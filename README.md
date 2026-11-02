@@ -1,0 +1,146 @@
+# Probato PR — Code Review with Proof
+
+> **Your AI reviews the code. We verify what could break.**
+
+Probato PR reviews your Git changes and pull requests inside VS Code and tells you **what is proven, what is only suspected, and why**. It runs deterministic analyzers locally, can execute your project's own checks with your approval, and compares results against the base revision to tell a regression *introduced by your change* from a failure that was already there.
+
+No account, no AI key, no server, no subscription is needed for the core review.
+
+## Why Probato PR
+
+Most AI review tools return a list of opinions. Probato PR classifies every finding by the strength of its evidence:
+
+| Status | Meaning |
+|---|---|
+| **Confirmed** | An executed check proves the defect, and a base-vs-head comparison attributes it to this change. |
+| **Evidenced** | Objective technical evidence exists (an AST fact, a failing check), but causality is not fully proven. |
+| **Suspected** | Probable issue from heuristics or AI. Not backed by an executed check. |
+| **Not verified** | The verification this finding needs could not be performed — and the report says why. |
+
+An AI claim is never "confirmed". A failing test is never blamed on your change without a passing baseline.
+
+## Quick start
+
+1. Install **Probato PR** from the Extensions view.
+2. Open a folder that is a Git repository and **trust** the workspace.
+3. Open the **Probato PR** view in the Activity Bar and click **Review Current Changes** (or use the shield button in the **Source Control** view, or run `Probato PR: Review Current Changes` from the Command Palette). In multi-root workspaces you pick the repository.
+4. Click a finding to jump to the code. Findings also appear in the **Problems** panel.
+5. Optional: click **Verify Findings** to run your project's type-check, lint, tests or build — you choose exactly which commands run.
+6. Export a **Markdown**, **SARIF** or **JSON** report.
+
+## Features
+
+- **Review scopes:** current changes (staged + unstaged + untracked), staged changes, a branch against its merge base, a single commit, or a GitHub pull request.
+- **Deterministic analyzers (no AI):**
+  - *Contracts* (TypeScript/JavaScript AST): removed or renamed exports still imported elsewhere, new required parameters with stale call sites, removed enum members and interface properties still in use, deleted or moved modules still imported.
+  - *Test integrity:* deleted test files, removed cases, `.only` / `.skip` / `xit`, tests whose assertions were removed (AST), Go `t.Skip` and removed `TestXxx` functions.
+  - *Secrets:* known credential formats on added lines, sensitive files (`.env`, keys, certificates) added to Git. Excerpts are always redacted.
+  - *Error handling:* new empty `catch` blocks, swallowed promise rejections, new `@ts-ignore` / `@ts-nocheck` / `eslint-disable`.
+  - *Dependencies:* new or changed install scripts (`postinstall`…), major upgrades, packages removed but still imported, local `replace` directives in `go.mod`.
+  - *Configuration:* TypeScript strictness disabled, risky GitHub Actions triggers (`pull_request_target` + PR head checkout, `write-all`).
+- **Verification engine:** detects checks already present in your project (package scripts, local TypeScript compiler, `go build/vet/test`), shows the exact commands, runs only what you approve, captures evidence (command, revision, exit code, duration, output hash, redacted output), and re-runs failing checks on the base revision in a temporary Git worktree to attribute failures.
+- **Explainable review risk:** a label (`LOW` … `CRITICAL`) with the reasons and the limitations behind it. Passing checks never mean "safe".
+- **Reports:** Markdown, SARIF 2.1.0 (GitHub code scanning compatible) and full JSON with evidence.
+- **Optional AI review:** a VS Code chat model you already have (e.g. GitHub Copilot) or Anthropic Claude with your own key. You see and approve exactly which files are sent. AI findings stay *suspected*, and findings pointing outside the reviewed diff are rejected.
+
+## Requirements
+
+- VS Code 1.99 or newer, desktop (local, WSL or remote hosts with a local file system).
+- Git on `PATH`.
+- For verification: your project's own tools already installed (e.g. `node_modules`, Go toolchain). Probato PR **never installs** anything.
+
+## Supported languages
+
+| Level | Languages |
+|---|---|
+| Diff review, secrets, configuration | Any text file |
+| AST analysis (contracts, tests, error handling) | TypeScript, JavaScript (incl. TSX/JSX, ESM/CJS) |
+| Line-level test checks, `go.mod` checks | Go |
+| Verification (executes your tools) | Node.js projects (npm, pnpm, yarn scripts; local `tsc`), Go modules |
+
+Python, PHP, Java, SQL migrations, OpenAPI, Docker and Terraform are on the roadmap (`ROADMAP.md`). Probato PR does not claim support for a language it only reads as text.
+
+## Commands
+
+| Command | Description |
+|---|---|
+| `Probato PR: Review Current Changes` | Staged, unstaged and untracked changes vs `HEAD`. |
+| `Probato PR: Review Staged Changes` | Index vs `HEAD`. |
+| `Probato PR: Review Branch` | `HEAD` vs merge base with the base branch. |
+| `Probato PR: Review Commit` | One commit vs its parent. |
+| `Probato PR: Review Pull Request (GitHub)` | Read-only, from the GitHub API. |
+| `Probato PR: Verify Findings (Run Checks)` | Plan, approve and run project checks with baseline attribution. |
+| `Probato PR: AI Review (Optional)` | Send the reviewed diff to your configured AI provider after confirmation. |
+| `Probato PR: Show Review Results` | Executive summary report. |
+| `Probato PR: Export Review Report` | Markdown, SARIF or JSON. |
+| `Probato PR: Cancel` | Stops the running operation and its child processes. |
+| `Probato PR: Delete Local Review History` | Removes stored reviews for this workspace. |
+
+## Configuration
+
+| Setting | Default | Description |
+|---|---|---|
+| `probatoPR.review.baseBranch` | `""` | Base for branch reviews; empty = `origin/HEAD`, then `main`/`master`. |
+| `probatoPR.review.maxFiles` | `300` | Files analyzed per review; extra files are listed as skipped. |
+| `probatoPR.review.maxDiffBytes` | `4000000` | Maximum diff size read from Git. |
+| `probatoPR.review.exclude` | lockfiles, `dist`, `node_modules`… | Globs not analyzed. |
+| `probatoPR.verification.timeoutSeconds` | `600` | Per-command timeout. |
+| `probatoPR.verification.maxOutputBytes` | `1000000` | Output kept per command (tail). |
+| `probatoPR.verification.baseline` | `ask` | Re-run failing checks on the base revision: `ask`, `always`, `never`. |
+| `probatoPR.ai.provider` | `none` | `none`, `vscode-lm`, `anthropic`. |
+| `probatoPR.ai.anthropicModel` | `claude-opus-5-5` | Model for the Anthropic provider. |
+| `probatoPR.ai.maxContextChars` | `120000` | Diff characters sent per AI review. |
+| `probatoPR.ai.exclude` | `[]` | Extra globs never sent to AI (sensitive files are always excluded). |
+
+## Offline mode
+
+Everything except pull request review and AI review works fully offline. If GitHub or the AI provider is unreachable, local review is unaffected.
+
+## Security and privacy
+
+- Works only in **trusted workspaces**; Restricted Mode disables it, as VS Code requires for tools that run processes.
+- Read-only by default: reviews never modify your files. Verification commands run **only after explicit approval** and run with your normal user permissions — **they are not sandboxed**.
+- Git is invoked with repository-config execution paths disabled (fsmonitor, external diff, textconv, hooks for the baseline worktree).
+- Secrets are redacted from stored evidence, reports and AI context. API keys live in VS Code SecretStorage.
+- No telemetry. Nothing leaves your machine unless you use PR review (GitHub API) or AI review (after a confirmation that lists the files).
+
+Details: `SECURITY.md` · `PRIVACY.md`.
+
+## Known limitations
+
+- Cross-file contract analysis resolves relative imports and the root `tsconfig.json` `baseUrl`/`paths` aliases; `extends` chains and package-name self-imports are not followed yet (a passing type-check automatically downgrades such findings to *suspected*).
+- Baseline runs link `node_modules` from your checkout; monorepos with per-package `node_modules` may produce inconclusive baselines.
+- Pull requests are reviewed from the GitHub API; verification and cross-file analysis require the PR head to be checked out locally.
+- Verified on Windows 11 with VS Code 1.144. Linux, macOS, WSL, Dev Containers and Remote SSH have not been verified yet — see `PRODUCT_RELEASE_READINESS.md`.
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| "Git was not found" | Install Git and make sure `git --version` works in a terminal, then reload VS Code. |
+| "Nothing to review" | No changes in the selected scope. Try **Review Branch** or **Review Commit**. |
+| A check reports `error` | The tool is not installed or not on `PATH`; the evidence log shows the exact message. |
+| Baseline is "inconclusive" | The base revision could not run the check (e.g. different dependencies). The failure is not attributed. |
+| Commands are disabled | Trust the workspace (`Manage Workspace Trust`). |
+
+Logs: **Output → Probato PR**.
+
+## Development
+
+```bash
+pnpm install
+pnpm run verify          # typecheck + lint + unit tests
+pnpm run test:integration  # real VS Code Extension Development Host
+pnpm run perf            # performance budgets on generated repositories
+pnpm run package         # verify + production build + VSIX
+```
+
+Press `F5` in VS Code to launch an Extension Development Host. See `CONTRIBUTING.md` and `ARCHITECTURE.md`.
+
+## Support
+
+Bug reports and feature requests: see `SUPPORT.md`.
+
+---
+
+Probato PR is developed by **Alejandro Daniel Di Stefano** — [ArmoTuSitio](https://armotusitio.com.ar). The product name is provisional pending trademark verification.

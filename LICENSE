@@ -1,0 +1,18 @@
+Copyright (c) 2026 Alejandro Daniel Di Stefano — ArmoTuSitio. All rights reserved.
+
+PROVISIONAL LICENSE — PENDING DECISION
+
+The final license of Probato PR (open source or proprietary) has not been decided yet.
+Until a final license is published, the following terms apply:
+
+1. You may install and use the packaged extension free of charge for personal and
+   commercial software development.
+2. You may not redistribute, sublicense, sell, or publish modified versions of the
+   extension or its source code without prior written permission from the copyright holder.
+3. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+   INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+   PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES
+   OR OTHER LIABILITY ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
+
+Third-party components bundled in the extension are distributed under their own licenses;
+see THIRD_PARTY_NOTICES.md.

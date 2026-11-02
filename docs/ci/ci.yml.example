@@ -1,0 +1,45 @@
+# TEMPLATE — NOT ENABLED. Copy to .github/workflows/ci.yml only after the maintainer authorizes CI.
+# Pin every third-party action to a full commit SHA before enabling (replace the <sha> placeholders).
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@<sha> # v4
+      - uses: pnpm/action-setup@<sha> # v4
+      - uses: actions/setup-node@<sha> # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run verify
+      - run: pnpm audit --prod
+      - name: Integration tests (Extension Development Host)
+        run: xvfb-run -a pnpm run test:integration
+        if: runner.os == 'Linux'
+      - name: Integration tests (Extension Development Host)
+        run: pnpm run test:integration
+        if: runner.os != 'Linux'
+      - run: pnpm run package
+      - uses: actions/upload-artifact@<sha> # v4
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          name: probato-pr-vsix
+          path: probato-pr.vsix

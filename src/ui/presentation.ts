@@ -1,0 +1,96 @@
+import * as vscode from 'vscode';
+import type { CheckStatus, ReviewFinding, RiskLevel, Severity, VerificationStatus } from '../core/model';
+
+// Single source for how domain states look in the UI (trees, diagnostics, hovers).
+
+export function verificationLabel(status: VerificationStatus): string {
+  switch (status) {
+    case 'confirmed':
+      return vscode.l10n.t('Confirmed');
+    case 'evidenced':
+      return vscode.l10n.t('Evidenced');
+    case 'suspected':
+      return vscode.l10n.t('Suspected');
+    case 'not-verified':
+      return vscode.l10n.t('Not verified');
+  }
+}
+
+export function severityLabel(severity: Severity): string {
+  switch (severity) {
+    case 'critical':
+      return vscode.l10n.t('Critical');
+    case 'high':
+      return vscode.l10n.t('High');
+    case 'medium':
+      return vscode.l10n.t('Medium');
+    case 'low':
+      return vscode.l10n.t('Low');
+  }
+}
+
+export function riskLabel(level: RiskLevel): string {
+  return level === 'unknown' ? vscode.l10n.t('Unknown') : severityLabel(level);
+}
+
+const SEVERITY_COLOR: Readonly<Record<Severity, string>> = {
+  critical: 'errorForeground',
+  high: 'problemsErrorIcon.foreground',
+  medium: 'problemsWarningIcon.foreground',
+  low: 'problemsInfoIcon.foreground',
+};
+
+export function severityIcon(severity: Severity): vscode.ThemeIcon {
+  const icon = severity === 'critical' || severity === 'high' ? 'error' : severity === 'medium' ? 'warning' : 'info';
+  return new vscode.ThemeIcon(icon, new vscode.ThemeColor(SEVERITY_COLOR[severity]));
+}
+
+/** Icon shape encodes verification strength so it is distinguishable without color. */
+export function verificationIcon(finding: ReviewFinding): vscode.ThemeIcon {
+  const color = new vscode.ThemeColor(SEVERITY_COLOR[finding.severity]);
+  switch (finding.verification) {
+    case 'confirmed':
+      return new vscode.ThemeIcon('verified-filled', color);
+    case 'evidenced':
+      return new vscode.ThemeIcon('pass', color);
+    case 'suspected':
+      return new vscode.ThemeIcon('question', color);
+    case 'not-verified':
+      return new vscode.ThemeIcon('circle-slash', color);
+  }
+}
+
+export function checkIcon(status: CheckStatus): vscode.ThemeIcon {
+  switch (status) {
+    case 'passed':
+      return new vscode.ThemeIcon('pass', new vscode.ThemeColor('testing.iconPassed'));
+    case 'failed':
+      return new vscode.ThemeIcon('error', new vscode.ThemeColor('testing.iconFailed'));
+    case 'timed-out':
+      return new vscode.ThemeIcon('watch', new vscode.ThemeColor('testing.iconErrored'));
+    case 'cancelled':
+      return new vscode.ThemeIcon('debug-stop');
+    case 'error':
+      return new vscode.ThemeIcon('warning', new vscode.ThemeColor('testing.iconErrored'));
+    case 'pending':
+      return new vscode.ThemeIcon('circle-outline');
+  }
+}
+
+export function riskIcon(level: RiskLevel): vscode.ThemeIcon {
+  return level === 'unknown' || level === 'low' ? new vscode.ThemeIcon('shield') : severityIcon(level);
+}
+
+/** Markdown hover that never trusts repository-derived text (no command links, HTML disabled). */
+export function safeMarkdown(...paragraphs: string[]): vscode.MarkdownString {
+  const md = new vscode.MarkdownString(undefined, false);
+  md.isTrusted = false;
+  md.supportHtml = false;
+  paragraphs.forEach((p, i) => {
+    if (i > 0) {
+      md.appendMarkdown('\n\n');
+    }
+    md.appendText(p);
+  });
+  return md;
+}
