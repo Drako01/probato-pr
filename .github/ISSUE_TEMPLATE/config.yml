@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/Drako01/probato-pr/security/advisories/new
+    about: Report privately. Do not open public issues for security problems.

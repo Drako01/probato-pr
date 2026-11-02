@@ -1,0 +1,21 @@
+name: Feature request
+description: A problem you would like Probato PR to solve.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Small example
+      description: A minimal change (diff or files) where Probato PR should behave differently.
+  - type: input
+    id: stack
+    attributes:
+      label: Languages and tools
+      placeholder: TypeScript, pnpm, Vitest

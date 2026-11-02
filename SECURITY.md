@@ -26,7 +26,7 @@ Probato PR treats the following as **untrusted input**: repository files, Git co
 
 ## Reporting a vulnerability
 
-Please report vulnerabilities privately to **addistefano76@gmail.com** with the subject `Probato PR security`. Include the version, platform and reproduction steps. Do not open public issues for security problems. You will receive an acknowledgement within 5 business days.
+Please report vulnerabilities privately through GitHub: **Security → Report a vulnerability** (https://github.com/Drako01/probato-pr/security/advisories/new). If you cannot use GitHub, email **addistefano76@gmail.com** with the subject `Probato PR security`. Include the version, platform and reproduction steps. Do not open public issues for security problems. You will receive an acknowledgement within 5 business days.
 
 ## Supported versions
 

@@ -29,6 +29,18 @@ pnpm run verify
 
 Do not weaken a test to make it pass; fix the cause. A skipped test is not a pass.
 
+## How to contribute
+
+`main` is protected: nobody pushes to it directly, history cannot be rewritten, and every change arrives through a pull request.
+
+1. For anything larger than a small fix, open an issue first so we can agree on the approach.
+2. Fork the repository and create a branch from `main` (`feat/short-description`, `fix/short-description`).
+3. Make the change with its tests, and run `pnpm run verify`.
+4. Open a pull request against `main` and fill in the template. The maintainer (`CODEOWNERS`) must approve it, and every review conversation must be resolved.
+5. Pull requests are **squash-merged**, so the PR title becomes the commit message: write it as a Conventional Commit.
+
+Release tags (`v*`) can only be created by the maintainer; publishing to the Marketplace follows `docs/RELEASE.md`.
+
 ## Commits
 
-Conventional Commits (`feat(verification): …`). Do not push, publish or open releases without the maintainer's authorization.
+Conventional Commits (`feat(verification): …`, `fix(ai): …`, `docs: …`).

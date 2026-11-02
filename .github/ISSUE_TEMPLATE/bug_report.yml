@@ -1,0 +1,38 @@
+name: Bug report
+description: Something does not work as described.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Security problems must not be reported here**: use *Security → Report a vulnerability* instead (see SECURITY.md).
+        Do not paste source code you are not allowed to share.
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Probato PR version (Extensions view) and VS Code version (Help → About).
+      placeholder: Probato PR 0.1.0, VS Code 1.144.0
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, and whether you use WSL, Dev Containers or Remote SSH.
+      placeholder: Windows 11, local
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What you did and what happened
+      description: The review scope you ran, what you expected, and what you got.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: Relevant lines of Output → Probato PR.
+      render: text

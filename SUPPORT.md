@@ -23,7 +23,8 @@ Describe the problem you want solved, a small example, and the languages or tool
 
 ## Channels
 
-Issues: https://github.com/Drako01/probato-pr/issues (once the repository is public). Meanwhile, contact **addistefano76@gmail.com** (subject: `Probato PR support`).
+- Bugs and feature requests: https://github.com/Drako01/probato-pr/issues (use the templates).
+- Anything else: **addistefano76@gmail.com** (subject: `Probato PR support`).
 
 ## Support policy
 
