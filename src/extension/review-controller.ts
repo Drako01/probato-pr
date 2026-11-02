@@ -190,7 +190,9 @@ export class ReviewController {
       this.deps.session.setPlan(plan);
       if (plan.length === 0) {
         void vscode.window.showInformationMessage(
-          vscode.l10n.t('No verification tools detected. Probato PR looks for package.json scripts (typecheck, lint, test, build), a tsconfig.json with TypeScript installed locally, or a go.mod. Nothing is installed automatically.'),
+          vscode.l10n.t(
+            'No verification tools detected. Probato PR looks for package.json scripts or a local TypeScript compiler, go.mod, Composer scripts or PHP tools in vendor/bin, configured pytest/mypy/ruff, Cargo.toml, and Maven or Gradle builds. Nothing is installed automatically.',
+          ),
         );
         return;
       }

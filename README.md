@@ -57,7 +57,16 @@ New to Probato PR? Run `Welcome: Open Walkthrough` and pick **Get started with P
   - *Error handling:* new empty `catch` blocks, swallowed promise rejections, new `@ts-ignore` / `@ts-nocheck` / `eslint-disable`.
   - *Dependencies:* new or changed install scripts (`postinstall`…), major upgrades, packages removed but still imported, local `replace` directives in `go.mod`.
   - *Configuration:* TypeScript strictness disabled, risky GitHub Actions triggers (`pull_request_target` + PR head checkout, `write-all`).
-- **Verification engine:** detects checks already present in your project (package scripts, local TypeScript compiler, `go build/vet/test`), shows the exact commands, runs only what you approve, captures evidence (command, revision, exit code, duration, output hash, redacted output), and re-runs failing checks on the base revision in a temporary Git worktree to attribute failures.
+- **Verification engine:** detects checks already present in your project, shows the exact commands, runs only what you approve, captures evidence (command, revision, exit code, duration, output hash, redacted output), and re-runs failing checks on the base revision in a temporary Git worktree to attribute failures. Compiler and linter errors are linked to the finding at that line, which is how a suspicion becomes **confirmed**.
+
+  | Ecosystem | Detected from | Checks |
+  |---|---|---|
+  | JavaScript / TypeScript | `package.json`, `tsconfig.json` | `typecheck`, `lint`, `test`, `build` scripts; local `tsc` |
+  | Go | `go.mod` | `go build`, `go vet`, `go test` |
+  | PHP | `composer.json` | Composer scripts, or PHPStan, PHP_CodeSniffer, PHPUnit and Pest from `vendor/bin` |
+  | Python | `pyproject.toml`, `setup.cfg`, `requirements.txt`… | mypy, ruff and pytest when configured, with the project's virtual environment (`.venv`, `venv`, `env`) |
+  | Rust | `Cargo.toml` | `cargo check`, `cargo clippy`, `cargo test` |
+  | Java / Kotlin | `pom.xml`, `build.gradle(.kts)` | Maven `compile` / `test`, Gradle `assemble` / `test`, through `mvnw` / `gradlew` when present |
 - **Guided Review → Verify → Share flow:** the Review Summary panel, the Overview view and the status bar always show the same step states and the next action. Findings can be filtered by severity and grouped by severity or by file; the Activity Bar badge shows how many are open.
 - **Explainable review risk:** a label (`LOW` … `CRITICAL`) with the reasons and the limitations behind it. Passing checks never mean "safe".
 - **Reports:** Markdown, SARIF 2.1.0 (GitHub code scanning compatible) and full JSON with evidence.
@@ -159,6 +168,8 @@ Details: `SECURITY.md` · `PRIVACY.md`.
 
 - Cross-file contract analysis resolves relative imports and the root `tsconfig.json` `baseUrl`/`paths` aliases; `extends` chains and package-name self-imports are not followed yet (a passing type-check automatically downgrades such findings to *suspected*).
 - Baseline runs link `node_modules` from your checkout; monorepos with per-package `node_modules` may produce inconclusive baselines.
+- For PHP and Python, `vendor/` and virtual environments are deliberately **not** linked into the baseline: a Composer autoloader or an editable install would load the changed code instead of the base revision and produce a false attribution. Failures are reported as inconclusive instead. Rust and Java builds run from scratch in the baseline worktree, which is correct but slower.
+- Checks are detected at the repository root only.
 - Pull requests are reviewed from the GitHub API; verification and cross-file analysis require the PR head to be checked out locally.
 - Verified on Windows 11 with VS Code 1.144. Linux, macOS, WSL, Dev Containers and Remote SSH have not been verified yet — see `PRODUCT_RELEASE_READINESS.md`.
 

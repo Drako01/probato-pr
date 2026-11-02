@@ -2,6 +2,25 @@
 
 All notable changes to Probato PR are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] — 2026-11-02
+
+### Added
+
+- **Verification for PHP, Python, Rust and Java/Kotlin**, besides JavaScript/TypeScript and Go:
+  - PHP: Composer scripts, or PHPStan, PHP_CodeSniffer, PHPUnit and Pest from `vendor/bin`.
+  - Python: mypy, ruff and pytest when the project configures them, run with its virtual environment (`.venv`, `venv`, `env`) and only if installed there; otherwise with the interpreter on `PATH`, and the plan says so.
+  - Rust: `cargo check`, `cargo clippy`, `cargo test`.
+  - Java/Kotlin: Maven `compile`/`test` and Gradle `assemble`/`test`, through the committed `mvnw`/`gradlew` wrapper when there is one. The wrapper's content is part of the approval fingerprint.
+- Compiler and linter errors from these tools are linked to findings at the same line (new `gnu` and `maven` output formats), so they can confirm a finding like `tsc` and `go` already did. Absolute paths inside the checked directory are understood.
+
+### Changed
+
+- Check detection is organized per ecosystem (`src/verification/ecosystems/`).
+
+### Notes
+
+- PHP and Python baselines do not reuse `vendor/` or the virtual environment on purpose: an autoloader or an editable install would load the changed code and produce a false attribution, so such failures are reported as inconclusive.
+
 ## [0.1.3] — 2026-11-02
 
 ### Added

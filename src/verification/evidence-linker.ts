@@ -24,7 +24,7 @@ function diagnosticFinding(
       ? tr('Reported by "{0}" with this change and absent when the same command ran on the base revision.', check.label)
       : tr('Reported by "{0}" in a file changed by this review. No baseline run, so it may predate the change.', check.label),
     origin: 'verification',
-    title: `${diagnostic.code === 'go' ? '' : `${diagnostic.code}: `}${diagnostic.message}`.slice(0, 200),
+    title: `${diagnostic.code === '' || diagnostic.code === 'go' ? '' : `${diagnostic.code}: `}${diagnostic.message}`.slice(0, 200),
     description: tr('{0} reported this error at {1}:{2}:{3}.', check.label, diagnostic.file, diagnostic.line, diagnostic.column),
     location: { file: diagnostic.file, startLine: diagnostic.line },
     evidence: [{ evidenceId, summary: tr('{0} output ({1})', check.label, check.status) }],
