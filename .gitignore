@@ -5,3 +5,6 @@ out/
 *.vsix
 coverage/
 .claude/
+
+# Reports exported by Probato PR itself (default file names)
+probato-review.*
