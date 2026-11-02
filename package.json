@@ -2,7 +2,7 @@
   "name": "probato-pr",
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "publisher": "armotusitio",
   "author": {
     "name": "Alejandro Daniel Di Stefano",
@@ -40,7 +40,11 @@
     "regression",
     "verification",
     "sarif",
-    "evidence"
+    "evidence",
+    "php",
+    "python",
+    "rust",
+    "java"
   ],
   "main": "./dist/extension.js",
   "l10n": "./l10n",

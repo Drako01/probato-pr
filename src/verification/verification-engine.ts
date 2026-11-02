@@ -112,7 +112,7 @@ export class VerificationEngine {
       });
       const ev = toEvidence(check, run, 'head', request.headSha, request.headDirty, check.cwd);
       evidence.push(ev);
-      heads.set(check.id, { evidence: ev, diagnostics: parseDiagnostics(run.output, check.outputFormat, check.cwd) });
+      heads.set(check.id, { evidence: ev, diagnostics: parseDiagnostics(run.output, check.outputFormat, check.cwd, path.join(request.repoRoot, check.cwd)) });
     }
 
     const failing = request.approved.filter((c) => heads.get(c.id)?.evidence.outcome === 'failed');
@@ -137,7 +137,7 @@ export class VerificationEngine {
           });
           const ev = toEvidence(check, run, 'base', request.baselineCommit, false, check.cwd);
           evidence.push(ev);
-          bases.set(check.id, { evidence: ev, diagnostics: parseDiagnostics(run.output, check.outputFormat, check.cwd) });
+          bases.set(check.id, { evidence: ev, diagnostics: parseDiagnostics(run.output, check.outputFormat, check.cwd, path.join(worktree.directory, check.cwd)) });
         }
       } catch (error) {
         baselineError = tr('Baseline could not be prepared: {0}', error instanceof Error ? error.message : String(error));

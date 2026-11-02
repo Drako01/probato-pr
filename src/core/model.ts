@@ -165,7 +165,8 @@ export interface ChangeSet {
 // Verification
 
 export type CheckKind = 'typecheck' | 'lint' | 'test' | 'build' | 'vet';
-export type OutputFormat = 'tsc' | 'go' | 'plain';
+/** How a check's output is parsed into file/line diagnostics ('plain' = not parsed). */
+export type OutputFormat = 'tsc' | 'go' | 'gnu' | 'maven' | 'plain';
 
 export interface CommandSpec {
   readonly executable: string;

@@ -35,8 +35,11 @@ export interface ProcessRunner {
   run(command: CommandSpec, options: RunOptions): Promise<RunResult>;
 }
 
-/** Executables distributed as .cmd shims on Windows; Node refuses to spawn them without a shell. */
-const WINDOWS_SHIMS = new Set(['npm', 'npx', 'pnpm', 'yarn']);
+/**
+ * Executables that are .cmd/.bat files on Windows; Node refuses to spawn them without a shell. Includes the
+ * Maven and Gradle wrappers, which cmd.exe resolves to mvnw.cmd / gradlew.bat in the working directory.
+ */
+const WINDOWS_SHIMS = new Set(['npm', 'npx', 'pnpm', 'yarn', 'composer', 'mvn', 'mvnw', 'gradle', 'gradlew']);
 /** Arguments allowed through cmd.exe: no metacharacters that the shell could interpret. */
 const SAFE_SHELL_ARG = /^[\w:./=@+-]+$/;
 
