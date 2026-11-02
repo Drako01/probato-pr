@@ -6,6 +6,14 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # Type definitions must match the oldest supported runtime, not the newest release:
+      # @types/vscode tracks engines.vscode (vsce refuses to package when it is newer), and
+      # @types/node tracks the Node.js major of the oldest supported VS Code.
+      - dependency-name: "@types/vscode"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       dev-dependencies:
         dependency-type: development
