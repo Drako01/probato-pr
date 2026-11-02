@@ -1,6 +1,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 import { matchesAnyGlob } from '../core/glob';
+import { tr } from '../core/i18n';
 import type { ChangeSet, ChangeSide, ContentProvider, FileChange, ReviewScope, SkippedFile } from '../core/model';
 import { PathOutsideWorkspaceError, resolveInside } from '../core/paths';
 import { EMPTY_TREE_SHA, GitError, type GitClient } from './git-client';
@@ -107,7 +108,7 @@ export class LocalChangeCollector {
     switch (request.kind) {
       case 'working':
         return {
-          scope: { kind: 'working', label: 'current changes (staged + unstaged + untracked)', baseRef: 'HEAD', headIsWorkingTree: true, ...(headSha ? { baseSha: headSha } : {}) },
+          scope: { kind: 'working', label: tr('current changes (staged + unstaged + untracked)'), baseRef: 'HEAD', headIsWorkingTree: true, ...(headSha ? { baseSha: headSha } : {}) },
           diffArgs: [head],
           baseRev: head,
           headRev: undefined,
@@ -115,7 +116,7 @@ export class LocalChangeCollector {
         };
       case 'staged':
         return {
-          scope: { kind: 'staged', label: 'staged changes', baseRef: 'HEAD', headRef: 'index', headIsWorkingTree: false, ...(headSha ? { baseSha: headSha } : {}) },
+          scope: { kind: 'staged', label: tr('staged changes'), baseRef: 'HEAD', headRef: 'index', headIsWorkingTree: false, ...(headSha ? { baseSha: headSha } : {}) },
           diffArgs: ['--cached', head],
           baseRev: head,
           headRev: '',
@@ -132,7 +133,7 @@ export class LocalChangeCollector {
         return {
           scope: {
             kind: 'branch',
-            label: `branch changes since ${request.baseBranch}`,
+            label: tr('branch changes since {0}', request.baseBranch),
             baseRef: request.baseBranch,
             baseSha: mergeBase,
             headRef: 'HEAD',
@@ -154,7 +155,7 @@ export class LocalChangeCollector {
         return {
           scope: {
             kind: 'commit',
-            label: `commit ${commit.slice(0, 10)}`,
+            label: tr('commit {0}', commit.slice(0, 10)),
             baseRef: `${commit.slice(0, 10)}^`,
             baseSha: parent,
             headRef: commit.slice(0, 10),

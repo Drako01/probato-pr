@@ -2,6 +2,17 @@
 
 All notable changes to Probato PR are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] — 2026-11-02
+
+### Fixed
+
+- The review scope label (current changes, staged changes, branch changes since a branch, commit, pull request) follows the VS Code display language.
+- Spanish finding titles for added items no longer disagree in gender ("Se agregó en archivo: elemento" instead of "elemento agregado").
+
+### Added
+
+- Screenshots in the README (Review Summary, findings with evidence status, check approval).
+
 ## [0.1.1] — 2026-11-02
 
 ### Fixed

@@ -228,7 +228,7 @@
   "Builds on other machines and in CI will fail or use different code unless the same local path exists.": "Los builds en otras máquinas y en el CI van a fallar o a usar código distinto, salvo que exista la misma ruta local.",
   "Swallowed errors and suppressed type/lint checks introduced by the change": "Errores silenciados y chequeos de tipos/lint suprimidos por el cambio",
   "The directive \"{0}\" appears on a line added by this change.": "La directiva \"{0}\" aparece en una línea agregada por este cambio.",
-  "{0} added in {1}": "{0} agregado en {1}",
+  "{0} added in {1}": "Se agregó en {1}: {0}",
   "Type checking is disabled for the whole file, so type errors introduced now or later go unnoticed.": "El chequeo de tipos se desactiva para todo el archivo, así que los errores de tipos que aparezcan ahora o después pasan inadvertidos.",
   "A compiler or linter diagnostic is silenced instead of fixed; the underlying problem is hidden, not resolved.": "Se silencia un diagnóstico del compilador o del linter en lugar de corregirlo; el problema de fondo queda oculto, no resuelto.",
   "AST shows a catch clause with no statements on a line added by this change.": "El AST muestra una cláusula catch sin sentencias en una línea agregada por este cambio.",
@@ -377,5 +377,10 @@
   "Baseline could not be prepared: {0}": "No se pudo preparar la base: {0}",
   "Temporary worktree cleanup failed: {0}": "Falló la limpieza del worktree temporal: {0}",
   "Not executed (cancelled before it started).": "No se ejecutó (cancelado antes de empezar).",
-  "Reported by {0}. AI output is not verification; no executed check backs this finding yet.": "Lo reportó {0}. La salida de la IA no es una verificación; todavía no hay ningún check ejecutado que respalde este hallazgo."
+  "Reported by {0}. AI output is not verification; no executed check backs this finding yet.": "Lo reportó {0}. La salida de la IA no es una verificación; todavía no hay ningún check ejecutado que respalde este hallazgo.",
+  "current changes (staged + unstaged + untracked)": "cambios actuales (preparados + sin preparar + sin seguimiento)",
+  "staged changes": "cambios preparados",
+  "branch changes since {0}": "cambios de la rama desde {0}",
+  "commit {0}": "commit {0}",
+  "pull request #{0}: {1}": "pull request #{0}: {1}"
 }
