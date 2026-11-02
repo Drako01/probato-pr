@@ -6,16 +6,16 @@ Escala: **PASS** (verificado con evidencia) · **WARN** (funciona con reservas) 
 
 ## Recomendación
 
-> **NO-GO para publicación pública** hasta resolver los bloqueantes B1, B3 y B4. El producto es funcional y está empaquetado; la licencia ya está decidida (MIT). Falta la verificación de marca, el publisher y la validación multiplataforma que exige la directiva. Recomendación al resolverlos: primera publicación como 0.x con `"preview": true`.
+> **GO como Preview 0.1.0, autorizado por el propietario el 2026-11-02 con riesgos aceptados** (B1 marca sin verificar en el INPI; B4 sin pruebas en Linux/macOS, declarado en el README). La evaluación técnica sola seguía siendo NO-GO por esos dos puntos; la decisión de publicar igual es del propietario. Licencia MIT, repositorio público, `"preview": true`. B3 (publisher) se resuelve al crearlo.
 
 ### Bloqueantes
 
 | # | Bloqueante | Responsable |
 |---|---|---|
-| B1 | Verificación legal/comercial del nombre "Probato PR" (INPI clases 9 y 42, Marketplace, GitHub, dominios). Solo hubo chequeos automáticos de disponibilidad, que no constituyen disponibilidad jurídica. | Alejandro |
+| B1 | Verificación legal/comercial del nombre "Probato PR" (INPI clases 9 y 42, Marketplace, GitHub, dominios). Solo hubo chequeos automáticos de disponibilidad, que no constituyen disponibilidad jurídica. **Riesgo aceptado por el propietario (2026-11-02)**: si hubiera conflicto, habría que publicar con otro ID. | Alejandro |
 | ~~B2~~ | ~~Licencia definitiva.~~ **Resuelto 2026-11-02: MIT** (`LICENSE`, `package.json`). | — |
 | B3 | Publisher `armotusitio` en Visual Studio Marketplace: crear/verificar identidad y método de publicación (ver `docs/RELEASE.md`). | Alejandro |
-| B4 | Pruebas en Linux y macOS (al menos Extension Host + suite e2e) antes de declarar compatibilidad. | CI (plantilla preparada, no habilitada) |
+| B4 | Pruebas en Linux y macOS (al menos Extension Host + suite e2e) antes de declarar compatibilidad. **Riesgo aceptado**: el README declara que solo Windows está verificado. | CI (plantilla preparada, no habilitada) |
 
 ## Checklist GO / NO-GO
 
@@ -40,7 +40,7 @@ Escala: **PASS** (verificado con evidencia) · **WARN** (funciona con reservas) 
 | Paquete VSIX inspeccionado | **PASS** | `unzip -l`: solo bundles (extensión y script del webview), CSS del panel, avisos legales, iconos, manifiestos, l10n y docs de usuario. 1,24 MB. |
 | Instalación limpia comprobada | **PASS** | Perfil aislado (`--user-data-dir`/`--extensions-dir` temporales). |
 | Procedimiento de publicación documentado | **PASS** | `docs/RELEASE.md`. |
-| Release autorizado por el propietario | **BLOCKED** | Pendiente de Alejandro. |
+| Release autorizado por el propietario | **PASS** | Autorizado por Alejandro el 2026-11-02 (Preview 0.1.0), con B1 y B4 como riesgos aceptados. |
 
 ## Requisitos de la directiva — estado
 
@@ -72,7 +72,7 @@ Escala: **PASS** (verificado con evidencia) · **WARN** (funciona con reservas) 
 - El logo del README (`media/readme-logo.png`) usa ruta relativa: `vsce` la reescribe a `github.com/Drako01/probato-pr`, así que en el Marketplace solo se verá cuando el repositorio sea público.
 - "Extension host is unresponsive" (~5 s) aparece en la integración durante la primera revisión: es la carga síncrona del compilador TypeScript. Relacionado con el punto del bundle de abajo.
 - Capturas reales para el README del Marketplace (panel Review Summary, Overview con los pasos, Findings agrupado por archivo).
-- `repository`/`bugs` apuntan a `github.com/Drako01/probato-pr`, que hoy es **privado**: hacerlo público (o quitar esos campos) antes de publicar, para que los enlaces del Marketplace no den 404.
+- ~~Repositorio privado~~: público desde el 2026-11-02; `repository`, `bugs` y el logo del README responden HTTP 200.
 - Confirmar el email público de contacto usado en `SECURITY.md`, `SUPPORT.md` y `PRIVACY.md`.
 - Resolución de `extends` en tsconfig y self-imports por nombre de paquete (los alias `paths` del tsconfig raíz ya se resuelven).
 - Tamaño del bundle (4,35 MB, mayormente el compilador TypeScript): evaluar carga diferida del módulo `typescript` para acelerar la activación.
