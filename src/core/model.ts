@@ -185,6 +185,10 @@ export interface PlannedCheck {
   /** External resources the command appears to need (database, Docker, network...). */
   readonly requires: readonly string[];
   readonly outputFormat: OutputFormat;
+  /** True when the command executes code defined by the repository (a package.json script, `go test`), not only a tool. */
+  readonly runsRepositoryCode: boolean;
+  /** Hash of everything that decides what runs (command, directory, script body). A remembered approval is bound to it. */
+  readonly fingerprint: string;
 }
 
 export type CheckStatus = 'passed' | 'failed' | 'timed-out' | 'cancelled' | 'error' | 'pending';

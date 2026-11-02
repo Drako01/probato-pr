@@ -162,7 +162,7 @@ describe('pull request description', () => {
     const md = renderPullRequestDescription(review());
     expect(md).not.toContain('## Summary');
     expect(md).toContain('## Verification (Probato PR)');
-    expect(md).toContain('`npm test`: FAIL (introduced)');
+    expect(md).toContain('`npm test`: Failed (Introduced by this change)');
   });
 
   it('leads with the AI walkthrough and escapes model-written text', () => {

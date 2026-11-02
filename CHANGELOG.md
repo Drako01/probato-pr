@@ -2,6 +2,23 @@
 
 All notable changes to Probato PR are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.1.3] — 2026-11-02
+
+### Added
+
+- **Run and remember:** approved checks can run without asking again in the same repository. The approval is stored outside the repository and bound to a hash of the command, its directory and the script body, so any change asks again. New command *Forget Approved Checks*.
+- **Always compare** in the base-revision question saves the choice in your user settings.
+- Light-bulb actions on Probato PR diagnostics: dismiss the finding, show its evidence, open the Review Summary.
+
+### Changed
+
+- Markdown reports and the pull request description follow the VS Code display language, with readable check results and attributions ("Failed (Introduced by this change)" instead of "FAIL (introduced)").
+- Evidence entries in the Verification view show the command first, where it ran ("with this change", "on the base revision") and a tooltip with commit, exit code and duration.
+
+### Fixed
+
+- With a non-English display language, checks that run repository scripts were pre-selected in the approval list. Pre-selection now relies on whether the check runs repository code, not on the warning text.
+
 ## [0.1.2] — 2026-11-02
 
 ### Fixed

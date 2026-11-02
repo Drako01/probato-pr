@@ -1,4 +1,5 @@
 import { msg, render, tr, type Message } from '../core/i18n';
+import { sha256 } from '../core/ids';
 import type { CheckKind, CommandSpec, OutputFormat, PlannedCheck } from '../core/model';
 
 /** Read-only view of repository files needed to plan checks (injected for testability). */
@@ -26,6 +27,13 @@ const INFRA_HINTS: readonly { readonly pattern: RegExp; readonly label: Message 
 ];
 
 const NPM_DEFAULT_TEST = /no test specified/;
+
+type CheckDraft = Omit<PlannedCheck, 'fingerprint'>;
+
+/** Any change to the command, its directory or the script body changes the fingerprint (and voids remembered approvals). */
+function fingerprintOf(check: CheckDraft, scriptBody: string): string {
+  return sha256(JSON.stringify([check.command.executable, check.command.args, check.cwd, scriptBody]));
+}
 const SAFE_SCRIPT_NAME = /^[\w:.-]+$/;
 
 async function packageManagerOf(probe: ProjectProbe): Promise<PackageManager> {
@@ -51,7 +59,8 @@ function infraNeeds(text: string): string[] {
  * installing anything; when dependencies are missing the plan says so instead of hiding the check.
  */
 export async function detectChecks(probe: ProjectProbe): Promise<PlannedCheck[]> {
-  const checks: PlannedCheck[] = [];
+  const checks: CheckDraft[] = [];
+  const scriptBodies = new Map<string, string>();
   const packageText = await probe.readText('package.json');
   if (packageText !== undefined) {
     let scripts: Record<string, unknown> = {};
@@ -91,6 +100,7 @@ export async function detectChecks(probe: ProjectProbe): Promise<PlannedCheck[]>
       if (kind === 'test' && envFile) {
         requires.push(tr('environment variables from .env'));
       }
+      scriptBodies.set(`script:${name}`, body);
       checks.push({
         id: `script:${name}`,
         kind,
@@ -101,6 +111,7 @@ export async function detectChecks(probe: ProjectProbe): Promise<PlannedCheck[]>
         warnings: [tr('Executes repository code: "{0}": {1}', name, body.slice(0, 300)), ...dependencyWarning],
         requires,
         outputFormat: /\btsc\b/.test(body) ? 'tsc' : /\bgo (?:build|vet)\b/.test(body) ? 'go' : 'plain',
+        runsRepositoryCode: true,
       });
     }
 
@@ -115,6 +126,7 @@ export async function detectChecks(probe: ProjectProbe): Promise<PlannedCheck[]>
         warnings: [tr('Runs the TypeScript compiler installed in node_modules (no repository scripts).')],
         requires: [],
         outputFormat: 'tsc',
+        runsRepositoryCode: false,
       });
     }
   }
@@ -139,8 +151,9 @@ export async function detectChecks(probe: ProjectProbe): Promise<PlannedCheck[]>
             : [tr('May download modules if they are not cached (network).')],
         requires: [],
         outputFormat: format,
+        runsRepositoryCode: sub === 'test',
       });
     }
   }
-  return checks;
+  return checks.map((check) => ({ ...check, fingerprint: fingerprintOf(check, scriptBodies.get(check.id) ?? '') }));
 }

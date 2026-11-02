@@ -59,6 +59,7 @@
   "walkthrough.ai.description": "Use a chat model you already have in VS Code (for example GitHub Copilot), or your own Claude, OpenAI or OpenAI-compatible key (OpenRouter, Ollama…). The AI adds a second opinion and writes the pull request summary. You confirm the exact files before anything is sent, and AI findings stay suspected until a check proves them.\n[Connect Your AI](command:probatoPR.connectAi)",
   "command.connectAi": "Connect Your AI",
   "command.forgetAiKeys": "Delete Stored AI API Keys",
+  "command.forgetApprovedChecks": "Forget Approved Checks",
   "command.copyPullRequestDescription": "Copy PR Description",
   "config.ai.provider.openaiCompatible": "OpenAI, or any OpenAI-compatible API (OpenRouter, Azure OpenAI, Ollama, LM Studio) with your own key.",
   "config.ai.vscodeLmModel": "Chat model used with the VS Code provider, as vendor/id. Empty: the first available model.",
