@@ -1,6 +1,7 @@
 import * as ts from 'typescript';
 import type { Analyzer, AnalyzerContext, AnalyzerOutput } from '../core/analyzer';
 import { OutputCollector, staticFinding } from '../core/finding-factory';
+import { msg, tr } from '../core/i18n';
 import type { ChangeSet, FileChange } from '../core/model';
 import { collectImports, isScriptFile, isTestFile, lineOf, parsePathAliases, parseSource, resolveImport, visit } from './ts-ast';
 
@@ -148,7 +149,9 @@ function diffExports(module: FileChange, base: Map<string, ExportedSymbol>, head
  */
 export class TsContractsAnalyzer implements Analyzer {
   readonly id = ID;
-  readonly description = 'Breaking changes to exported TypeScript/JavaScript contracts and their in-repo consumers';
+  get description(): string {
+    return tr('Breaking changes to exported TypeScript/JavaScript contracts and their in-repo consumers');
+  }
 
   appliesTo(changes: ChangeSet): boolean {
     return changes.files.some((f) => !f.binary && isScriptFile(f.path) && !isTestFile(f.path) && f.status !== 'added');
@@ -188,7 +191,7 @@ export class TsContractsAnalyzer implements Analyzer {
     const allFiles = await workspace.listFiles(isScriptFile);
     const files = allFiles.slice(0, MAX_IMPORTER_SCAN);
     if (allFiles.length > files.length) {
-      out.limitations.push(`Consumer scan limited to ${MAX_IMPORTER_SCAN} of ${allFiles.length} source files; consumers beyond the limit were not checked.`);
+      out.limitations.push(tr('Consumer scan limited to {0} of {1} source files; consumers beyond the limit were not checked.', MAX_IMPORTER_SCAN, allFiles.length));
     }
     const existing = new Set([...files, ...contractChanges.map((c) => c.module.path)]);
     const stems = contractChanges.map((c) => moduleStem(c.module.path));
@@ -231,18 +234,30 @@ export class TsContractsAnalyzer implements Analyzer {
   ): void {
     const modulePath = change.module.path;
     if (change.moduleGone) {
-      const verb = change.module.status === 'renamed' ? 'moved' : 'deleted';
+      const moved = change.module.status === 'renamed';
       out.add(
         staticFinding({
           analyzerId: ID,
           ruleId: 'contracts/module-removed',
           severity: 'high',
           verification: 'evidenced',
-          verificationNote: `Static import resolution: "${moduleImport.specifier}" resolved to ${modulePath}, which is ${verb} in this change. Run the type-check or build to confirm.`,
-          title: `Import of ${verb} module ${modulePath}`,
-          description: `${importerPath} still imports "${moduleImport.specifier}", but ${modulePath} was ${verb}${change.module.status === 'renamed' ? ` to ${change.module.path}` : ''}.`,
+          verificationNote: moved
+            ? msg(
+                'Static import resolution: "{0}" resolved to {1}, which is moved in this change. Run the type-check or build to confirm.',
+                moduleImport.specifier,
+                modulePath,
+              )
+            : msg(
+                'Static import resolution: "{0}" resolved to {1}, which is deleted in this change. Run the type-check or build to confirm.',
+                moduleImport.specifier,
+                modulePath,
+              ),
+          title: moved ? msg('Import of moved module {0}', modulePath) : msg('Import of deleted module {0}', modulePath),
+          description: moved
+            ? msg('{0} still imports "{1}", but {2} was moved to {3}.', importerPath, moduleImport.specifier, modulePath, change.module.path)
+            : msg('{0} still imports "{1}", but {2} was deleted.', importerPath, moduleImport.specifier, modulePath),
           location: { file: importerPath, startLine: moduleImport.line },
-          evidenceDescription: `${importerPath}:${moduleImport.line} imports ${modulePath}, which no longer exists at that path.`,
+          evidenceDescription: msg('{0}:{1} imports {2}, which no longer exists at that path.', importerPath, moduleImport.line, modulePath),
           evidenceLocations: [{ file: importerPath, startLine: moduleImport.line }],
         }),
       );
@@ -259,11 +274,28 @@ export class TsContractsAnalyzer implements Analyzer {
               ruleId: 'contracts/export-removed',
               severity: 'high',
               verification: 'evidenced',
-              verificationNote: `Static analysis: "${usage.name}" was exported by ${modulePath} in the base revision, is not exported in head, and is referenced here. Run the type-check or build to confirm.`,
-              title: `"${usage.name}" is no longer exported by ${modulePath}`,
-              description: `${importerPath} depends on the ${removed.kind} "${usage.name}", which this change removed or renamed in ${modulePath}.`,
+              verificationNote: msg(
+                'Static analysis: "{0}" was exported by {1} in the base revision, is not exported in head, and is referenced here. Run the type-check or build to confirm.',
+                usage.name,
+                modulePath,
+              ),
+              title: msg('"{0}" is no longer exported by {1}', usage.name, modulePath),
+              description: msg(
+                '{0} depends on the {1} "{2}", which this change removed or renamed in {3}.',
+                importerPath,
+                removed.kind,
+                usage.name,
+                modulePath,
+              ),
               location: { file: importerPath, startLine: usage.line },
-              evidenceDescription: `Base ${modulePath}:${removed.line} exported "${usage.name}"; head does not. Referenced at ${importerPath}:${usage.line}.`,
+              evidenceDescription: msg(
+                'Base {0}:{1} exported "{2}"; head does not. Referenced at {3}:{4}.',
+                modulePath,
+                removed.line,
+                usage.name,
+                importerPath,
+                usage.line,
+              ),
               evidenceLocations: [{ file: importerPath, startLine: usage.line }],
             }),
           );
@@ -278,11 +310,30 @@ export class TsContractsAnalyzer implements Analyzer {
                 ruleId: 'contracts/arity-increased',
                 severity: 'high',
                 verification: 'evidenced',
-                verificationNote: `Static analysis: "${usage.name}" now requires ${arity.after} argument(s) (was ${arity.before}); this call passes ${call.args}.`,
-                title: `Call to "${usage.name}" is missing required arguments`,
-                description: `${modulePath} changed the signature of "${usage.name}" to require ${arity.after} argument(s), but this call site was not updated.`,
+                verificationNote: msg(
+                  'Static analysis: "{0}" now requires {1} argument(s) (was {2}); this call passes {3}.',
+                  usage.name,
+                  arity.after,
+                  arity.before,
+                  call.args,
+                ),
+                title: msg('Call to "{0}" is missing required arguments', usage.name),
+                description: msg(
+                  '{0} changed the signature of "{1}" to require {2} argument(s), but this call site was not updated.',
+                  modulePath,
+                  usage.name,
+                  arity.after,
+                ),
                 location: { file: importerPath, startLine: call.line },
-                evidenceDescription: `${importerPath}:${call.line} passes ${call.args} argument(s); ${modulePath}:${arity.line} requires ${arity.after}.`,
+                evidenceDescription: msg(
+                  '{0}:{1} passes {2} argument(s); {3}:{4} requires {5}.',
+                  importerPath,
+                  call.line,
+                  call.args,
+                  modulePath,
+                  arity.line,
+                  arity.after,
+                ),
               }),
             );
           }
@@ -299,12 +350,26 @@ export class TsContractsAnalyzer implements Analyzer {
                 severity: enumAccess ? 'high' : 'medium',
                 verification: enumAccess ? 'evidenced' : 'suspected',
                 verificationNote: enumAccess
-                  ? `Static analysis: ${usage.name}.${hit.member} was removed from ${modulePath} and is accessed here.`
-                  : `Name-based match without type resolution: "${hit.member}" was removed from ${usage.name} and a property with that name is used in a file importing it. A type-check can confirm.`,
-                title: enumAccess ? `Removed enum member ${usage.name}.${hit.member} still used` : `Possible use of removed property "${hit.member}" of ${usage.name}`,
-                description: `${modulePath} removed "${hit.member}" from ${members.kind} ${usage.name}; ${importerPath} still references it.`,
+                  ? msg('Static analysis: {0}.{1} was removed from {2} and is accessed here.', usage.name, hit.member, modulePath)
+                  : msg(
+                      'Name-based match without type resolution: "{0}" was removed from {1} and a property with that name is used in a file importing it. A type-check can confirm.',
+                      hit.member,
+                      usage.name,
+                    ),
+                title: enumAccess
+                  ? msg('Removed enum member {0}.{1} still used', usage.name, hit.member)
+                  : msg('Possible use of removed property "{0}" of {1}', hit.member, usage.name),
+                description: msg('{0} removed "{1}" from {2} {3}; {4} still references it.', modulePath, hit.member, members.kind, usage.name, importerPath),
                 location: { file: importerPath, startLine: hit.line },
-                evidenceDescription: `Member "${hit.member}" removed from ${usage.name} (${modulePath}:${members.line}); referenced at ${importerPath}:${hit.line}.`,
+                evidenceDescription: msg(
+                  'Member "{0}" removed from {1} ({2}:{3}); referenced at {4}:{5}.',
+                  hit.member,
+                  usage.name,
+                  modulePath,
+                  members.line,
+                  importerPath,
+                  hit.line,
+                ),
               }),
             );
           }

@@ -11,6 +11,7 @@ import {
   type SkippedFile,
   type VerificationStatus,
 } from './model';
+import { tr } from './i18n';
 
 export interface RiskInput {
   readonly findings: readonly ReviewFinding[];
@@ -66,66 +67,76 @@ export function assessRisk(input: RiskInput): RiskAssessment {
   const backedCritical = count('critical', true);
   if (backedCritical > 0) {
     level = raise(level, 'critical');
-    reasons.push(`${backedCritical} critical finding(s) backed by evidence.`);
+    reasons.push(tr('{0} critical finding(s) backed by evidence.', backedCritical));
   }
   if (regressionChecks.length > 0) {
     level = raise(level, 'high');
-    reasons.push(`${regressionChecks.length} check(s) pass on the base revision but fail with this change: ${regressionChecks.map((c) => c.label).join(', ')}.`);
+    reasons.push(
+      tr('{0} check(s) pass on the base revision but fail with this change: {1}.', regressionChecks.length, regressionChecks.map((c) => c.label).join(', ')),
+    );
   }
   const backedHigh = count('high', true);
   if (backedHigh > 0) {
     level = raise(level, 'high');
-    reasons.push(`${backedHigh} high-severity finding(s) backed by evidence.`);
+    reasons.push(tr('{0} high-severity finding(s) backed by evidence.', backedHigh));
   }
   const suspectedSerious = count('critical', false) + count('high', false);
   if (suspectedSerious > 0) {
     level = raise(level, 'medium');
-    reasons.push(`${suspectedSerious} critical/high finding(s) are suspected but not verified.`);
+    reasons.push(tr('{0} critical/high finding(s) are suspected but not verified.', suspectedSerious));
   }
   const failedUnattributed = input.checks.filter((c) => FAILED_STATUSES.has(c.status) && c.attribution !== 'introduced' && c.attribution !== 'pre-existing');
   if (failedUnattributed.length > 0) {
     level = raise(level, 'medium');
-    reasons.push(`${failedUnattributed.length} check(s) failed without a baseline to attribute the failure: ${failedUnattributed.map((c) => c.label).join(', ')}.`);
+    reasons.push(
+      tr(
+        '{0} check(s) failed without a baseline to attribute the failure: {1}.',
+        failedUnattributed.length,
+        failedUnattributed.map((c) => c.label).join(', '),
+      ),
+    );
   }
   const backedMedium = count('medium', true);
   if (backedMedium > 0) {
     level = raise(level, 'medium');
-    reasons.push(`${backedMedium} medium-severity finding(s) backed by evidence.`);
+    reasons.push(tr('{0} medium-severity finding(s) backed by evidence.', backedMedium));
   }
   if (reasons.length === 0 && level === 'low') {
-    reasons.push(input.findings.length === 0 ? 'No findings from the analyzers that ran.' : 'Only low-severity or unverified medium findings.');
+    reasons.push(input.findings.length === 0 ? tr('No findings from the analyzers that ran.') : tr('Only low-severity or unverified medium findings.'));
   }
 
   const limitations: string[] = [];
   if (input.checks.length === 0) {
-    limitations.push('No verification commands were executed; findings rely on static analysis only.');
+    limitations.push(tr('No verification commands were executed; findings rely on static analysis only.'));
   } else if (checks.notRun > 0) {
-    limitations.push(`${checks.notRun} planned check(s) did not run (cancelled or not approved).`);
+    limitations.push(tr('{0} planned check(s) did not run (cancelled or not approved).', checks.notRun));
   }
   if (checks.passed > 0) {
-    limitations.push('Passing checks only cover what the project tests exercise; they do not prove the change is correct.');
+    limitations.push(tr('Passing checks only cover what the project tests exercise; they do not prove the change is correct.'));
   }
   const preExisting = input.checks.filter((c) => c.attribution === 'pre-existing');
   if (preExisting.length > 0) {
-    limitations.push(`${preExisting.length} check(s) also fail on the base revision; failures there are not attributed to this change.`);
+    limitations.push(tr('{0} check(s) also fail on the base revision; failures there are not attributed to this change.', preExisting.length));
   }
   for (const run of input.analyzerRuns) {
     if (run.status === 'ran' && run.detail) {
-      limitations.push(`Partial analysis (${run.analyzerId}): ${run.detail}`);
+      limitations.push(tr('Partial analysis ({0}): {1}', run.analyzerId, run.detail));
     }
   }
   const skippedAnalyzers = input.analyzerRuns.filter((r) => r.status === 'failed');
   if (skippedAnalyzers.length > 0) {
-    limitations.push(`Analyzer(s) failed: ${skippedAnalyzers.map((r) => `${r.analyzerId} (${r.detail ?? 'unknown error'})`).join('; ')}.`);
+    limitations.push(
+      tr('Analyzer(s) failed: {0}.', skippedAnalyzers.map((r) => `${r.analyzerId} (${r.detail ?? tr('unknown error')})`).join('; ')),
+    );
   }
   if (input.skipped.length > 0) {
-    limitations.push(`${input.skipped.length} changed file(s) were not analyzed (excluded or over limits).`);
+    limitations.push(tr('{0} changed file(s) were not analyzed (excluded or over limits).', input.skipped.length));
   }
   if (input.scope.kind === 'pull-request' && input.checks.length === 0) {
-    limitations.push('Pull request reviewed from the GitHub API; checks require the PR head checked out locally.');
+    limitations.push(tr('Pull request reviewed from the GitHub API; checks require the PR head checked out locally.'));
   }
   if (byVerification['not-verified'] > 0) {
-    limitations.push(`${byVerification['not-verified']} finding(s) could not be verified.`);
+    limitations.push(tr('{0} finding(s) could not be verified.', byVerification['not-verified']));
   }
 
   return { level, reasons, limitations, counts: { byVerification, bySeverity, checks, regressions } };

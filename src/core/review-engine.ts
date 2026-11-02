@@ -1,4 +1,5 @@
 import type { Analyzer, WorkspaceIndex } from './analyzer';
+import { tr } from './i18n';
 import { uniqueId } from './ids';
 import {
   SEVERITIES,
@@ -65,11 +66,11 @@ export class ReviewEngine {
 
     for (const analyzer of this.analyzers) {
       if (options.signal?.aborted) {
-        runs.push({ analyzerId: analyzer.id, status: 'skipped', detail: 'Review cancelled.' });
+        runs.push({ analyzerId: analyzer.id, status: 'skipped', detail: tr('Review cancelled.') });
         continue;
       }
       if (!analyzer.appliesTo(changes)) {
-        runs.push({ analyzerId: analyzer.id, status: 'skipped', detail: 'No changed files in scope.' });
+        runs.push({ analyzerId: analyzer.id, status: 'skipped', detail: tr('No changed files in scope.') });
         continue;
       }
       options.progress?.(analyzer.description);

@@ -1,9 +1,11 @@
 // Single catalog of secret patterns. Used to detect secrets added in a diff, to redact
 // command output stored as evidence, and to scrub context before it reaches an AI provider.
 
+import { msg, type Message } from './i18n';
+
 export interface SecretPattern {
   readonly id: string;
-  readonly label: string;
+  readonly label: Message;
   /** Specific token formats are high confidence; generic assignments are medium. */
   readonly confidence: 'high' | 'medium';
   readonly regex: RegExp;
@@ -12,32 +14,32 @@ export interface SecretPattern {
 export const SECRET_PATTERNS: readonly SecretPattern[] = [
   {
     id: 'private-key',
-    label: 'Private key block',
+    label: msg('Private key block'),
     confidence: 'high',
     regex: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY(?: BLOCK)?-----/g,
   },
-  { id: 'aws-access-key', label: 'AWS access key ID', confidence: 'high', regex: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g },
-  { id: 'github-token', label: 'GitHub token', confidence: 'high', regex: /\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{60,})\b/g },
-  { id: 'anthropic-key', label: 'Anthropic API key', confidence: 'high', regex: /\bsk-ant-[A-Za-z0-9_-]{20,}/g },
-  { id: 'openai-key', label: 'OpenAI API key', confidence: 'high', regex: /\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{32,}/g },
-  { id: 'slack-token', label: 'Slack token', confidence: 'high', regex: /\bxox[abposr]-[A-Za-z0-9-]{10,}/g },
-  { id: 'stripe-live-key', label: 'Stripe live secret key', confidence: 'high', regex: /\b(?:sk|rk)_live_[A-Za-z0-9]{20,}/g },
-  { id: 'google-api-key', label: 'Google API key', confidence: 'high', regex: /\bAIza[0-9A-Za-z_-]{35}\b/g },
+  { id: 'aws-access-key', label: msg('AWS access key ID'), confidence: 'high', regex: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g },
+  { id: 'github-token', label: msg('GitHub token'), confidence: 'high', regex: /\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{60,})\b/g },
+  { id: 'anthropic-key', label: msg('Anthropic API key'), confidence: 'high', regex: /\bsk-ant-[A-Za-z0-9_-]{20,}/g },
+  { id: 'openai-key', label: msg('OpenAI API key'), confidence: 'high', regex: /\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{32,}/g },
+  { id: 'slack-token', label: msg('Slack token'), confidence: 'high', regex: /\bxox[abposr]-[A-Za-z0-9-]{10,}/g },
+  { id: 'stripe-live-key', label: msg('Stripe live secret key'), confidence: 'high', regex: /\b(?:sk|rk)_live_[A-Za-z0-9]{20,}/g },
+  { id: 'google-api-key', label: msg('Google API key'), confidence: 'high', regex: /\bAIza[0-9A-Za-z_-]{35}\b/g },
   {
     id: 'jwt',
-    label: 'JSON Web Token',
+    label: msg('JSON Web Token'),
     confidence: 'medium',
     regex: /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g,
   },
   {
     id: 'connection-string-password',
-    label: 'Credentials in connection string',
+    label: msg('Credentials in connection string'),
     confidence: 'high',
     regex: /\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@'"]+:[^\s@/'"]{3,}@[^\s'"]+/gi,
   },
   {
     id: 'generic-secret-assignment',
-    label: 'Hard-coded secret value',
+    label: msg('Hard-coded secret value'),
     confidence: 'medium',
     regex:
       /\b[\w.-]*(?:password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret)[\w.-]*["']?\s*[:=]\s*["']([^"'\s]{8,})["']/gi,

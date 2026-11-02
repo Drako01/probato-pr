@@ -1,4 +1,5 @@
 import type { Attribution, CommandEvidence } from '../core/model';
+import { tr } from '../core/i18n';
 import { fingerprint, type ToolDiagnostic } from './diagnostics-parser';
 
 export interface AttributionResult {
@@ -24,26 +25,30 @@ export function attribute(
   const none = { introducedDiagnostics: [], preExistingDiagnostics: [] };
   if (head.outcome === 'passed') {
     if (base && failed(base)) {
-      return { attribution: 'fixed', note: 'Fails on the base revision and passes with this change.', ...none };
+      return { attribution: 'fixed', note: tr('Fails on the base revision and passes with this change.'), ...none };
     }
-    return { attribution: 'unknown', note: 'Passed with this change.', ...none };
+    return { attribution: 'unknown', note: tr('Passed with this change.'), ...none };
   }
   if (head.outcome !== 'failed') {
-    return { attribution: 'inconclusive', note: `The head run did not complete (${head.outcome}); nothing can be concluded.`, ...none };
+    return { attribution: 'inconclusive', note: tr('The head run did not complete ({0}); nothing can be concluded.', head.outcome), ...none };
   }
   if (!base) {
-    return { attribution: 'inconclusive', note: 'Failed with this change; no baseline run, so the failure may already exist on the base revision.', ...none };
+    return {
+      attribution: 'inconclusive',
+      note: tr('Failed with this change; no baseline run, so the failure may already exist on the base revision.'),
+      ...none,
+    };
   }
   if (base.outcome === 'passed') {
     return {
       attribution: 'introduced',
-      note: 'Passes on the base revision and fails with this change.',
+      note: tr('Passes on the base revision and fails with this change.'),
       introducedDiagnostics: headDiagnostics,
       preExistingDiagnostics: [],
     };
   }
   if (base.outcome !== 'failed') {
-    return { attribution: 'inconclusive', note: `The baseline run did not complete (${base.outcome}); the failure cannot be attributed.`, ...none };
+    return { attribution: 'inconclusive', note: tr('The baseline run did not complete ({0}); the failure cannot be attributed.', base.outcome), ...none };
   }
   // Both failed: diagnostics (if parseable) tell new errors apart from old ones.
   if (headDiagnostics.length > 0 || baseDiagnostics.length > 0) {
@@ -53,21 +58,23 @@ export function attribute(
     if (introduced.length > 0) {
       return {
         attribution: 'introduced',
-        note: `Fails on both revisions; ${introduced.length} error(s) are new with this change and ${preExisting.length} already existed.`,
+        note: tr('Fails on both revisions; {0} error(s) are new with this change and {1} already existed.', introduced.length, preExisting.length),
         introducedDiagnostics: introduced,
         preExistingDiagnostics: preExisting,
       };
     }
     return {
       attribution: 'pre-existing',
-      note: `Fails on both revisions with the same ${preExisting.length} error(s); not caused by this change.`,
+      note: tr('Fails on both revisions with the same {0} error(s); not caused by this change.', preExisting.length),
       introducedDiagnostics: [],
       preExistingDiagnostics: preExisting,
     };
   }
   return {
     attribution: 'pre-existing',
-    note: 'Fails on both the base revision and with this change, so the failure is not attributed to it. Individual failures could not be compared; additional failures caused by this change cannot be ruled out.',
+    note: tr(
+      'Fails on both the base revision and with this change, so the failure is not attributed to it. Individual failures could not be compared; additional failures caused by this change cannot be ruled out.',
+    ),
     ...none,
   };
 }

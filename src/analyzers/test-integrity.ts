@@ -1,6 +1,7 @@
 import * as ts from 'typescript';
 import type { Analyzer, AnalyzerContext, AnalyzerOutput } from '../core/analyzer';
 import { OutputCollector, staticFinding } from '../core/finding-factory';
+import { msg, tr } from '../core/i18n';
 import type { ChangeSet, FileChange } from '../core/model';
 import { addedLines, deletedLines } from '../git/diff-parser';
 import { calleePath, isScriptFile, isTestFile, lineOf, parseSource, stringLiteralValue, visit } from './ts-ast';
@@ -87,7 +88,9 @@ const GO_TEST_FUNC = /^func (Test\w+)\s*\(/;
 /** Detects deleted, skipped, focused or weakened tests. */
 export class TestIntegrityAnalyzer implements Analyzer {
   readonly id = ID;
-  readonly description = 'Tests removed, skipped, focused or weakened by the change';
+  get description(): string {
+    return tr('Tests removed, skipped, focused or weakened by the change');
+  }
 
   appliesTo(changes: ChangeSet): boolean {
     return changes.files.some((f) => (isScriptFile(f.path) && isTestFile(f.path)) || f.path.endsWith('_test.go'));
@@ -122,11 +125,20 @@ export class TestIntegrityAnalyzer implements Analyzer {
             ruleId: 'tests/file-deleted',
             severity: 'high',
             verification: 'evidenced',
-            verificationNote: `The base version of the file contained ${base.length} test case(s); the file is deleted in this change.`,
-            title: `Test file deleted: ${file.path}`,
-            description: `Deleting ${file.path} removes ${base.length} test case(s). If the covered behavior still exists, it is no longer protected.`,
+            verificationNote: msg('The base version of the file contained {0} test case(s); the file is deleted in this change.', base.length),
+            title: msg('Test file deleted: {0}', file.path),
+            description: msg(
+              'Deleting {0} removes {1} test case(s). If the covered behavior still exists, it is no longer protected.',
+              file.path,
+              base.length,
+            ),
             location: { file: file.path, startLine: 1 },
-            evidenceDescription: `Base revision had ${base.length} test case(s): ${base.slice(0, 5).map((c) => c.title).join('; ')}${base.length > 5 ? '…' : ''}`,
+            evidenceDescription: msg(
+              'Base revision had {0} test case(s): {1}{2}',
+              base.length,
+              base.slice(0, 5).map((c) => c.title).join('; '),
+              base.length > 5 ? '…' : '',
+            ),
           }),
         );
       }
@@ -147,11 +159,11 @@ export class TestIntegrityAnalyzer implements Analyzer {
           ruleId: 'tests/cases-removed',
           severity: 'medium',
           verification: 'evidenced',
-          verificationNote: `Test count dropped from ${base.length} to ${head.length} (AST comparison of base and head).`,
-          title: `${removed.length} test case(s) removed in ${file.path}`,
-          description: `Removed: ${removed.map((c) => `"${c.title}"`).join(', ')}.`,
+          verificationNote: msg('Test count dropped from {0} to {1} (AST comparison of base and head).', base.length, head.length),
+          title: msg('{0} test case(s) removed in {1}', removed.length, file.path),
+          description: msg('Removed: {0}.', removed.map((c) => `"${c.title}"`).join(', ')),
           location: { file: file.path, startLine: head[0]?.line ?? 1 },
-          evidenceDescription: `Test cases present in base but not in head: ${removed.map((c) => c.title).join('; ')}`,
+          evidenceDescription: msg('Test cases present in base but not in head: {0}', removed.map((c) => c.title).join('; ')),
         }),
       );
     }
@@ -165,12 +177,12 @@ export class TestIntegrityAnalyzer implements Analyzer {
             ruleId: 'tests/focused',
             severity: 'high',
             verification: 'evidenced',
-            verificationNote: 'The AST shows a focus modifier (.only/fit/fdescribe) that was not present in the base revision.',
-            title: `Focused test added: "${testCase.title}"`,
-            description: 'A focused test makes the runner skip every other test in the file or suite, so CI can pass while most tests never run.',
+            verificationNote: msg('The AST shows a focus modifier (.only/fit/fdescribe) that was not present in the base revision.'),
+            title: msg('Focused test added: "{0}"', testCase.title),
+            description: msg('A focused test makes the runner skip every other test in the file or suite, so CI can pass while most tests never run.'),
             location: { file: file.path, startLine: testCase.line },
-            evidenceDescription: `Line ${testCase.line} declares a focused test.`,
-            suggestedFix: 'Remove the .only / f-prefix before merging.',
+            evidenceDescription: msg('Line {0} declares a focused test.', testCase.line),
+            suggestedFix: msg('Remove the .only / f-prefix before merging.'),
           }),
         );
       } else if (testCase.mode === 'skipped' && before && before.mode !== 'skipped') {
@@ -180,11 +192,11 @@ export class TestIntegrityAnalyzer implements Analyzer {
             ruleId: 'tests/skipped',
             severity: 'medium',
             verification: 'evidenced',
-            verificationNote: 'The test ran in the base revision and is skipped in head (AST comparison).',
-            title: `Test disabled: "${testCase.title}"`,
-            description: 'An existing test was disabled by this change, so the behavior it covered is no longer verified.',
+            verificationNote: msg('The test ran in the base revision and is skipped in head (AST comparison).'),
+            title: msg('Test disabled: "{0}"', testCase.title),
+            description: msg('An existing test was disabled by this change, so the behavior it covered is no longer verified.'),
             location: { file: file.path, startLine: testCase.line },
-            evidenceDescription: `Line ${testCase.line}: test skipped (was active in base).`,
+            evidenceDescription: msg('Line {0}: test skipped (was active in base).', testCase.line),
           }),
         );
       } else if (before && before.mode === 'normal' && testCase.mode === 'normal' && testCase.assertions < before.assertions) {
@@ -195,13 +207,17 @@ export class TestIntegrityAnalyzer implements Analyzer {
             ruleId: none ? 'tests/assertions-removed' : 'tests/assertions-reduced',
             severity: none ? 'high' : 'low',
             verification: 'evidenced',
-            verificationNote: `Assertion calls in this test went from ${before.assertions} to ${testCase.assertions} (AST count of expect/assert calls).`,
-            title: none ? `Test no longer asserts anything: "${testCase.title}"` : `Fewer assertions in "${testCase.title}"`,
+            verificationNote: msg(
+              'Assertion calls in this test went from {0} to {1} (AST count of expect/assert calls).',
+              before.assertions,
+              testCase.assertions,
+            ),
+            title: none ? msg('Test no longer asserts anything: "{0}"', testCase.title) : msg('Fewer assertions in "{0}"', testCase.title),
             description: none
-              ? 'The test still runs but cannot fail on wrong results, which makes it pass unconditionally.'
-              : 'The test checks less than before; confirm the removed assertions were obsolete.',
+              ? msg('The test still runs but cannot fail on wrong results, which makes it pass unconditionally.')
+              : msg('The test checks less than before; confirm the removed assertions were obsolete.'),
             location: { file: file.path, startLine: testCase.line },
-            evidenceDescription: `Assertions: base ${before.assertions}, head ${testCase.assertions}.`,
+            evidenceDescription: msg('Assertions: base {0}, head {1}.', before.assertions, testCase.assertions),
           }),
         );
       }
@@ -223,11 +239,11 @@ export class TestIntegrityAnalyzer implements Analyzer {
           ruleId: 'tests/cases-removed',
           severity: 'medium',
           verification: 'evidenced',
-          verificationNote: 'Line-level diff comparison: Test function declarations were deleted and not re-added.',
-          title: `${reallyRemoved.length} Go test(s) removed in ${file.path}`,
-          description: `Removed: ${reallyRemoved.join(', ')}.`,
+          verificationNote: msg('Line-level diff comparison: Test function declarations were deleted and not re-added.'),
+          title: msg('{0} Go test(s) removed in {1}', reallyRemoved.length, file.path),
+          description: msg('Removed: {0}.', reallyRemoved.join(', ')),
           location: { file: file.path, startLine: 1 },
-          evidenceDescription: `Deleted declarations: ${reallyRemoved.join(', ')}`,
+          evidenceDescription: msg('Deleted declarations: {0}', reallyRemoved.join(', ')),
         }),
       );
     }
@@ -239,11 +255,11 @@ export class TestIntegrityAnalyzer implements Analyzer {
             ruleId: 'tests/skipped',
             severity: 'medium',
             verification: 'evidenced',
-            verificationNote: 'An added line calls t.Skip; the diff shows it is new in this change.',
-            title: `Go test skip added in ${file.path}`,
-            description: 'A test now skips itself, so the behavior it covered is no longer verified.',
+            verificationNote: msg('An added line calls t.Skip; the diff shows it is new in this change.'),
+            title: msg('Go test skip added in {0}', file.path),
+            description: msg('A test now skips itself, so the behavior it covered is no longer verified.'),
             location: { file: file.path, startLine: line.line },
-            evidenceDescription: `Added line ${line.line}: ${line.text.trim()}`,
+            evidenceDescription: msg('Added line {0}: {1}', line.line, line.text.trim()),
             excerpt: line.text.trim(),
           }),
         );

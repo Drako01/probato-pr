@@ -6,7 +6,7 @@ import * as path from 'node:path';
 const files = (dir) => readdirSync(dir).flatMap((n) => (statSync(path.join(dir, n)).isDirectory() ? files(path.join(dir, n)) : n.endsWith('.ts') ? [path.join(dir, n)] : []));
 const keys = new Set();
 for (const file of files('src')) {
-  for (const m of readFileSync(file, 'utf8').matchAll(/l10n\.t\(\s*'((?:[^'\\]|\\.)*)'/g)) {
+  for (const m of readFileSync(file, 'utf8').matchAll(/(?:l10n\.t|\btr|\bmsg)\(\s*'((?:[^'\\]|\\.)*)'/g)) {
     keys.add(m[1].replace(/\\'/g, "'"));
   }
 }

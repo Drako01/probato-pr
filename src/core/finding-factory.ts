@@ -1,27 +1,31 @@
 import { stableId } from './ids';
+import { render, renderEnglish, type Message } from './i18n';
 import type { ReviewFinding, SourceLocation, StaticEvidence } from './model';
 
-/** Builds a finding together with the static evidence that backs it, keeping ids stable across runs. */
+/**
+ * Builds a finding together with the static evidence that backs it. Text fields are messages rendered in the
+ * active locale; the id is derived from the English title so it does not change when the language does.
+ */
 export function staticFinding(input: {
   readonly analyzerId: string;
   readonly ruleId: string;
   readonly severity: ReviewFinding['severity'];
   readonly verification: 'evidenced' | 'suspected';
-  readonly verificationNote: string;
-  readonly title: string;
-  readonly description: string;
+  readonly verificationNote: Message;
+  readonly title: Message;
+  readonly description: Message;
   readonly location: SourceLocation;
-  readonly evidenceDescription: string;
+  readonly evidenceDescription: Message;
   readonly evidenceLocations?: readonly SourceLocation[];
   readonly excerpt?: string;
-  readonly suggestedFix?: string;
+  readonly suggestedFix?: Message;
 }): { finding: ReviewFinding; evidence: StaticEvidence } {
-  const id = stableId(input.ruleId, input.location.file, input.location.startLine, input.title);
+  const id = stableId(input.ruleId, input.location.file, input.location.startLine, renderEnglish(input.title));
   const evidence: StaticEvidence = {
     kind: 'static-analysis',
     id: `ev-${id}`,
     analyzerId: input.analyzerId,
-    description: input.evidenceDescription,
+    description: render(input.evidenceDescription),
     locations: input.evidenceLocations ?? [input.location],
     ...(input.excerpt !== undefined ? { excerpt: input.excerpt } : {}),
   };
@@ -30,13 +34,13 @@ export function staticFinding(input: {
     ruleId: input.ruleId,
     severity: input.severity,
     verification: input.verification,
-    verificationNote: input.verificationNote,
+    verificationNote: render(input.verificationNote),
     origin: 'analyzer',
-    title: input.title,
-    description: input.description,
+    title: render(input.title),
+    description: render(input.description),
     location: input.location,
-    evidence: [{ evidenceId: evidence.id, summary: input.evidenceDescription }],
-    ...(input.suggestedFix !== undefined ? { suggestedFix: input.suggestedFix } : {}),
+    evidence: [{ evidenceId: evidence.id, summary: render(input.evidenceDescription) }],
+    ...(input.suggestedFix !== undefined ? { suggestedFix: render(input.suggestedFix) } : {}),
   };
   return { finding, evidence };
 }

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { createDefaultAnalyzers } from './analyzers';
 import type { ReviewResult } from './core/model';
+import { setTranslator } from './core/i18n';
 import { ReviewEngine } from './core/review-engine';
 import { aiProviderLabel, createAiProvider } from './extension/ai-providers';
 import { AiSetup } from './extension/ai-setup';
@@ -31,6 +32,7 @@ export interface ProbatoApi {
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<ProbatoApi> {
+  setTranslator((template, ...args) => vscode.l10n.t(template, ...args));
   const log = vscode.window.createOutputChannel('Probato PR', { log: true });
   const manifest = context.extension.packageJSON as { version?: unknown };
   const version = typeof manifest.version === 'string' ? manifest.version : '0.0.0';

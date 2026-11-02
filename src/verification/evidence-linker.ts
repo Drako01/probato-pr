@@ -1,5 +1,6 @@
 import { stableId } from '../core/ids';
 import type { CheckResult, ReviewFinding, ReviewResult } from '../core/model';
+import { tr } from '../core/i18n';
 import { finalizeResult } from '../core/review-engine';
 import { fingerprint, type ToolDiagnostic } from './diagnostics-parser';
 import type { VerificationOutcome } from './verification-engine';
@@ -20,13 +21,13 @@ function diagnosticFinding(
     severity: introduced ? 'high' : 'medium',
     verification: introduced ? 'confirmed' : 'evidenced',
     verificationNote: introduced
-      ? `Reported by "${check.label}" with this change and absent when the same command ran on the base revision.`
-      : `Reported by "${check.label}" in a file changed by this review. No baseline run, so it may predate the change.`,
+      ? tr('Reported by "{0}" with this change and absent when the same command ran on the base revision.', check.label)
+      : tr('Reported by "{0}" in a file changed by this review. No baseline run, so it may predate the change.', check.label),
     origin: 'verification',
     title: `${diagnostic.code === 'go' ? '' : `${diagnostic.code}: `}${diagnostic.message}`.slice(0, 200),
-    description: `${check.label} reported this error at ${diagnostic.file}:${diagnostic.line}:${diagnostic.column}.`,
+    description: tr('{0} reported this error at {1}:{2}:{3}.', check.label, diagnostic.file, diagnostic.line, diagnostic.column),
     location: { file: diagnostic.file, startLine: diagnostic.line },
-    evidence: [{ evidenceId, summary: `${check.label} output (${check.status})` }],
+    evidence: [{ evidenceId, summary: tr('{0} output ({1})', check.label, check.status) }],
     attribution: introduced ? 'introduced' : 'unknown',
   };
 }
@@ -59,7 +60,7 @@ export function applyVerification(review: ReviewResult, outcome: VerificationOut
       }
       hits.forEach((h) => matched.add(fingerprint(h)));
       const codes = [...new Set(hits.map((h) => h.code))].join(', ');
-      const evidence = [...finding.evidence, { evidenceId: headEvidenceId, summary: `${check.label} reports ${codes} at this line` }];
+      const evidence = [...finding.evidence, { evidenceId: headEvidenceId, summary: tr('{0} reports {1} at this line', check.label, codes) }];
       const newOnes = hits.filter((h) => introduced.has(fingerprint(h)));
       if (diag.hasBaseline && newOnes.length > 0) {
         return {
@@ -67,7 +68,10 @@ export function applyVerification(review: ReviewResult, outcome: VerificationOut
           evidence,
           verification: 'confirmed',
           attribution: 'introduced',
-          verificationNote: `${finding.origin === 'ai' ? 'AI suspicion confirmed' : 'Confirmed'}: "${check.label}" reports ${codes} at this location with this change, and not on the base revision.`,
+          verificationNote:
+            finding.origin === 'ai'
+              ? tr('AI suspicion confirmed: "{0}" reports {1} at this location with this change, and not on the base revision.', check.label, codes)
+              : tr('Confirmed: "{0}" reports {1} at this location with this change, and not on the base revision.', check.label, codes),
         };
       }
       if (diag.hasBaseline && hits.every((h) => preExisting.has(fingerprint(h)))) {
@@ -76,14 +80,14 @@ export function applyVerification(review: ReviewResult, outcome: VerificationOut
           evidence,
           verification: finding.verification === 'suspected' ? 'evidenced' : finding.verification,
           attribution: 'pre-existing',
-          verificationNote: `${finding.verificationNote} "${check.label}" reports ${codes} here on the base revision too, so this error predates the change.`,
+          verificationNote: `${finding.verificationNote} ${tr('"{0}" reports {1} here on the base revision too, so this error predates the change.', check.label, codes)}`,
         };
       }
       return {
         ...finding,
         evidence,
         verification: finding.verification === 'suspected' || finding.verification === 'not-verified' ? 'evidenced' : finding.verification,
-        verificationNote: `${finding.verificationNote} "${check.label}" reports ${codes} at this line (no baseline comparison, so attribution is unknown).`,
+        verificationNote: `${finding.verificationNote} ${tr('"{0}" reports {1} at this line (no baseline comparison, so attribution is unknown).', check.label, codes)}`,
       };
     });
 
@@ -101,7 +105,7 @@ export function applyVerification(review: ReviewResult, outcome: VerificationOut
         ? {
             ...f,
             verification: 'suspected',
-            verificationNote: `${f.verificationNote} However, "${passedTypecheck.label}" passed, so this may be a false positive (for example a path alias, or a file outside the compiled project).`,
+            verificationNote: `${f.verificationNote} ${tr('However, "{0}" passed, so this may be a false positive (for example a path alias, or a file outside the compiled project).', passedTypecheck.label)}`,
           }
         : f,
     );
