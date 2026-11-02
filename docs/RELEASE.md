@@ -32,9 +32,10 @@ SemVer. `0.x` while the public API (settings, commands, report schema) may still
 Step-by-step guide, accounts and first-time setup: [`PUBLICACION.md`](PUBLICACION.md) (Spanish).
 
 - **First release:** upload the verified `probato-pr.vsix` on the publisher management page (no token needed).
-- **Later releases:** Trusted Publishing from GitHub Actions (`vsce publish --oidc`, template in `docs/ci/publish.yml.example`, not enabled). No long-lived secret is stored.
-- **Do not use Personal Access Tokens:** global Azure DevOps PATs are retired on 2026-12-01.
-- **Open VSX** (Cursor, Windsurf, VSCodium): `npx ovsx publish probato-pr.vsix -p <token>`; the token lives only in a password manager or a GitHub environment secret.
+- **Later releases (automatic):** `.github/workflows/publish.yml`. A pull request merged to `main` that changes the version in `package.json` runs the quality gate, packages the VSIX once, publishes that same file to the Marketplace (Trusted Publishing, `vsce publish --oidc`, no stored token) and to Open VSX, and creates the GitHub release with the VSIX and its SHA-256. A merge that keeps the version only verifies. *Actions → publish → Run workflow* publishes the version on `main` by hand; publishing is idempotent (`--skip-duplicate`).
+- **Credentials:** the `marketplace` and `open-vsx` GitHub environments are limited to `main`. The Marketplace needs a Trusted Publishing policy (owner `Drako01`, repository `probato-pr`, workflow `publish.yml`, environment `marketplace`). Open VSX uses the `OVSX_PAT` secret of the `open-vsx` environment; rotate it in open-vsx.org → Settings → Access Tokens and `gh secret set OVSX_PAT --env open-vsx`.
+- **Do not use Personal Access Tokens for the Marketplace:** global Azure DevOps PATs are retired on 2026-12-01.
+- **Workflow changes** need a pull request approved by the code owner; pin every third-party action to a full commit SHA (Dependabot keeps them current).
 
 ## Rollback / withdrawal
 

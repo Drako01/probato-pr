@@ -60,27 +60,27 @@ Antes, revisá que no haya nada privado en el historial: `git log --stat` y busc
 
 > **Importante:** los *Personal Access Tokens* globales de Azure DevOps se retiran el **1 de diciembre de 2026**. Muchos tutoriales todavía explican `vsce login` con un PAT: **no uses ese método**.
 
-La forma recomendada es **Trusted Publishing** con GitHub Actions: GitHub demuestra ante el Marketplace que el workflow es tuyo, sin guardar ninguna clave.
+La forma recomendada es **Trusted Publishing** con GitHub Actions: GitHub demuestra ante el Marketplace que el workflow es tuyo, sin guardar ninguna clave. El workflow es `.github/workflows/publish.yml`.
+
+**Configuración (una sola vez):**
 
 1. En la página del publisher, pestaña **Trusted Publishing**, creá una política:
+   - Policy name: `Release workflow`
+   - Provider: GitHub Actions
    - Repository owner: `Drako01`
-   - Repository: `probato-pr`
-   - Workflow filename: `publish.yml`
+   - Repository: `probato-pr` (solo el nombre, sin la URL)
+   - Workflow: `publish.yml`
    - Environment: `marketplace`
-2. En GitHub, **Settings → Environments → New environment** `marketplace`, con **Required reviewers** = vos. Así cada publicación espera tu aprobación.
-3. Copiá `docs/ci/publish.yml.example` a `.github/workflows/publish.yml` y reemplazá cada `<sha>` por el commit SHA de la versión de la acción (seguridad: evita que una acción modificada publique por vos).
-4. Para publicar una versión nueva:
+2. En GitHub existen los environments `marketplace` y `open-vsx`, limitados a la rama `main`: ninguna otra rama puede usar sus credenciales. El token de Open VSX vive solo como secreto del environment `open-vsx` (`OVSX_PAT`).
 
-   ```bash
-   # 1. Subí la versión en package.json y documentala en CHANGELOG.md
-   # 2. Commit, y luego:
-   git tag v0.1.1
-   git push origin v0.1.1
-   ```
+**Cómo se publica una versión nueva:**
 
-   El workflow verifica que el tag coincida con `package.json`, corre todos los tests, empaqueta, publica con `vsce publish --oidc` y guarda el VSIX con su SHA-256.
+1. En tu PR subí la versión en `package.json` y documentala en `CHANGELOG.md`.
+2. Mergeá el PR a `main`. Si la versión cambió, el workflow corre todos los chequeos, empaqueta **una sola vez** el VSIX y lo publica en el Marketplace y en Open VSX con ese mismo archivo. Después crea el release de GitHub con el VSIX y su SHA-256.
+3. Si el merge no cambia la versión, el workflow solo verifica y no publica nada.
+4. Para republicar o publicar la versión actual a mano: **Actions → publish → Run workflow**. Es seguro repetirlo: una versión que ya existe en un store se omite.
 
-Si el repositorio fuera privado, el workflow tiene que correr dentro de las 48 horas de crear la política.
+Cada pull request corre los chequeos en Linux y Windows. Si el repositorio fuera privado, el workflow tiene que correr dentro de las 48 horas de crear la política.
 
 ## 6. Open VSX: Cursor, Windsurf y VSCodium
 
@@ -90,11 +90,11 @@ Cursor, Windsurf, VSCodium y Gitpod **no usan** el Marketplace de Microsoft sino
 2. Creá una cuenta en **eclipse.org** completando el campo *GitHub Username* con exactamente `Drako01`.
 3. En tu perfil de open-vsx.org, vinculá la cuenta de Eclipse y **firmá el Publisher Agreement desde ese perfil**. Firmarlo solo en el sitio de Eclipse no alcanza.
 4. En el perfil, **Access Tokens → Generate New Token**. Copialo y guardalo en un gestor de contraseñas, nunca en archivos del repo.
-5. Creá el namespace y publicá el mismo VSIX:
+5. Creá el namespace y publicá el mismo VSIX (la primera vez a mano; después lo hace el workflow del paso 5, con el token guardado como secreto del environment `open-vsx`):
 
    ```bash
-   npx ovsx create-namespace armotusitio -p <token>
-   npx ovsx publish probato-pr.vsix -p <token>
+   OVSX_PAT=<token> npx ovsx create-namespace armotusitio
+   OVSX_PAT=<token> npx ovsx publish probato-pr.vsix
    ```
 
 6. Crear el namespace no te da exclusividad: pedí la propiedad del namespace (*claim ownership*, siguiendo la wiki de Open VSX) para que nadie más pueda publicar como `armotusitio`.

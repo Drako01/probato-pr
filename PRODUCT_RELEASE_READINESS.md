@@ -65,7 +65,7 @@ Escala: **PASS** (verificado con evidencia) · **WARN** (funciona con reservas) 
 | Accesibilidad | WARN | Árboles nativos con `accessibilityInformation` e iconos con forma distinta por estado (no solo color). Panel: botones nativos, `aria-pressed`/`aria-expanded`, foco restaurado tras cada render, chips de verificación distinguibles por estilo de borde, `prefers-reduced-motion`. Sin auditoría con lector de pantalla; plan manual §1.7. |
 | VS Code Insiders | SKIP | No instalado en esta máquina. |
 | vscode.dev / github.dev | Fuera de alcance 0.1 | `virtualWorkspaces: false` declarado; requiere Git y procesos locales. |
-| OIDC / Trusted Publishing | WARN | Validado contra la documentación oficial (2026-11-02): `vsce publish --oidc` (soportado por `@vscode/vsce` 4.1.0 instalado) con política de Trusted Publishing; los PAT globales se retiran el 2026-12-01. Plantilla `docs/ci/publish.yml.example` y guía `docs/PUBLICACION.md` preparadas, **no habilitadas** (requiere autorización y SHAs fijados). |
+| OIDC / Trusted Publishing | WARN | Validado contra la documentación oficial (2026-11-02): `vsce publish --oidc` (soportado por `@vscode/vsce` 4.1.0 instalado) con política de Trusted Publishing; los PAT globales se retiran el 2026-12-01. Workflow `.github/workflows/publish.yml` con acciones fijadas por SHA y environments limitados a `main`; guía `docs/PUBLICACION.md`. |
 
 ## Pendientes no bloqueantes
 
