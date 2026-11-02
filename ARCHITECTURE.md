@@ -12,7 +12,9 @@ Documento interno (español). La documentación pública está en inglés.
 extension.ts (composition root)
    │
    ├─ extension/   comandos, sesión, settings        ← depende de vscode
-   ├─ ui/          árboles, diagnósticos, documentos ← depende de vscode
+   ├─ ui/          árboles, diagnósticos, documentos, panel Review Summary, status bar ← depende de vscode
+   │                (ui/workflow.ts y ui/summary-protocol.ts son puros: sin vscode)
+   ├─ webview/     script del panel (navegador, DOM); importa solo tipos de ui/summary-protocol
    ├─ ai/vscode-lm-provider.ts                       ← depende de vscode
    │
    ├─ core/          modelo de dominio, motor, riesgo, secretos, paths, glob   (sin vscode)
@@ -33,7 +35,13 @@ Reglas verificadas por tests (`test/unit/ai-github-reports.test.ts`): las capas 
 2. `LocalChangeCollector` (o `pullRequestChangeSet`) produce un `ChangeSet`: archivos, hunks, límites aplicados y un `ContentProvider` perezoso para leer base/head.
 3. `ReviewEngine` ejecuta cada `Analyzer` aplicable; un analizador que falla queda registrado como `failed` sin ocultar a los demás; los recortes de cobertura se informan como limitaciones.
 4. `finalizeResult` deduplica, ordena y calcula el riesgo explicable (`assessRisk`).
-5. La UI se suscribe a `ReviewSession.onDidChange` (árboles, diagnósticos, reporte virtual) y el historial se persiste de forma atómica.
+5. La UI se suscribe a `ReviewSession.onDidChange` (árboles, diagnósticos, panel, status bar, reporte virtual) y el historial se persiste de forma atómica.
+
+## Interfaz: flujo guiado
+
+`workflowOf` (`src/ui/workflow.ts`, puro y testeado) deriva el estado de los pasos Review → Verify → Share y la acción siguiente a partir de la sesión. `workflowSteps` le agrega textos localizados y es la única fuente que consumen el árbol Overview, el panel Review Summary y la status bar, así las tres superficies nunca se contradicen.
+
+El panel (`SummaryPanel`) es un webview: el host arma un `SummaryState` serializable (textos ya localizados con `vscode.l10n`) y lo envía con `postMessage`; el script del webview (`src/webview/summary.ts`, bundle IIFE aparte) solo renderiza con `textContent` y devuelve intenciones (`webviewMessageSchema`, Zod), que el host valida contra la lista blanca `SUMMARY_COMMANDS` antes de actuar.
 
 ## Verificación
 
@@ -51,7 +59,7 @@ Reglas verificadas por tests (`test/unit/ai-github-reports.test.ts`): las capas 
 | Git por CLI con flags seguros, no la Git Extension API | Necesitamos merge-base, worktrees, blobs por revisión y tests fuera de VS Code; control explícito de config peligrosa | `vscode.git` API: no expone todo y no es testeable sin el host |
 | Parser de diff propio | Renombres, binarios, rutas citadas y cambios de modo de Git | `diff.parsePatch`: maneja mal cabeceras de Git |
 | TypeScript 6.0.3 como dependencia de runtime (bundle) | AST real para analizadores; typescript-eslint exige `<6.1` | TS 7 (compilador nativo) no expone la API de JS |
-| Sin webviews | Superficie de ataque mínima, accesibilidad y tema nativos; reporte vía documento virtual + vista previa Markdown | Webview con CSP: más código y riesgo sin beneficio en el MVP |
+| Un solo webview (Review Summary), el resto nativo | El flujo con solo árboles resultó confuso en pruebas de uso; el panel muestra riesgo, pasos y hallazgos de un vistazo. Superficie acotada: CSP con nonce, sin `innerHTML`, mensajes validados con Zod y lista blanca de comandos. Árboles, diagnósticos y status bar siguen nativos (tema y accesibilidad de VS Code) | Solo árboles nativos (decisión del MVP, revisada); UI completa en webview: más superficie y peor integración con el tema |
 | Baseline solo para checks fallidos | Reduce el costo a la mitad o menos; un check que pasa no puede ser regresión | Correr todo dos veces |
 | PR vía API, sin fetch/checkout | Solo lectura, no toca el repo del usuario | `git fetch pull/N/head`: escribe refs |
 | IA solo como transporte de texto | Proveedores intercambiables; validación y redacción comunes | Lógica por proveedor |

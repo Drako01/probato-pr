@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { CheckResult, CommandEvidence, PlannedCheck } from '../core/model';
 import type { ReviewSession } from '../extension/review-session';
-import { checkIcon, safeMarkdown } from './presentation';
+import { checkIcon, checkResultLabel, safeMarkdown } from './presentation';
 
 type Node =
   | { readonly kind: 'section'; readonly id: string; readonly label: string; readonly children: readonly Node[] }
@@ -70,9 +70,10 @@ export class VerificationTreeProvider implements vscode.TreeDataProvider<Node>, 
         const item = new vscode.TreeItem(c.label);
         item.id = `check:${c.checkId}`;
         item.iconPath = checkIcon(c.status);
-        item.description = c.attribution === 'unknown' ? c.status : `${c.status} · ${c.attribution}`;
+        const status = checkResultLabel(c);
+        item.description = status;
         item.tooltip = safeMarkdown(c.commandLine, c.attributionNote);
-        item.accessibilityInformation = { label: `${c.label}: ${c.status}. ${c.attributionNote}` };
+        item.accessibilityInformation = { label: `${c.label}: ${status}. ${c.attributionNote}` };
         if (c.headEvidenceId) {
           item.command = { command: 'probatoPR.openEvidence', title: vscode.l10n.t('Open Evidence'), arguments: [c.headEvidenceId] };
         }

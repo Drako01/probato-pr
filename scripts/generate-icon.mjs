@@ -1,33 +1,39 @@
-// Generates media/icon.png (128x128, Marketplace requires PNG) without dependencies:
-// a shield with a check mark, rasterized with 4x4 supersampling and encoded with node:zlib.
+// Generates media/logo.png (128x128, Marketplace requires PNG) without dependencies, from the same geometry
+// as media/logo.svg: the "P-Merge" mark (a P drawn as a merge graph) on a dark tile, rasterized with 4x4
+// supersampling and encoded with node:zlib.
 import { writeFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 
 const SIZE = 128;
 const SS = 4;
-const BG = [27, 31, 36];
-const SHIELD = [46, 169, 143];
-const CHECK = [255, 255, 255];
+const BG = [20, 24, 29];
+const LINE = [255, 255, 255];
+const ACCENT = [46, 169, 143];
 
-const shield = [
-  [64, 18], [100, 30], [100, 62], [96, 82], [84, 98], [64, 112], [44, 98], [32, 82], [28, 62], [28, 30],
+// Mark geometry in the 24-unit grid of media/mark.svg, placed on the tile like logo.svg (translate 2.2 2.4, scale .8).
+const UNIT = SIZE / 24;
+const toMark = (v, offset) => (v / UNIT - offset) / 0.8;
+const HALF_STROKE = 0.8;
+const BOWL = { cx: 13, cy: 9, r: 4.5 };
+// The bowl arc stops where it meets the branch commit's outline (radius 2) and resumes after it.
+const COMMIT_GAP = 2 * Math.asin(2 / (2 * BOWL.r));
+const BOWL_ARCS = [
+  [-Math.PI / 2, -COMMIT_GAP],
+  [COMMIT_GAP, Math.PI / 2],
 ];
-
-function insidePolygon(x, y, poly) {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const [xi, yi] = poly[i];
-    const [xj, yj] = poly[j];
-    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
-      inside = !inside;
-    }
-  }
-  return inside;
-}
 
 function distanceToSegment(px, py, [ax, ay], [bx, by]) {
   const t = Math.max(0, Math.min(1, ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / ((bx - ax) ** 2 + (by - ay) ** 2)));
   return Math.hypot(px - (ax + t * (bx - ax)), py - (ay + t * (by - ay)));
+}
+
+function distanceToArc(px, py, from, to) {
+  const angle = Math.atan2(py - BOWL.cy, px - BOWL.cx);
+  if (angle >= from && angle <= to) {
+    return Math.abs(Math.hypot(px - BOWL.cx, py - BOWL.cy) - BOWL.r);
+  }
+  const end = (a) => Math.hypot(px - (BOWL.cx + BOWL.r * Math.cos(a)), py - (BOWL.cy + BOWL.r * Math.sin(a)));
+  return Math.min(end(from), end(to));
 }
 
 function insideRoundedSquare(x, y, radius) {
@@ -37,13 +43,23 @@ function insideRoundedSquare(x, y, radius) {
 }
 
 function colorAt(x, y) {
-  if (!insideRoundedSquare(x, y, 22)) {
+  if (!insideRoundedSquare(x, y, 5 * UNIT)) {
     return null;
   }
-  if (distanceToSegment(x, y, [46, 64], [58, 77]) < 6.5 || distanceToSegment(x, y, [58, 77], [83, 48]) < 6.5) {
-    return CHECK;
+  const mx = toMark(x, 2.2);
+  const my = toMark(y, 2.4);
+  if (Math.hypot(mx - 17.5, my - 9) <= 2.4 + HALF_STROKE) {
+    return ACCENT; // the branch commit: the change under review
   }
-  return insidePolygon(x, y, shield) ? SHIELD : BG;
+  const strokes = [
+    distanceToSegment(mx, my, [8, 6.5], [8, 17.5]),
+    distanceToSegment(mx, my, [10, 4.5], [13, 4.5]),
+    distanceToSegment(mx, my, [13, 13.5], [8, 13.5]),
+    ...BOWL_ARCS.map(([from, to]) => distanceToArc(mx, my, from, to)),
+    Math.abs(Math.hypot(mx - 8, my - 4.5) - 2),
+    Math.abs(Math.hypot(mx - 8, my - 19.5) - 2),
+  ];
+  return Math.min(...strokes) <= HALF_STROKE ? LINE : BG;
 }
 
 const raw = Buffer.alloc((SIZE * 4 + 1) * SIZE);
@@ -96,5 +112,5 @@ const png = Buffer.concat([
   chunk('IDAT', deflateSync(raw, { level: 9 })),
   chunk('IEND', Buffer.alloc(0)),
 ]);
-writeFileSync(new URL('../media/icon.png', import.meta.url), png);
-console.log(`media/icon.png written (${png.length} bytes)`);
+writeFileSync(new URL('../media/logo.png', import.meta.url), png);
+console.log(`media/logo.png written (${png.length} bytes)`);

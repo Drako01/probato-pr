@@ -8,7 +8,7 @@
     "name": "Alejandro Daniel Di Stefano",
     "url": "https://armotusitio.com.ar"
   },
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "MIT",
   "homepage": "https://armotusitio.com.ar",
   "repository": {
     "type": "git",
@@ -19,9 +19,9 @@
   },
   "private": true,
   "pricing": "Free",
-  "icon": "media/icon.png",
+  "icon": "media/logo.png",
   "galleryBanner": {
-    "color": "#1b1f24",
+    "color": "#14181d",
     "theme": "dark"
   },
   "engines": {
@@ -43,7 +43,9 @@
   ],
   "main": "./dist/extension.js",
   "l10n": "./l10n",
-  "activationEvents": [],
+  "activationEvents": [
+    "onWebviewPanel:probatoPR.summary"
+  ],
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
@@ -107,6 +109,12 @@
         "icon": "$(export)"
       },
       {
+        "command": "probatoPR.openMarkdownReport",
+        "title": "%command.openMarkdownReport%",
+        "category": "Probato PR",
+        "icon": "$(markdown)"
+      },
+      {
         "command": "probatoPR.cancel",
         "title": "%command.cancel%",
         "category": "Probato PR",
@@ -142,6 +150,18 @@
         "command": "probatoPR.restoreDismissed",
         "title": "%command.restoreDismissed%",
         "category": "Probato PR"
+      },
+      {
+        "command": "probatoPR.groupFindingsByFile",
+        "title": "%command.groupFindingsByFile%",
+        "category": "Probato PR",
+        "icon": "$(files)"
+      },
+      {
+        "command": "probatoPR.groupFindingsBySeverity",
+        "title": "%command.groupFindingsBySeverity%",
+        "category": "Probato PR",
+        "icon": "$(list-tree)"
       }
     ],
     "menus": {
@@ -187,6 +207,18 @@
         {
           "command": "probatoPR.cancel",
           "when": "probatoPR.busy"
+        },
+        {
+          "command": "probatoPR.openMarkdownReport",
+          "when": "probatoPR.hasReview"
+        },
+        {
+          "command": "probatoPR.groupFindingsByFile",
+          "when": "false"
+        },
+        {
+          "command": "probatoPR.groupFindingsBySeverity",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -214,6 +246,21 @@
           "command": "probatoPR.exportReport",
           "when": "view == probatoPR.findings && probatoPR.hasReview",
           "group": "navigation@2"
+        },
+        {
+          "command": "probatoPR.groupFindingsByFile",
+          "when": "view == probatoPR.findings && probatoPR.hasReview && probatoPR.findingsGrouping != file",
+          "group": "navigation@0"
+        },
+        {
+          "command": "probatoPR.groupFindingsBySeverity",
+          "when": "view == probatoPR.findings && probatoPR.hasReview && probatoPR.findingsGrouping == file",
+          "group": "navigation@0"
+        },
+        {
+          "command": "probatoPR.showResults",
+          "when": "view == probatoPR.overview && probatoPR.hasReview",
+          "group": "navigation@2"
         }
       ]
     },
@@ -222,7 +269,7 @@
         {
           "id": "probatoPR",
           "title": "Probato PR",
-          "icon": "media/activity.svg"
+          "icon": "media/mark.svg"
         }
       ]
     },
@@ -246,7 +293,7 @@
       {
         "view": "probatoPR.overview",
         "contents": "%welcome.overview%",
-        "when": "workspaceFolderCount > 0 && isWorkspaceTrusted"
+        "when": "workspaceFolderCount > 0 && isWorkspaceTrusted && !probatoPR.hasReview && !probatoPR.busy"
       },
       {
         "view": "probatoPR.overview",
@@ -257,6 +304,21 @@
         "view": "probatoPR.overview",
         "contents": "%welcome.noFolder%",
         "when": "workspaceFolderCount == 0"
+      },
+      {
+        "view": "probatoPR.findings",
+        "contents": "%welcome.findings.noReview%",
+        "when": "!probatoPR.hasReview"
+      },
+      {
+        "view": "probatoPR.findings",
+        "contents": "%welcome.findings.none%",
+        "when": "probatoPR.hasReview && probatoPR.visibleFindings == 0"
+      },
+      {
+        "view": "probatoPR.verification",
+        "contents": "%welcome.verification.noReview%",
+        "when": "!probatoPR.hasReview"
       }
     ],
     "configuration": {
@@ -360,13 +422,75 @@
           "description": "%config.ai.exclude%"
         }
       }
-    }
+    },
+    "walkthroughs": [
+      {
+        "id": "getStarted",
+        "title": "%walkthrough.title%",
+        "description": "%walkthrough.description%",
+        "steps": [
+          {
+            "id": "review",
+            "title": "%walkthrough.review.title%",
+            "description": "%walkthrough.review.description%",
+            "media": {
+              "image": "media/logo.svg",
+              "altText": "Probato PR"
+            },
+            "completionEvents": [
+              "onCommand:probatoPR.reviewCurrentChanges",
+              "onCommand:probatoPR.reviewBranch",
+              "onCommand:probatoPR.reviewStagedChanges",
+              "onCommand:probatoPR.reviewCommit",
+              "onCommand:probatoPR.reviewPullRequest"
+            ]
+          },
+          {
+            "id": "verify",
+            "title": "%walkthrough.verify.title%",
+            "description": "%walkthrough.verify.description%",
+            "media": {
+              "image": "media/logo.svg",
+              "altText": "Probato PR"
+            },
+            "completionEvents": [
+              "onCommand:probatoPR.verify"
+            ]
+          },
+          {
+            "id": "share",
+            "title": "%walkthrough.share.title%",
+            "description": "%walkthrough.share.description%",
+            "media": {
+              "image": "media/logo.svg",
+              "altText": "Probato PR"
+            },
+            "completionEvents": [
+              "onCommand:probatoPR.exportReport",
+              "onCommand:probatoPR.openMarkdownReport"
+            ]
+          },
+          {
+            "id": "ai",
+            "title": "%walkthrough.ai.title%",
+            "description": "%walkthrough.ai.description%",
+            "media": {
+              "image": "media/logo.svg",
+              "altText": "Probato PR"
+            },
+            "completionEvents": [
+              "onSettingChanged:probatoPR.ai.provider"
+            ]
+          }
+        ]
+      }
+    ]
   },
   "scripts": {
     "build": "node esbuild.mjs",
     "build:prod": "node esbuild.mjs --production",
     "watch": "node esbuild.mjs --watch",
-    "typecheck": "tsc -p . --noEmit",
+    "typecheck": "tsc -p . --noEmit && tsc -p src/webview --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
     "test:integration": "pnpm run build && tsc -p test/integration && node out/integration/run.js",

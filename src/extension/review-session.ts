@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { PlannedCheck, ReviewFinding, ReviewResult } from '../core/model';
 import type { HistoryStore } from '../infrastructure/history-store';
+import { workflowOf, type Workflow } from '../ui/workflow';
 import { applyVerification } from '../verification/evidence-linker';
 import type { VerificationOutcome } from '../verification/verification-engine';
 
@@ -22,7 +23,8 @@ export class ReviewSession implements vscode.Disposable {
   private review: ReviewResult | undefined;
   private outcome: VerificationOutcome | undefined;
   private view: ReviewResult | undefined;
-  private planned: readonly PlannedCheck[] = [];
+  /** Checks detected for the current review; undefined until detection ran (e.g. after a restore). */
+  private planned: readonly PlannedCheck[] | undefined;
   private running: { readonly label: string; readonly controller: AbortController } | undefined;
   private readonly dismissed: Set<string>;
   private readonly emitter = new vscode.EventEmitter<void>();
@@ -45,7 +47,16 @@ export class ReviewSession implements vscode.Disposable {
   }
 
   get plan(): readonly PlannedCheck[] {
-    return this.planned;
+    return this.planned ?? [];
+  }
+
+  workflow(): Workflow {
+    return workflowOf({
+      hasReview: this.view !== undefined,
+      hasLocalCheckout: Boolean(this.view?.repository.root),
+      checksRun: this.view?.checks.length ?? 0,
+      checksAvailable: this.planned?.length,
+    });
   }
 
   get busyLabel(): string | undefined {
@@ -70,7 +81,7 @@ export class ReviewSession implements vscode.Disposable {
   setReview(review: ReviewResult): void {
     this.review = review;
     this.outcome = undefined;
-    this.planned = [];
+    this.planned = undefined;
     this.view = review;
     this.changed(true);
   }
@@ -143,7 +154,7 @@ export class ReviewSession implements vscode.Disposable {
     this.review = undefined;
     this.outcome = undefined;
     this.view = undefined;
-    this.planned = [];
+    this.planned = undefined;
     await this.history.clear();
     this.changed(false);
   }

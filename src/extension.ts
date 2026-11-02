@@ -14,8 +14,10 @@ import { HistoryStore } from './infrastructure/history-store';
 import { NodeProcessRunner } from './infrastructure/process-runner';
 import { FindingDiagnostics } from './ui/diagnostics';
 import { EVIDENCE_SCHEME, REPORT_SCHEME, ReviewDocuments } from './ui/documents';
-import { FindingsTreeProvider } from './ui/findings-tree';
+import { createFindingsView } from './ui/findings-tree';
 import { OverviewTreeProvider } from './ui/overview-tree';
+import { ReviewStatusBar } from './ui/status-bar';
+import { SUMMARY_VIEW_TYPE, SummaryPanel } from './ui/summary-panel';
 import { VerificationTreeProvider } from './ui/verification-tree';
 import { VerificationEngine } from './verification/verification-engine';
 
@@ -67,6 +69,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
     }
   };
 
+  const summary = new SummaryPanel(session, context.extensionUri, log);
   const controller = new ReviewController({
     session,
     git,
@@ -81,6 +84,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
     aiProvider,
     settings,
     log,
+    showSummary: (preserveFocus) => {
+      summary.show(preserveFocus);
+    },
   });
 
   const documents = new ReviewDocuments(session);
@@ -91,8 +97,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
     vscode.workspace.registerTextDocumentContentProvider(REPORT_SCHEME, documents),
     vscode.workspace.registerTextDocumentContentProvider(EVIDENCE_SCHEME, documents),
     new FindingDiagnostics(session),
+    summary,
+    vscode.window.registerWebviewPanelSerializer(SUMMARY_VIEW_TYPE, summary),
+    new ReviewStatusBar(session),
     registerTree('probatoPR.overview', new OverviewTreeProvider(session)),
-    registerTree('probatoPR.findings', new FindingsTreeProvider(session)),
+    createFindingsView(session, context.workspaceState),
     registerTree('probatoPR.verification', new VerificationTreeProvider(session)),
     vscode.commands.registerCommand('probatoPR.reviewCurrentChanges', (arg?: unknown) => controller.reviewLocal('working', reviewTarget(arg))),
     vscode.commands.registerCommand('probatoPR.reviewStagedChanges', (arg?: unknown) => controller.reviewLocal('staged', reviewTarget(arg))),
@@ -101,9 +110,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
     vscode.commands.registerCommand('probatoPR.reviewPullRequest', () => controller.reviewPullRequest()),
     vscode.commands.registerCommand('probatoPR.verify', () => controller.verify()),
     vscode.commands.registerCommand('probatoPR.aiReview', () => controller.aiReview()),
-    vscode.commands.registerCommand('probatoPR.showResults', () => controller.showResults()),
+    vscode.commands.registerCommand('probatoPR.showResults', () => {
+      controller.showResults();
+    }),
+    vscode.commands.registerCommand('probatoPR.openMarkdownReport', () => controller.openMarkdownReport()),
     vscode.commands.registerCommand('probatoPR.exportReport', () => controller.exportReport()),
-    vscode.commands.registerCommand('probatoPR.openFinding', (id: string) => controller.openFinding(id)),
+    vscode.commands.registerCommand('probatoPR.openFinding', (id: string, viewColumn?: vscode.ViewColumn) => controller.openFinding(id, viewColumn)),
     vscode.commands.registerCommand('probatoPR.openEvidence', (id: string) => controller.openEvidence(id)),
     vscode.commands.registerCommand('probatoPR.cancel', () => session.cancel()),
     vscode.commands.registerCommand('probatoPR.dismissFinding', (node?: { finding?: { id: string } }) => (node?.finding ? session.dismiss(node.finding.id) : undefined)),
@@ -158,7 +170,7 @@ function reviewTarget(arg: unknown): vscode.Uri | undefined {
 }
 
 function registerTree<T>(id: string, provider: vscode.TreeDataProvider<T> & vscode.Disposable): vscode.Disposable {
-  const view = vscode.window.createTreeView(id, { treeDataProvider: provider, showCollapseAll: id === 'probatoPR.findings' });
+  const view = vscode.window.createTreeView(id, { treeDataProvider: provider });
   return vscode.Disposable.from(view, provider);
 }
 

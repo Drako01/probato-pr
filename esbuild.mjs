@@ -1,30 +1,39 @@
-// Bundles the extension into a single CommonJS file loaded by the VS Code extension host.
+// Bundles the extension (CommonJS for the extension host) and the Review Summary webview script (browser IIFE).
 import { writeFileSync } from 'node:fs';
 import * as esbuild from 'esbuild';
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
 
-const context = await esbuild.context({
+const shared = { bundle: true, sourcemap: !production, minify: production, logLevel: 'info' };
+
+const extension = await esbuild.context({
+  ...shared,
   entryPoints: ['src/extension.ts'],
-  bundle: true,
   format: 'cjs',
   platform: 'node',
   target: 'node20',
   outfile: 'dist/extension.js',
   external: ['vscode'],
-  sourcemap: !production,
-  minify: production,
   legalComments: 'linked',
   metafile: true,
-  logLevel: 'info',
+});
+
+// The webview imports protocol types only, so it bundles no third-party code.
+const webview = await esbuild.context({
+  ...shared,
+  entryPoints: ['src/webview/summary.ts'],
+  format: 'iife',
+  platform: 'browser',
+  target: 'es2022',
+  outfile: 'dist/webview/summary.js',
 });
 
 if (watch) {
-  await context.watch();
+  await Promise.all([extension.watch(), webview.watch()]);
 } else {
-  const result = await context.rebuild();
+  const [result] = await Promise.all([extension.rebuild(), webview.rebuild()]);
   // The metafile lists every bundled input; scripts/third-party-notices.mjs derives license notices from it.
   writeFileSync('dist/metafile.json', JSON.stringify(result.metafile));
-  await context.dispose();
+  await Promise.all([extension.dispose(), webview.dispose()]);
 }

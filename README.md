@@ -23,10 +23,12 @@ An AI claim is never "confirmed". A failing test is never blamed on your change 
 
 1. Install **Probato PR** from the Extensions view.
 2. Open a folder that is a Git repository and **trust** the workspace.
-3. Open the **Probato PR** view in the Activity Bar and click **Review Current Changes** (or use the shield button in the **Source Control** view, or run `Probato PR: Review Current Changes` from the Command Palette). In multi-root workspaces you pick the repository.
-4. Click a finding to jump to the code. Findings also appear in the **Problems** panel.
-5. Optional: click **Verify Findings** to run your project's type-check, lint, tests or build — you choose exactly which commands run.
-6. Export a **Markdown**, **SARIF** or **JSON** report.
+3. Open the **Probato PR** view in the Activity Bar and click **Review Current Changes** (or use the compare button in the **Source Control** view, or run `Probato PR: Review Current Changes` from the Command Palette). In multi-root workspaces you pick the repository.
+4. The **Review Summary** opens with the review risk, the findings and the next step highlighted. Click a finding to open the code beside it. Findings also appear in the **Problems** panel.
+5. **Verify:** run your project's type-check, lint, tests or build. You choose exactly which commands run.
+6. **Share:** export a **Markdown**, **SARIF** or **JSON** report, or copy the Markdown summary into your pull request description.
+
+New to Probato PR? Run `Welcome: Open Walkthrough` and pick **Get started with Probato PR**.
 
 ## Features
 
@@ -39,6 +41,7 @@ An AI claim is never "confirmed". A failing test is never blamed on your change 
   - *Dependencies:* new or changed install scripts (`postinstall`…), major upgrades, packages removed but still imported, local `replace` directives in `go.mod`.
   - *Configuration:* TypeScript strictness disabled, risky GitHub Actions triggers (`pull_request_target` + PR head checkout, `write-all`).
 - **Verification engine:** detects checks already present in your project (package scripts, local TypeScript compiler, `go build/vet/test`), shows the exact commands, runs only what you approve, captures evidence (command, revision, exit code, duration, output hash, redacted output), and re-runs failing checks on the base revision in a temporary Git worktree to attribute failures.
+- **Guided Review → Verify → Share flow:** the Review Summary panel, the Overview view and the status bar always show the same step states and the next action. Findings can be filtered by severity and grouped by severity or by file; the Activity Bar badge shows how many are open.
 - **Explainable review risk:** a label (`LOW` … `CRITICAL`) with the reasons and the limitations behind it. Passing checks never mean "safe".
 - **Reports:** Markdown, SARIF 2.1.0 (GitHub code scanning compatible) and full JSON with evidence.
 - **Optional AI review:** a VS Code chat model you already have (e.g. GitHub Copilot) or Anthropic Claude with your own key. You see and approve exactly which files are sent. AI findings stay *suspected*, and findings pointing outside the reviewed diff are rejected.
@@ -71,8 +74,9 @@ Python, PHP, Java, SQL migrations, OpenAPI, Docker and Terraform are on the road
 | `Probato PR: Review Pull Request (GitHub)` | Read-only, from the GitHub API. |
 | `Probato PR: Verify Findings (Run Checks)` | Plan, approve and run project checks with baseline attribution. |
 | `Probato PR: AI Review (Optional)` | Send the reviewed diff to your configured AI provider after confirmation. |
-| `Probato PR: Show Review Results` | Executive summary report. |
+| `Probato PR: Show Review Summary` | Opens the Review Summary panel: risk, next step, findings and checks. |
 | `Probato PR: Export Review Report` | Markdown, SARIF or JSON. |
+| `Probato PR: Open Markdown Report (for the PR Description)` | Markdown preview of the review, ready to paste into a pull request. |
 | `Probato PR: Cancel` | Stops the running operation and its child processes. |
 | `Probato PR: Delete Local Review History` | Removes stored reviews for this workspace. |
 
@@ -140,6 +144,10 @@ Press `F5` in VS Code to launch an Extension Development Host. See `CONTRIBUTING
 ## Support
 
 Bug reports and feature requests: see `SUPPORT.md`.
+
+## License
+
+[MIT](LICENSE) © 2026 Alejandro Daniel Di Stefano. Bundled third-party components keep their own licenses (`THIRD_PARTY_NOTICES.md`).
 
 ---
 

@@ -17,7 +17,6 @@ import { renderJson } from '../reports/json';
 import { renderMarkdown } from '../reports/markdown';
 import { renderSarif } from '../reports/sarif';
 import { evidenceUri, REPORT_URI } from '../ui/documents';
-import { riskLabel } from '../ui/presentation';
 import { detectChecks } from '../verification/check-detector';
 import type { VerificationEngine } from '../verification/verification-engine';
 import { BusyError, type ReviewSession } from './review-session';
@@ -33,6 +32,8 @@ export interface ControllerDeps {
   readonly aiProvider: () => AIReviewProvider | undefined;
   readonly settings: () => Settings & { readonly maxFileBytes: number };
   readonly log: vscode.LogOutputChannel;
+  /** Opens (or reveals) the Review Summary panel. */
+  readonly showSummary: (preserveFocus?: boolean) => void;
 }
 
 /** Orchestrates user commands. All operations are read-only unless the user approves otherwise. */
@@ -141,11 +142,8 @@ export class ReviewController {
       this.deps.session.setPlan(await this.planChecks(changes.repository.root));
     }
     this.deps.log.info(`Review ${review.id}: ${review.findings.length} finding(s), risk ${review.risk.level}, ${review.stats.filesChanged} file(s).`);
-    vscode.window.setStatusBarMessage(
-      vscode.l10n.t('Probato PR: {0} finding(s), review risk {1}', review.findings.length, riskLabel(review.risk.level).toUpperCase()),
-      8000,
-    );
     await vscode.commands.executeCommand('probatoPR.findings.focus');
+    this.deps.showSummary();
   }
 
   private planChecks(root: string): Promise<PlannedCheck[]> {
@@ -218,7 +216,7 @@ export class ReviewController {
         }
         this.deps.session.setVerification(outcome);
       });
-      await vscode.commands.executeCommand('probatoPR.verification.focus');
+      this.deps.showSummary(true);
     });
   }
 
@@ -353,7 +351,12 @@ export class ReviewController {
 
   // ---------------------------------------------------------------- results
 
-  async showResults(): Promise<void> {
+  showResults(): void {
+    this.deps.showSummary();
+  }
+
+  /** Markdown rendering of the review, ready to paste into a pull request description. */
+  async openMarkdownReport(): Promise<void> {
     if (!this.deps.session.current) {
       void vscode.window.showInformationMessage(vscode.l10n.t('No review yet. Run "Probato PR: Review Current Changes".'));
       return;
@@ -395,7 +398,7 @@ export class ReviewController {
     });
   }
 
-  async openFinding(id: string): Promise<void> {
+  async openFinding(id: string, viewColumn?: vscode.ViewColumn): Promise<void> {
     const review = this.deps.session.current;
     const finding = review?.findings.find((f) => f.id === id);
     if (!review || !finding) {
@@ -410,7 +413,7 @@ export class ReviewController {
     try {
       const file = await resolveInside(review.repository.root, finding.location.file);
       const line = Math.max(0, finding.location.startLine - 1);
-      await vscode.window.showTextDocument(vscode.Uri.file(file), { selection: new vscode.Range(line, 0, line, 0), preview: true });
+      await vscode.window.showTextDocument(vscode.Uri.file(file), { selection: new vscode.Range(line, 0, line, 0), preview: true, ...(viewColumn ? { viewColumn } : {}) });
     } catch (error) {
       if (error instanceof PathOutsideWorkspaceError) {
         this.deps.log.warn(`Refused to open ${finding.location.file}: outside the repository.`);

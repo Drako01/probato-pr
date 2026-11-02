@@ -13,7 +13,8 @@ Probato PR treats the following as **untrusted input**: repository files, Git co
 | Destroying user data | Reviews are read-only. Baseline worktrees live in the OS temp folder; the `node_modules` link is removed with `unlink` and verified before the worktree is deleted (covered by a test). |
 | Secret leakage | One secret-pattern catalog redacts command output stored as evidence, report excerpts and AI context. Sensitive files (`.env`, keys, certificates, credentials) are never sent to AI providers. API keys use VS Code SecretStorage. |
 | Prompt injection | Repository content is fenced as data, the fence cannot be closed from inside, instructions say data is never instructions, AI output is parsed as JSON with a schema, findings outside the reviewed diff are rejected, and nothing in an AI response is ever executed. |
-| Markdown/HTML injection | Report text from repositories is escaped; tree tooltips use untrusted `MarkdownString` with HTML and command links disabled. The extension ships no webview. |
+| Markdown/HTML injection | Report text from repositories is escaped; tree tooltips use untrusted `MarkdownString` with HTML and command links disabled. |
+| Review Summary webview | Strict Content Security Policy (`default-src 'none'`, scripts only by per-load nonce, styles and scripts only from the extension's own `dist/webview` and `media` folders), command URIs disabled. Repository text is sent as data and rendered with `textContent`, never as HTML. Every message from the webview is validated against a schema and an allowlist of Probato PR commands; anything else is rejected and logged. |
 | Orphaned processes | Cancellation and timeouts kill the whole process tree (`taskkill /T` on Windows, process groups elsewhere); covered by a test with a grandchild process. |
 | Untrusted workspaces | Declared `untrustedWorkspaces: limited`; every command refuses to run Git or tools until the workspace is trusted. |
 

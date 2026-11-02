@@ -20,3 +20,9 @@ First functional version (not published).
 - Contract analysis resolves `tsconfig.json` `baseUrl` / `paths` aliases.
 - Review commands accept a target repository: Source Control view button and multi-root support.
 - Confirmation before reviewing a repository whose root is above the opened folder (e.g. a home directory under Git).
+- Guided Review → Verify → Share flow shared by every surface: Review Summary panel (risk, next step, filterable findings, checks with evidence), step-based Overview view, persistent status bar entry and Activity Bar badge.
+- Findings view grouping by severity or by file, and empty states with next actions in every view.
+- Get Started walkthrough and the *Open Markdown Report (for the PR Description)* command.
+- Localized check statuses and attributions (previously shown as raw identifiers).
+- Brand mark: the letter P drawn as a merge graph.
+- MIT License.

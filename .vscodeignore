@@ -1,6 +1,7 @@
 **
 !dist/extension.js
 !dist/extension.js.LEGAL.txt
+!dist/webview/summary.js
 !media/**
 !l10n/**
 !package.json

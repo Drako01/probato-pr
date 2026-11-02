@@ -89,6 +89,8 @@ const SCENARIOS: readonly Scenario[] = [
 ];
 
 async function main(): Promise<void> {
+  // Inherited when launched from a VS Code integrated terminal or extension host; it would make Code.exe start as plain Node.
+  delete process.env.ELECTRON_RUN_AS_NODE;
   const only = process.env.PROBATO_SCENARIO;
   for (const scenario of SCENARIOS.filter((s) => (only ? s.name === only : !s.optIn))) {
     const sandbox = mkdtempSync(path.join(tmpdir(), `probato-it-${scenario.name}-`));
@@ -111,7 +113,8 @@ async function main(): Promise<void> {
         extensionTestsEnv: { ...env, PROBATO_SCENARIO: scenario.name, GIT_CEILING_DIRECTORIES: sandbox },
       });
     } finally {
-      rmSync(sandbox, { recursive: true, force: true });
+      // VS Code child processes can hold handles briefly after exit (EPERM/EBUSY on Windows).
+      rmSync(sandbox, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 });
     }
   }
 }

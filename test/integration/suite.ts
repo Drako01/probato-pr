@@ -64,6 +64,16 @@ function singleRepoTests(): void {
       assert.equal(editor.selection.active.line, finding.location.startLine - 1);
     });
 
+    test('a review opens the Review Summary panel and the view commands work', async () => {
+      const summaryTabs = (): vscode.Tab[] =>
+        vscode.window.tabGroups.all.flatMap((g) => g.tabs).filter((t) => t.input instanceof vscode.TabInputWebview && t.input.viewType.endsWith('probatoPR.summary'));
+      assert.equal(summaryTabs().length, 1, 'the summary panel opened after the review');
+      await vscode.commands.executeCommand('probatoPR.showResults');
+      assert.equal(summaryTabs().length, 1, 'showing results reveals the same panel instead of opening another');
+      await vscode.commands.executeCommand('probatoPR.groupFindingsByFile');
+      await vscode.commands.executeCommand('probatoPR.groupFindingsBySeverity');
+    });
+
     test('the Markdown report renders through the virtual document provider', async () => {
       const document = await vscode.workspace.openTextDocument(vscode.Uri.from({ scheme: 'probato-report', path: '/Probato PR Review.md' }));
       assert.match(document.getText(), /# Probato PR review/);

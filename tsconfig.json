@@ -21,5 +21,6 @@
     "resolveJsonModule": true,
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "test/unit/**/*.ts", "test/perf/**/*.ts", "vitest.config.mts", "vitest.perf.config.mts"]
+  "include": ["src/**/*.ts", "test/unit/**/*.ts", "test/perf/**/*.ts", "vitest.config.mts", "vitest.perf.config.mts"],
+  "exclude": ["src/webview/**"]
 }

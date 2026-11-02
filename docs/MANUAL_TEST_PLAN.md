@@ -12,8 +12,8 @@ node scripts/create-demo-repo.mjs C:\temp\probato-demo
 ## 1. First use (zero friction)
 
 1. Open `C:\temp\probato-demo` in VS Code and choose **Yes, I trust the authors**.
-2. Click the **Probato PR** icon (shield) in the Activity Bar. The welcome view shows *Review Current Changes*.
-3. Run it. Expected in **Findings**:
+2. Click the **Probato PR** icon (the letter P drawn as a merge graph) in the Activity Bar. The Overview welcome shows *Review → Verify → Share* with *Review Current Changes* and *Review Branch* buttons; Findings and Verification show their own empty-state text.
+3. Run it. The **Review Summary** panel opens: risk **CRITICAL**, the three steps with *Verify* highlighted as the next step, and the findings. The status bar shows the risk and the finding count; the Activity Bar icon shows a badge. Expected in **Findings**:
    - High · Evidenced — `"getUserName" is no longer exported by src/api/user.ts` at `src/ui/profile.ts:1`.
    - High · Evidenced — focused test `cart > adds items`.
    - High · Evidenced — `Test no longer asserts anything: "cart > removes items"`.
@@ -21,6 +21,10 @@ node scripts/create-demo-repo.mjs C:\temp\probato-demo
    - Medium · Evidenced — empty catch block in `src/storage.ts`.
 4. Click a finding: the editor opens at the right line; the Problems panel lists the same findings.
 5. Hover a finding: the tooltip explains *why this status*.
+6. In **Findings**, switch to *Group by File* in the view toolbar and back; the choice survives a window reload.
+7. In the Review Summary: filter by severity, switch *By file*, expand a finding and press **Open** (the code opens beside the panel), then **Dismiss** (the finding disappears everywhere and *Restore dismissed* appears). Use only the keyboard (Tab, Enter) for one pass: focus stays on the control you used.
+8. Reload the window: the Review Summary panel is restored with the same review.
+9. `Welcome: Open Walkthrough` → **Get started with Probato PR**: each step's button runs its command and the step is marked done.
 
 ## 2. Verification with attribution
 
