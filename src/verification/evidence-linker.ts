@@ -67,7 +67,7 @@ export function applyVerification(review: ReviewResult, outcome: VerificationOut
           evidence,
           verification: 'confirmed',
           attribution: 'introduced',
-          verificationNote: `Confirmed: "${check.label}" reports ${codes} at this location with this change, and not on the base revision.`,
+          verificationNote: `${finding.origin === 'ai' ? 'AI suspicion confirmed' : 'Confirmed'}: "${check.label}" reports ${codes} at this location with this change, and not on the base revision.`,
         };
       }
       if (diag.hasBaseline && hits.every((h) => preExisting.has(fingerprint(h)))) {

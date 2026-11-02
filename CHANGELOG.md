@@ -26,3 +26,12 @@ First functional version (not published).
 - Localized check statuses and attributions (previously shown as raw identifiers).
 - Brand mark: the letter P drawn as a merge graph.
 - MIT License.
+- Bring your own AI: *Connect Your AI* setup (VS Code chat models, Anthropic, OpenAI and any OpenAI-compatible API such as OpenRouter, Azure OpenAI, Ollama or LM Studio), models listed from the provider, keys bound to their server origin.
+- Richer AI context: full content of changed files (optional) and already-known findings; the confirmation dialog lists every file and how it is shared.
+- AI walkthrough of the change (overview, per-file summary, where to look first) shown in the Review Summary, the Markdown report and the new *Copy PR Description* command, which also works without AI.
+- AI findings are upgraded to *confirmed* when an executed check fails at the same line only after the change ("AI suspicion confirmed").
+- Marked as Preview in the Marketplace manifest.
+
+### Changed
+
+- *Set Anthropic API Key* replaced by *Connect Your AI* and *Delete Stored AI API Keys*.

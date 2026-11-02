@@ -14,7 +14,6 @@
   "command.exportReport": "Export Review Report",
   "command.cancel": "Cancel",
   "command.clearHistory": "Delete Local Review History",
-  "command.setAnthropicApiKey": "Set Anthropic API Key",
   "command.openFinding": "Open Finding",
   "command.openEvidence": "Open Evidence",
   "command.dismissFinding": "Dismiss Finding",
@@ -35,7 +34,7 @@
   "config.verification.baseline.ask": "Ask each time.",
   "config.verification.baseline.always": "Always run the baseline for failing checks.",
   "config.verification.baseline.never": "Never run baselines (failures stay unattributed).",
-  "config.ai.provider": "Optional AI reviewer. Code is only sent after you confirm the exact files each time.",
+  "config.ai.provider": "Optional AI reviewer. Use **Probato PR: Connect Your AI** to set it up. Code is only sent after you confirm the exact files each time.",
   "config.ai.provider.none": "No AI (default). Deterministic analysis and verification only.",
   "config.ai.provider.vscodeLm": "A chat model already available in VS Code (for example GitHub Copilot).",
   "config.ai.provider.anthropic": "Anthropic Claude with your own API key (stored in SecretStorage).",
@@ -57,5 +56,13 @@
   "walkthrough.share.title": "3. Share the result",
   "walkthrough.share.description": "Export SARIF for code scanning, JSON with the full evidence, or Markdown to paste into your pull request description.\n[Export Report](command:probatoPR.exportReport)",
   "walkthrough.ai.title": "Optional: add an AI reviewer",
-  "walkthrough.ai.description": "Use a chat model you already have in VS Code (for example GitHub Copilot) or your own Anthropic key. You confirm the exact files before anything is sent, and AI findings stay suspected until a check proves them.\n[Choose an AI Provider](command:workbench.action.openSettings?%5B%22probatoPR.ai.provider%22%5D)"
+  "walkthrough.ai.description": "Use a chat model you already have in VS Code (for example GitHub Copilot), or your own Claude, OpenAI or OpenAI-compatible key (OpenRouter, Ollama…). The AI adds a second opinion and writes the pull request summary. You confirm the exact files before anything is sent, and AI findings stay suspected until a check proves them.\n[Connect Your AI](command:probatoPR.connectAi)",
+  "command.connectAi": "Connect Your AI",
+  "command.forgetAiKeys": "Delete Stored AI API Keys",
+  "command.copyPullRequestDescription": "Copy PR Description",
+  "config.ai.provider.openaiCompatible": "OpenAI, or any OpenAI-compatible API (OpenRouter, Azure OpenAI, Ollama, LM Studio) with your own key.",
+  "config.ai.vscodeLmModel": "Chat model used with the VS Code provider, as vendor/id. Empty: the first available model.",
+  "config.ai.openaiCompatible.baseUrl": "Base URL of the OpenAI-compatible API (ends before `/chat/completions`). HTTPS is required except for servers on this machine. User-level setting only: a workspace cannot redirect your API key.",
+  "config.ai.openaiCompatible.model": "Model ID for the OpenAI-compatible API. Pick it from the provider's list with **Connect Your AI**.",
+  "config.ai.includeFileContent": "Also send the full current content of changed files (after the diffs, within maxContextChars) so the AI understands the surrounding code. The confirmation dialog lists these files."
 }

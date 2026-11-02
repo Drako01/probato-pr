@@ -29,5 +29,7 @@ export interface AIReviewProvider {
   /** Human-readable destination shown in the consent dialog (who receives the code). */
   readonly destination: string;
   isAvailable(): Promise<boolean>;
+  /** Model IDs this provider offers with the current credentials; also proves the credentials work. */
+  listModels(signal: AbortSignal): Promise<readonly string[]>;
   complete(prompt: AiPrompt, signal: AbortSignal): Promise<AiRawResponse>;
 }

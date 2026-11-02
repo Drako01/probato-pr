@@ -14,7 +14,7 @@ SemVer. `0.x` while the public API (settings, commands, report schema) may still
 4. Integration: `pnpm run test:integration` (from a terminal **outside** VS Code, or unset `ELECTRON_RUN_AS_NODE`).
 5. Performance: `pnpm run perf`; compare with the previous release.
 6. Security: `pnpm audit --prod`; review `THIRD_PARTY_NOTICES.md` changes.
-7. Package: `pnpm run package` → `probato-pr.vsix`. Inspect with `unzip -l probato-pr.vsix`: only `dist/extension.js`, legal notices, media, l10n, manifests and user docs.
+7. Package: `pnpm run package` → `probato-pr.vsix`. Inspect with `unzip -l probato-pr.vsix`: only `dist/extension.js`, `dist/webview/summary.js`, legal notices, media, l10n, manifests and user docs.
 8. Clean install test:
 
    ```bash
@@ -29,11 +29,15 @@ SemVer. `0.x` while the public API (settings, commands, report schema) may still
 
 ## Publishing (after authorization)
 
-- **Manual:** `vsce publish --packagePath probato-pr.vsix`, authenticated interactively. Do not store Personal Access Tokens in files, scripts or repositories.
-- **CI (preferred, to evaluate):** `@vscode/vsce` supports authenticating with Microsoft Entra ID credentials (`--azure-credential`), which allows a GitHub Actions OIDC federation to an Entra identity linked to the Marketplace publisher, without long-lived PATs. Confirm the current Microsoft documentation and set it up before adding a publish job (none is included; `docs/ci/ci.yml.example` only builds and tests).
+Step-by-step guide, accounts and first-time setup: [`PUBLICACION.md`](PUBLICACION.md) (Spanish).
+
+- **First release:** upload the verified `probato-pr.vsix` on the publisher management page (no token needed).
+- **Later releases:** Trusted Publishing from GitHub Actions (`vsce publish --oidc`, template in `docs/ci/publish.yml.example`, not enabled). No long-lived secret is stored.
+- **Do not use Personal Access Tokens:** global Azure DevOps PATs are retired on 2026-12-01.
+- **Open VSX** (Cursor, Windsurf, VSCodium): `npx ovsx publish probato-pr.vsix -p <token>`; the token lives only in a password manager or a GitHub environment secret.
 
 ## Rollback / withdrawal
 
 - The Marketplace does not allow re-publishing an existing version. Fix forward with a patch version (`0.1.1`).
-- For a severe issue: publish the previous good code as a new patch version, or unpublish the extension from the publisher management page (removes it for new installs; existing installs remain).
+- For a severe issue: publish the previous good code as a new patch version, or **Unpublish** the extension from the publisher management page (no new downloads; statistics kept; can be published again). Never use **Remove**: it is irreversible and the name stays reserved forever.
 - Communicate in `CHANGELOG.md` and the Marketplace page.

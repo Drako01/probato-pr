@@ -63,12 +63,14 @@ El panel (`SummaryPanel`) es un webview: el host arma un `SummaryState` serializ
 | Baseline solo para checks fallidos | Reduce el costo a la mitad o menos; un check que pasa no puede ser regresión | Correr todo dos veces |
 | PR vía API, sin fetch/checkout | Solo lectura, no toca el repo del usuario | `git fetch pull/N/head`: escribe refs |
 | IA solo como transporte de texto | Proveedores intercambiables; validación y redacción comunes | Lógica por proveedor |
+| BYOK con un proveedor genérico compatible con OpenAI vía `fetch` | Un solo adaptador cubre OpenAI, OpenRouter, Azure, Ollama y LM Studio sin dependencias nuevas; claves por origen y URL con scope `application` evitan redirigir la clave desde un workspace | SDK por proveedor: más dependencias y superficie |
+| La IA no verifica: sus sospechas se confirman con checks | `applyVerification` cruza también los hallazgos de IA con los diagnósticos ejecutados; solo un error nuevo respecto de la base en esa línea los lleva a *confirmed* | Confiar en la IA o descartarla: ninguna da evidencia |
 | SDK oficial `@anthropic-ai/sdk` | Recomendación oficial; errores tipados | `fetch` crudo |
 
 ## Puntos de extensión
 
 - **Nuevo analizador:** implementar `Analyzer` (`src/core/analyzer.ts`) y registrarlo en `src/analyzers/index.ts`. Agregar casos verdaderos y trampas al corpus (`test/unit/benchmark.test.ts`).
-- **Nuevo proveedor de IA:** implementar `AIReviewProvider` (`src/ai/ai-provider.ts`) y agregarlo al switch de `extension.ts` + enum de settings.
+- **Nuevo proveedor de IA:** implementar `AIReviewProvider` (`src/ai/ai-provider.ts`, incluye `listModels` para el asistente), agregarlo a `createAiProvider` (`src/extension/ai-providers.ts`, única fábrica para revisión y asistente), a `AI_PROVIDERS` en settings y al asistente `AiSetup`. La mayoría de los proveedores nuevos no necesitan código: alcanza con `openai-compatible` y otra URL.
 - **Nuevo tipo de check:** extender `detectChecks` y, si la salida es parseable, `parseDiagnostics`.
 - **Nuevo formato de reporte:** función pura `ReviewResult → string` en `src/reports/`.
 

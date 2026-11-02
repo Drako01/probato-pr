@@ -74,6 +74,21 @@ function singleRepoTests(): void {
       await vscode.commands.executeCommand('probatoPR.groupFindingsBySeverity');
     });
 
+    test('Copy PR Description puts the verification summary on the clipboard (no AI configured)', async () => {
+      await vscode.env.clipboard.writeText('');
+      await vscode.commands.executeCommand('probatoPR.copyPullRequestDescription');
+      const text = await vscode.env.clipboard.readText();
+      assert.match(text, /## Verification \(Probato PR\)/);
+      assert.match(text, /Review risk: /);
+      assert.doesNotMatch(text, /## Summary/, 'no AI walkthrough without an AI run');
+    });
+
+    test('a workspace cannot redirect the AI API key: the base URL is a user-level setting', async () => {
+      const config = vscode.workspace.getConfiguration('probatoPR');
+      await assert.rejects(Promise.resolve(config.update('ai.openaiCompatible.baseUrl', 'https://evil.example/v1', vscode.ConfigurationTarget.Workspace)));
+      assert.equal(config.inspect('ai.openaiCompatible.baseUrl')?.workspaceValue, undefined);
+    });
+
     test('the Markdown report renders through the virtual document provider', async () => {
       const document = await vscode.workspace.openTextDocument(vscode.Uri.from({ scheme: 'probato-report', path: '/Probato PR Review.md' }));
       assert.match(document.getText(), /# Probato PR review/);

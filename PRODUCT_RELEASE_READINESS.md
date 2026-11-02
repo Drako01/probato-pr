@@ -22,7 +22,7 @@ Escala: **PASS** (verificado con evidencia) · **WARN** (funciona con reservas) 
 | Criterio | Estado | Evidencia / justificación |
 |---|---|---|
 | Extensión instalable desde VSIX | **PASS** | `code --install-extension probato-pr.vsix` en perfil aislado → `armotusitio.probato-pr@0.1.0` listado. |
-| Activación comprobada en VS Code oficial | **PASS** | Suite de integración (`test/integration`) 9/9 en VS Code 1.144.0 (escenarios repo único y multi-root, incluye apertura del panel Review Summary), tanto desde fuentes como **desde el contenido extraído del VSIX** (re-ejecutado 2026-11-02 tras el cambio de UI). |
+| Activación comprobada en VS Code oficial | **PASS** | Suite de integración (`test/integration`) 11/11 en VS Code 1.144.0 (escenarios repo único y multi-root: panel Review Summary, Copy PR Description con el portapapeles real, URL de IA no sobrescribible desde el workspace), tanto desde fuentes como **desde el contenido extraído del VSIX** (re-ejecutado 2026-11-02 tras BYOK). |
 | Primer uso funcional sin cuentas externas | **PASS** | La suite ejecuta *Review Current Changes* en un repo fixture sin GitHub ni IA; detecta el hallazgo y publica el diagnóstico. |
 | Revisión Git local funcional | **PASS** | Tests e2e sobre repos Git reales: working/staged/branch/commit, untracked, rutas con espacios y Unicode, límites y exclusiones. |
 | Hallazgos navegables | **PASS** | Test de integración: `openFinding` abre el archivo correcto en la línea del hallazgo; diagnósticos verificados en el host. |
@@ -48,23 +48,29 @@ Escala: **PASS** (verificado con evidencia) · **WARN** (funciona con reservas) 
 |---|---|---|
 | Zero-friction (sin cuentas, IA, Docker, servidores) | PASS | Probado en la suite de integración. |
 | Workspace Trust | WARN | `untrustedWorkspaces: limited` + bloqueo en cada comando + welcome view. Test automatizado **BLOCKED por la plataforma**: VS Code no aplica Workspace Trust en el Extension Development Host (`isTrusted` queda en `true`; escenario opt-in `PROBATO_SCENARIO=restricted` lo documenta). Verificación manual: `docs/MANUAL_TEST_PLAN.md` §5. |
-| SecretStorage | PASS (código) | API key de Anthropic; sin test automatizado (requiere llavero del SO). |
-| Prompt injection | PASS | Tests: delimitación de datos, cierre de etiqueta neutralizado, rechazo de ubicaciones fuera del diff. |
+| SecretStorage | PASS (código) | API keys de IA, una por origen de servidor (`apiKeySecretName`, test unitario); el borrado usa una lista en `globalState` porque `SecretStorage.keys()` no existe en VS Code 1.99. Sin test automatizado del llavero real (requiere llavero del SO). |
+| IA BYOK: proveedor compatible con OpenAI | PASS | Tests con `fetch` simulado (errores auth/rate-limit/red/refusal/respuesta inválida, sin header sin key) y **contra un servidor HTTP real en 127.0.0.1** (rutas, header `Authorization`, la key nunca en el body). Validación de URL (HTTPS salvo loopback, sin credenciales ni query). |
+| IA BYOK: llamadas reales a OpenAI / Anthropic / Copilot / Ollama | SKIP | Sin claves ni servidores en esta máquina; no se simuló. Plan manual §8. |
+| IA: protección de la clave ante workspaces maliciosos | PASS | `ai.openaiCompatible.baseUrl` con scope `application`: test de integración verifica que VS Code rechaza escribirlo a nivel workspace. Claves ligadas al origen. |
+| IA: sospecha → prueba | PASS | Test e2e con `tsc` y baseline reales: un hallazgo de IA en una línea donde el type-check falla solo tras el cambio pasa a *confirmed / introduced* ("AI suspicion confirmed"). Solo aplica a checks con diagnósticos parseables (tsc, go). |
+| Prompt injection | PASS | Tests: delimitación de datos (diffs, contenido completo, rutas y hallazgos conocidos), cierre/apertura de etiquetas neutralizado, rechazo de hallazgos y entradas del resumen fuera de los archivos compartidos, texto del modelo escapado en Markdown y en la descripción del PR. |
 | Path traversal / symlinks | PASS | Tests con `..`, absolutos, NUL y junctions que escapan. |
 | CSP de webviews | PASS | Un webview (Review Summary): CSP `default-src 'none'` + nonce, `localResourceRoots` acotado, sin command URIs, render con `textContent`. Mensajes validados con Zod contra lista blanca; tests unitarios de rechazo (`test/unit/summary-ui.test.ts`). |
 | Multi-root | PASS | Integración: workspace con 2 repos + carpeta sin repo; review dirigida por URI/`SourceControl.rootUri`, repo limpio y carpeta sin repo rechazados. Guardia de repo padre (p. ej. home bajo Git) con confirmación. |
 | Monorepos | WARN | Funciona a nivel de diff y análisis; baseline con `node_modules` por paquete puede quedar *inconclusive* (documentado). |
 | Precisión / recall / FPR | PASS (corpus propio) | 22 casos (13 defectos, 9 trampas, incluye alias de tsconfig): precision 1,000, recall 1,000, FPR 0,000. **No** es un benchmark comparativo. |
-| Localización al español | PASS | Manifest (`package.nls.es.json`) y runtime (`l10n/bundle.l10n.es.json`, 155/155 claves, verificado con `scripts/l10n-keys.mjs`). |
+| Localización al español | PASS | Manifest (`package.nls.es.json`) y runtime (`l10n/bundle.l10n.es.json`, 194/194 claves, verificado con `scripts/l10n-keys.mjs`). |
 | Telemetría | PASS | No existe. |
 | Accesibilidad | WARN | Árboles nativos con `accessibilityInformation` e iconos con forma distinta por estado (no solo color). Panel: botones nativos, `aria-pressed`/`aria-expanded`, foco restaurado tras cada render, chips de verificación distinguibles por estilo de borde, `prefers-reduced-motion`. Sin auditoría con lector de pantalla; plan manual §1.7. |
 | VS Code Insiders | SKIP | No instalado en esta máquina. |
 | vscode.dev / github.dev | Fuera de alcance 0.1 | `virtualWorkspaces: false` declarado; requiere Git y procesos locales. |
-| OIDC / Trusted Publishing | WARN | Evaluado y documentado en `docs/RELEASE.md`; validar contra la documentación vigente de Microsoft antes de habilitar. |
+| OIDC / Trusted Publishing | WARN | Validado contra la documentación oficial (2026-11-02): `vsce publish --oidc` (soportado por `@vscode/vsce` 4.1.0 instalado) con política de Trusted Publishing; los PAT globales se retiran el 2026-12-01. Plantilla `docs/ci/publish.yml.example` y guía `docs/PUBLICACION.md` preparadas, **no habilitadas** (requiere autorización y SHAs fijados). |
 
 ## Pendientes no bloqueantes
 
-- Ejecutar los pasos nuevos del plan manual (`docs/MANUAL_TEST_PLAN.md` §1.6–1.9: agrupación, panel con teclado, restauración tras reload, walkthrough). Hasta ahora el panel solo se probó con la suite de integración y uso informal.
+- Ejecutar los pasos nuevos del plan manual (`docs/MANUAL_TEST_PLAN.md` §1.6–1.9: agrupación, panel con teclado, restauración tras reload, walkthrough; §8: BYOK con un proveedor real). Hasta ahora el panel solo se probó con la suite de integración y uso informal, y la IA sin llamadas reales.
+- El logo del README (`media/readme-logo.png`) usa ruta relativa: `vsce` la reescribe a `github.com/Drako01/probato-pr`, así que en el Marketplace solo se verá cuando el repositorio sea público.
+- "Extension host is unresponsive" (~5 s) aparece en la integración durante la primera revisión: es la carga síncrona del compilador TypeScript. Relacionado con el punto del bundle de abajo.
 - Capturas reales para el README del Marketplace (panel Review Summary, Overview con los pasos, Findings agrupado por archivo).
 - `repository`/`bugs` apuntan a `github.com/Drako01/probato-pr`, que hoy es **privado**: hacerlo público (o quitar esos campos) antes de publicar, para que los enlaces del Marketplace no den 404.
 - Confirmar el email público de contacto usado en `SECURITY.md`, `SUPPORT.md` y `PRIVACY.md`.

@@ -242,6 +242,8 @@ export interface ReviewResult {
   readonly checks: readonly CheckResult[];
   readonly analyzerRuns: readonly AnalyzerRun[];
   readonly aiRuns: readonly AiRunRecord[];
+  /** Walkthrough of the change written by the optional AI reviewer (latest run). Descriptive, never evidence. */
+  readonly aiSummary?: AiSummary;
   readonly risk: RiskAssessment;
 }
 
@@ -253,4 +255,14 @@ export interface AiRunRecord {
   readonly accepted: number;
   readonly rejected: number;
   readonly rejectionReasons: readonly string[];
+}
+
+export interface AiSummary {
+  /** Provider and model that wrote it, e.g. "Anthropic Claude (claude-opus-5-5)". */
+  readonly author: string;
+  readonly overview: string;
+  /** One entry per changed file the model described; only files that were shared with it. */
+  readonly changes: readonly { readonly file: string; readonly summary: string }[];
+  /** Where a human reviewer should look first. */
+  readonly reviewFocus: readonly string[];
 }

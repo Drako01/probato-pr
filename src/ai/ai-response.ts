@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import { stableId } from '../core/ids';
-import type { ChangeSet, ReviewFinding } from '../core/model';
+import type { AiSummary, ChangeSet, ReviewFinding } from '../core/model';
 import { addedLines } from '../git/diff-parser';
 
 const MAX_FINDINGS = 50;
+const MAX_SUMMARY_ITEMS = 100;
 /** Lines of tolerance around an added line; models often point at the statement start nearby. */
 const LINE_TOLERANCE = 2;
 
@@ -15,11 +16,43 @@ const AiFindingSchema = z.object({
   description: z.string().min(1).max(4000),
   suggestedFix: z.string().max(4000).optional(),
 });
-const AiResponseSchema = z.object({ findings: z.array(z.unknown()).max(500) });
+const AiSummarySchema = z.object({
+  overview: z.string().min(1).max(4000),
+  changes: z.array(z.object({ file: z.string().min(1).max(500), summary: z.string().min(1).max(1000) })).max(500).default([]),
+  reviewFocus: z.array(z.string().min(1).max(1000)).max(50).default([]),
+});
+const AiResponseSchema = z.object({ findings: z.array(z.unknown()).max(500), summary: z.unknown().optional() });
 
-export interface ParsedAiFindings {
+export interface ParsedAiReview {
   readonly accepted: readonly ReviewFinding[];
   readonly rejected: readonly string[];
+  /** Absent when the model sent none or it was malformed (then a rejection explains why). */
+  readonly summary?: AiSummary;
+}
+
+const normalizePath = (file: string): string => file.replace(/^\.?\//, '');
+
+/** Keeps the walkthrough to files that were shared; descriptions of anything else are dropped. */
+function parseSummary(raw: unknown, shared: ReadonlySet<string>, author: string, rejected: string[]): AiSummary | undefined {
+  if (raw === undefined) {
+    return undefined;
+  }
+  const parsed = AiSummarySchema.safeParse(raw);
+  if (!parsed.success) {
+    rejected.push('Summary did not match the expected shape and was ignored.');
+    return undefined;
+  }
+  const changes = parsed.data.changes.map((c) => ({ file: normalizePath(c.file), summary: c.summary }));
+  const unknown = changes.filter((c) => !shared.has(c.file));
+  if (unknown.length > 0) {
+    rejected.push(`Summary entries for ${unknown.length} file(s) that were not shared were ignored.`);
+  }
+  return {
+    author,
+    overview: parsed.data.overview,
+    changes: changes.filter((c) => shared.has(c.file)).slice(0, MAX_SUMMARY_ITEMS),
+    reviewFocus: parsed.data.reviewFocus,
+  };
 }
 
 function extractJson(text: string): unknown {
@@ -33,7 +66,7 @@ function extractJson(text: string): unknown {
  * a file that was shared and at (or next to) a line the change added; everything else is rejected
  * with a reason. Accepted findings are always "suspected": an AI claim is not proof.
  */
-export function parseAiFindings(text: string, changes: ChangeSet, sharedFiles: readonly string[], providerLabel: string): ParsedAiFindings {
+export function parseAiReview(text: string, changes: ChangeSet, sharedFiles: readonly string[], providerLabel: string): ParsedAiReview {
   let raw: unknown;
   try {
     raw = extractJson(text);
@@ -56,7 +89,7 @@ export function parseAiFindings(text: string, changes: ChangeSet, sharedFiles: r
       continue;
     }
     const f = parsed.data;
-    const file = f.file.replace(/^\.?\//, '');
+    const file = normalizePath(f.file);
     if (!shared.has(file)) {
       rejected.push(`"${f.title}": file "${file}" was not part of the shared diff.`);
       continue;
@@ -84,5 +117,6 @@ export function parseAiFindings(text: string, changes: ChangeSet, sharedFiles: r
   if (envelope.data.findings.length > MAX_FINDINGS) {
     rejected.push(`${envelope.data.findings.length - MAX_FINDINGS} finding(s) over the limit of ${MAX_FINDINGS} were ignored.`);
   }
-  return { accepted, rejected };
+  const summary = parseSummary(envelope.data.summary, shared, providerLabel, rejected);
+  return { accepted, rejected, ...(summary ? { summary } : {}) };
 }

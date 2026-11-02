@@ -125,6 +125,36 @@ function renderSteps(r: SummaryReview): HTMLElement {
   );
 }
 
+function renderAi(s: SummaryState, r: SummaryReview): HTMLElement {
+  const { ai } = r;
+  if (ai.summary) {
+    const summary = ai.summary;
+    return h(
+      'section',
+      { class: 'panel ai' },
+      h('div', { class: 'panel-head' }, h('h2', {}, s.labels.aiTitle), h('span', { class: 'muted' }, summary.author)),
+      h('p', {}, summary.overview),
+      summary.changes.length > 0 && h('ul', { class: 'ai-changes' }, ...summary.changes.map((c) => h('li', {}, h('code', {}, c.file), ` ${c.summary}`))),
+      summary.reviewFocus.length > 0 && h('h3', {}, s.labels.aiWhereToLook),
+      summary.reviewFocus.length > 0 && h('ul', {}, ...summary.reviewFocus.map((f) => h('li', {}, f))),
+      h('div', { class: 'actions' }, commandButton(s.labels.copyDescription, 'copyPullRequestDescription', 'button'), commandButton(s.labels.aiRunAgain, 'aiReview'), commandButton(s.labels.aiChange, 'connectAi', 'link')),
+    );
+  }
+  const connected = ai.provider !== undefined;
+  return h(
+    'section',
+    { class: 'panel ai' },
+    h('div', { class: 'panel-head' }, h('h2', {}, s.labels.aiTitle), connected && h('span', { class: 'muted' }, ai.provider)),
+    h('p', { class: 'muted' }, connected ? s.labels.aiReadyHint : s.labels.aiConnectHint),
+    h(
+      'div',
+      { class: 'actions' },
+      connected ? commandButton(s.labels.aiRun, 'aiReview', 'button') : commandButton(s.labels.aiConnect, 'connectAi', 'button'),
+      connected && commandButton(s.labels.aiChange, 'connectAi', 'link'),
+    ),
+  );
+}
+
 function renderRisk(s: SummaryState, r: SummaryReview): HTMLElement | undefined {
   if (r.risk.reasons.length === 0 && r.risk.limitations.length === 0) {
     return undefined;
@@ -261,8 +291,9 @@ function renderMore(s: SummaryState): HTMLElement {
   return h(
     'footer',
     { class: 'more' },
+    commandButton(s.labels.copyDescription, 'copyPullRequestDescription', 'link'),
+    commandButton(s.labels.exportReport, 'exportReport', 'link'),
     commandButton(s.labels.markdown, 'openMarkdownReport', 'link'),
-    commandButton(s.labels.aiReview, 'aiReview', 'link'),
     h('span', { class: 'muted' }, `${s.labels.reviewAgain}:`),
     commandButton(s.labels.reviewCurrent, 'reviewCurrentChanges', 'link'),
     commandButton(s.labels.staged, 'reviewStagedChanges', 'link'),
@@ -283,7 +314,7 @@ function render(): void {
   const r = s.review;
   // Re-rendering replaces the DOM; keep keyboard focus on the same control.
   const focused = document.activeElement?.getAttribute('data-key');
-  app.replaceChildren(...[busy, ...(r ? [renderHeader(s, r), renderSteps(r), renderRisk(s, r), renderFindings(s, r), renderChecks(s, r), renderMore(s)] : [renderEmpty(s)])].filter((n): n is HTMLElement => Boolean(n)));
+  app.replaceChildren(...[busy, ...(r ? [renderHeader(s, r), renderSteps(r), renderRisk(s, r), renderAi(s, r), renderFindings(s, r), renderChecks(s, r), renderMore(s)] : [renderEmpty(s)])].filter((n): n is HTMLElement => Boolean(n)));
   if (focused) {
     app.querySelector<HTMLElement>(`[data-key="${CSS.escape(focused)}"]`)?.focus();
   }

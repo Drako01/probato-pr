@@ -14,7 +14,8 @@ Probato PR treats your code as confidential. The core product runs entirely on y
 |---|---|---|
 | Latest review and a summary of the last 20 reviews (findings, evidence metadata, redacted output excerpts) | VS Code workspace storage for this extension (outside your repository) | `Probato PR: Delete Local Review History` |
 | Dismissed finding IDs | VS Code workspace state | `Probato PR: Restore Dismissed Findings` |
-| Anthropic API key (if you set one) | VS Code SecretStorage (OS keychain) | `Probato PR: Set Anthropic API Key` with an empty value |
+| AI provider API keys (if you set any), each bound to the server it was entered for | VS Code SecretStorage (OS keychain) | `Probato PR: Delete Stored AI API Keys` |
+| AI walkthrough of a review (if you ran AI review) | Part of the stored review | `Probato PR: Delete Local Review History` |
 | Exported reports | Wherever you save them | Delete the file |
 
 Temporary baseline worktrees are created in the OS temp folder and removed after each verification.
@@ -26,8 +27,10 @@ Nothing, unless you use one of these optional features:
 | Feature | Recipient | What is sent | When |
 |---|---|---|---|
 | Pull request review | GitHub API (`api.github.com`) | Requests for PR metadata, changed-file lists and file contents of that PR | Only when you run *Review Pull Request* |
-| AI review — VS Code model | The provider of the chat model selected in VS Code (e.g. GitHub Copilot) | Diff hunks of the files listed in the confirmation dialog, secrets redacted | Only after you confirm the dialog, every time |
+| AI review — VS Code model | The provider of the chat model selected in VS Code (e.g. GitHub Copilot) | The diffs of the files listed in the confirmation dialog; the full current content of the changed files listed as "for context" (unless `probatoPR.ai.includeFileContent` is off); titles and locations of findings Probato PR already reported. Secrets redacted. | Only after you confirm the dialog, every time |
 | AI review — Anthropic | Anthropic API | Same as above | Only after you confirm the dialog, every time |
+| AI review — OpenAI or OpenAI-compatible API | The server at `probatoPR.ai.openaiCompatible.baseUrl` (OpenAI, OpenRouter, Azure OpenAI, or a local server such as Ollama) | Same as above | Only after you confirm the dialog, every time |
+| Connect Your AI | The chosen provider | A request for its model list, authenticated with your key. No code is sent. | When you run the setup |
 
 Sensitive files (`.env*`, private keys, certificates, credential files, Terraform state) are never sent to AI providers, regardless of settings. The providers' own privacy terms apply to what you send them.
 

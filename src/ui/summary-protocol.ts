@@ -1,7 +1,7 @@
 // Contract between the extension host and the Review Summary webview. The webview imports types only;
 // every message it sends is validated here before the host acts on it.
 import { z } from 'zod';
-import type { CheckStatus, RiskLevel, Severity, VerificationStatus } from '../core/model';
+import type { AiSummary, CheckStatus, RiskLevel, Severity, VerificationStatus } from '../core/model';
 import type { NextAction, StepState } from './workflow';
 
 /** Host commands the webview may trigger. Anything else is rejected. */
@@ -17,6 +17,8 @@ export const SUMMARY_COMMANDS = [
   'cancel',
   'restoreDismissed',
   'openMarkdownReport',
+  'copyPullRequestDescription',
+  'connectAi',
 ] as const;
 export type SummaryCommand = (typeof SUMMARY_COMMANDS)[number];
 
@@ -33,6 +35,8 @@ export const SUMMARY_COMMAND_IDS: Readonly<Record<SummaryCommand, string>> = {
   cancel: 'probatoPR.cancel',
   restoreDismissed: 'probatoPR.restoreDismissed',
   openMarkdownReport: 'probatoPR.openMarkdownReport',
+  copyPullRequestDescription: 'probatoPR.copyPullRequestDescription',
+  connectAi: 'probatoPR.connectAi',
 };
 
 const id = z.string().min(1).max(200);
@@ -78,6 +82,12 @@ export interface SummaryCheck {
   readonly evidenceId?: string;
 }
 
+/** The optional AI reviewer: not connected, connected (ready to run), or its latest walkthrough. */
+export interface SummaryAi {
+  readonly provider?: string;
+  readonly summary?: AiSummary;
+}
+
 export interface SummaryReview {
   readonly title: string;
   readonly subtitle: string;
@@ -90,6 +100,7 @@ export interface SummaryReview {
   readonly findings: readonly SummaryFinding[];
   readonly dismissed: number;
   readonly checks: readonly SummaryCheck[];
+  readonly ai: SummaryAi;
 }
 
 /** Localized UI strings, resolved in the host (the webview has no l10n API). */
@@ -115,13 +126,22 @@ export type SummaryLabels = Readonly<Record<
   | 'noChecks'
   | 'evidence'
   | 'markdown'
-  | 'aiReview'
   | 'cancel'
   | 'reviewAgain'
   | 'staged'
   | 'commit'
   | 'pullRequest'
-  | 'statusLegend',
+  | 'statusLegend'
+  | 'aiTitle'
+  | 'aiConnectHint'
+  | 'aiConnect'
+  | 'aiReadyHint'
+  | 'aiRun'
+  | 'aiRunAgain'
+  | 'aiWhereToLook'
+  | 'aiChange'
+  | 'copyDescription'
+  | 'exportReport',
   string
 >>;
 

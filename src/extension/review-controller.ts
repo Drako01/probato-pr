@@ -3,7 +3,8 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { buildAiContext } from '../ai/ai-context';
 import { AiProviderError, type AIReviewProvider } from '../ai/ai-provider';
-import { parseAiFindings } from '../ai/ai-response';
+import { InvalidBaseUrlError } from '../ai/openai-compatible-provider';
+import { parseAiReview } from '../ai/ai-response';
 import { EMPTY_WORKSPACE, type WorkspaceIndex } from '../core/analyzer';
 import type { ChangeSet, PlannedCheck, ReviewResult } from '../core/model';
 import { isWithin, PathOutsideWorkspaceError, resolveInside } from '../core/paths';
@@ -14,7 +15,7 @@ import { GitHubError, parseGitHubRemote, type GitHubClient } from '../github/git
 import { pullRequestChangeSet } from '../github/pull-request-changes';
 import { GitWorkspaceIndex } from '../infrastructure/workspace-index';
 import { renderJson } from '../reports/json';
-import { renderMarkdown } from '../reports/markdown';
+import { renderMarkdown, renderPullRequestDescription } from '../reports/markdown';
 import { renderSarif } from '../reports/sarif';
 import { evidenceUri, REPORT_URI } from '../ui/documents';
 import { detectChecks } from '../verification/check-detector';
@@ -34,6 +35,8 @@ export interface ControllerDeps {
   readonly log: vscode.LogOutputChannel;
   /** Opens (or reveals) the Review Summary panel. */
   readonly showSummary: (preserveFocus?: boolean) => void;
+  /** Runs the "Connect your AI" setup. */
+  readonly connectAi: () => Promise<void>;
 }
 
 /** Orchestrates user commands. All operations are read-only unless the user approves otherwise. */
@@ -278,37 +281,39 @@ export class ReviewController {
         void vscode.window.showInformationMessage(vscode.l10n.t('Run a review in this session first; AI review uses the same diff.'));
         return;
       }
-      const provider = this.deps.aiProvider();
+      let provider = this.deps.aiProvider();
       if (!provider) {
-        const open = vscode.l10n.t('Open Settings');
-        const answer = await vscode.window.showInformationMessage(
-          vscode.l10n.t('AI review is optional and disabled. Deterministic review and verification work without it. Choose a provider in probatoPR.ai.provider to enable it.'),
-          open,
-        );
-        if (answer === open) {
-          await vscode.commands.executeCommand('workbench.action.openSettings', 'probatoPR.ai');
+        const message = vscode.l10n.t('Connect GitHub Copilot, Claude, OpenAI or a local model to add an AI reviewer and a pull request summary. It is optional: deterministic review and verification work without it.');
+        provider = (await this.offerAiSetup(message, 'info')) ? this.deps.aiProvider() : undefined;
+        if (!provider) {
+          return;
         }
-        return;
       }
       if (!(await provider.isAvailable())) {
-        void vscode.window.showWarningMessage(vscode.l10n.t('{0} is not available. Check the provider setup (API key or signed-in chat model).', provider.name));
+        await this.offerAiSetup(vscode.l10n.t('{0} is not ready: no model selected, no API key or no signed-in chat model.', provider.name), 'warning');
         return;
       }
       const settings = this.deps.settings();
-      const context = buildAiContext(changes, settings.ai.exclude, settings.ai.maxContextChars);
+      const context = await buildAiContext(changes, {
+        exclude: settings.ai.exclude,
+        maxChars: settings.ai.maxContextChars,
+        includeFileContent: settings.ai.includeFileContent,
+        knownFindings: review.findings,
+      });
       if (context.sharedFiles.length === 0) {
         void vscode.window.showInformationMessage(vscode.l10n.t('Nothing to send: every changed file is excluded, sensitive or binary.'));
         return;
       }
       const send = vscode.l10n.t('Send to AI');
       const answer = await vscode.window.showWarningMessage(
-        vscode.l10n.t('Send the diff of {0} file(s) ({1} characters) to {2}?', context.sharedFiles.length, context.characters, provider.destination),
+        vscode.l10n.t('Send this change ({0} file(s), {1} characters) to {2}?', context.sharedFiles.length, context.characters, provider.destination),
         {
           modal: true,
           detail: [
-            vscode.l10n.t('Files: {0}', context.sharedFiles.join(', ')),
+            vscode.l10n.t('Diffs: {0}', context.sharedFiles.join(', ')),
+            context.contentFiles.length > 0 ? vscode.l10n.t('Full file content, for context: {0}', context.contentFiles.join(', ')) : '',
             context.excluded.length > 0 ? vscode.l10n.t('Not sent: {0}', context.excluded.map((e) => `${e.path} (${e.reason})`).join(', ')) : '',
-            vscode.l10n.t('Only diff hunks are sent, with detected secrets redacted. AI findings are marked as suspected until verified.'),
+            vscode.l10n.t('Detected secrets are redacted and sensitive files are never sent. AI findings stay suspected until a check proves them.'),
           ]
             .filter(Boolean)
             .join('\n\n'),
@@ -321,15 +326,16 @@ export class ReviewController {
       await this.exclusiveWithProgress(vscode.l10n.t('AI review'), vscode.ProgressLocation.Notification, vscode.l10n.t('Probato PR: AI review'), async (signal) => {
         const startedAt = new Date().toISOString();
         const response = await provider.complete(context.prompt, signal);
-        const parsed = parseAiFindings(response.text, changes, context.sharedFiles, `${provider.name} (${response.model})`);
+        const parsed = parseAiReview(response.text, changes, context.sharedFiles, `${provider.name} (${response.model})`);
         parsed.rejected.forEach((r) => {
-          this.deps.log.info(`AI finding rejected: ${r}`);
+          this.deps.log.info(`AI output rejected: ${r}`);
         });
         const current = this.deps.session.base ?? review;
         this.deps.session.updateReview(
           finalizeResult({
             ...current,
             findings: [...current.findings.filter((f) => f.origin !== 'ai'), ...parsed.accepted],
+            ...(parsed.summary ? { aiSummary: parsed.summary } : {}),
             aiRuns: [
               ...current.aiRuns,
               {
@@ -346,7 +352,31 @@ export class ReviewController {
         );
         vscode.window.setStatusBarMessage(vscode.l10n.t('Probato PR: AI suggested {0} finding(s), rejected {1}', parsed.accepted.length, parsed.rejected.length), 8000);
       });
+      this.deps.showSummary(true);
     });
+  }
+
+  /** Shows a message with a "Connect Your AI" button; returns true when the user ran the setup. */
+  private async offerAiSetup(message: string, level: 'info' | 'warning'): Promise<boolean> {
+    const connect = vscode.l10n.t('Connect Your AI');
+    const show = level === 'info' ? vscode.window.showInformationMessage : vscode.window.showWarningMessage;
+    if ((await show(message, connect)) !== connect) {
+      return false;
+    }
+    await this.deps.connectAi();
+    return true;
+  }
+
+  /** Copies a pull request description (AI walkthrough when available + what Probato PR verified). */
+  async copyPullRequestDescription(): Promise<void> {
+    const review = this.deps.session.current;
+    if (!review) {
+      void vscode.window.showInformationMessage(vscode.l10n.t('No review yet. Run "Probato PR: Review Current Changes".'));
+      return;
+    }
+    await vscode.env.clipboard.writeText(renderPullRequestDescription(review));
+    const hint = review.aiSummary ? '' : ` ${vscode.l10n.t('Run AI Review to add a written summary of the change.')}`;
+    void vscode.window.showInformationMessage(`${vscode.l10n.t('Pull request description copied to the clipboard.')}${hint}`);
   }
 
   // ---------------------------------------------------------------- results
@@ -585,7 +615,7 @@ export class ReviewController {
       actions.unshift(vscode.l10n.t('Open Settings'));
     } else if (error instanceof GitError) {
       message = vscode.l10n.t('Git error: {0}', error.message);
-    } else if (error instanceof GitHubError || error instanceof AiProviderError) {
+    } else if (error instanceof GitHubError || error instanceof AiProviderError || error instanceof InvalidBaseUrlError) {
       message = error.message;
     } else {
       message = vscode.l10n.t('Unexpected error: {0}', error instanceof Error ? error.message : String(error));

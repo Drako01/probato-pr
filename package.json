@@ -19,6 +19,7 @@
   },
   "private": true,
   "pricing": "Free",
+  "preview": true,
   "icon": "media/logo.png",
   "galleryBanner": {
     "color": "#14181d",
@@ -97,10 +98,27 @@
         "icon": "$(sparkle)"
       },
       {
+        "command": "probatoPR.connectAi",
+        "title": "%command.connectAi%",
+        "category": "Probato PR",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "probatoPR.forgetAiKeys",
+        "title": "%command.forgetAiKeys%",
+        "category": "Probato PR"
+      },
+      {
         "command": "probatoPR.showResults",
         "title": "%command.showResults%",
         "category": "Probato PR",
         "icon": "$(preview)"
+      },
+      {
+        "command": "probatoPR.copyPullRequestDescription",
+        "title": "%command.copyPullRequestDescription%",
+        "category": "Probato PR",
+        "icon": "$(copy)"
       },
       {
         "command": "probatoPR.exportReport",
@@ -123,11 +141,6 @@
       {
         "command": "probatoPR.clearHistory",
         "title": "%command.clearHistory%",
-        "category": "Probato PR"
-      },
-      {
-        "command": "probatoPR.setAnthropicApiKey",
-        "title": "%command.setAnthropicApiKey%",
         "category": "Probato PR"
       },
       {
@@ -219,6 +232,10 @@
         {
           "command": "probatoPR.groupFindingsBySeverity",
           "when": "false"
+        },
+        {
+          "command": "probatoPR.copyPullRequestDescription",
+          "when": "probatoPR.hasReview"
         }
       ],
       "view/title": [
@@ -261,6 +278,11 @@
           "command": "probatoPR.showResults",
           "when": "view == probatoPR.overview && probatoPR.hasReview",
           "group": "navigation@2"
+        },
+        {
+          "command": "probatoPR.copyPullRequestDescription",
+          "when": "view == probatoPR.findings && probatoPR.hasReview",
+          "group": "navigation@3"
         }
       ]
     },
@@ -391,20 +413,43 @@
           "enum": [
             "none",
             "vscode-lm",
-            "anthropic"
+            "anthropic",
+            "openai-compatible"
           ],
           "default": "none",
           "enumDescriptions": [
             "%config.ai.provider.none%",
             "%config.ai.provider.vscodeLm%",
-            "%config.ai.provider.anthropic%"
+            "%config.ai.provider.anthropic%",
+            "%config.ai.provider.openaiCompatible%"
           ],
-          "description": "%config.ai.provider%"
+          "markdownDescription": "%config.ai.provider%"
         },
         "probatoPR.ai.anthropicModel": {
           "type": "string",
           "default": "claude-opus-5-5",
           "description": "%config.ai.anthropicModel%"
+        },
+        "probatoPR.ai.vscodeLmModel": {
+          "type": "string",
+          "default": "",
+          "description": "%config.ai.vscodeLmModel%"
+        },
+        "probatoPR.ai.openaiCompatible.baseUrl": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "scope": "application",
+          "markdownDescription": "%config.ai.openaiCompatible.baseUrl%"
+        },
+        "probatoPR.ai.openaiCompatible.model": {
+          "type": "string",
+          "default": "",
+          "description": "%config.ai.openaiCompatible.model%"
+        },
+        "probatoPR.ai.includeFileContent": {
+          "type": "boolean",
+          "default": true,
+          "description": "%config.ai.includeFileContent%"
         },
         "probatoPR.ai.maxContextChars": {
           "type": "integer",
@@ -479,6 +524,7 @@
               "altText": "Probato PR"
             },
             "completionEvents": [
+              "onCommand:probatoPR.connectAi",
               "onSettingChanged:probatoPR.ai.provider"
             ]
           }

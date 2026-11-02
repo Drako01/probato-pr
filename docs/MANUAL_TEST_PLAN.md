@@ -57,6 +57,16 @@ Open a folder that is not a repository but lives inside one (e.g. a subfolder of
 - Disconnect the network: local review and verification still work; *Review Pull Request* shows "Could not reach GitHub".
 - With `probatoPR.ai.provider = none`, *AI Review* explains it is optional and offers the setting.
 
-## 8. Spanish UI
+## 8. Bring your own AI
+
+1. In the Review Summary, the *AI reviewer* card shows **Connect Your AI**. Run it and pick **Chat models already in VS Code** (requires GitHub Copilot): the model list appears; pick one. The card now shows the provider and **Run AI Review**.
+2. Run **Connect Your AI** again with **OpenAI** (or **Other OpenAI-compatible API** with `http://localhost:11434/v1` and Ollama running): an invalid key shows "Could not connect" and saves nothing; a valid key lists models.
+3. Try `http://example.com/v1` as a custom URL: it is refused (HTTPS required for remote servers).
+4. **Run AI Review**: the confirmation lists *Diffs*, *Full file content, for context* and *Not sent*. Confirm: the card shows the walkthrough; AI findings appear as *Suspected*.
+5. **Copy PR Description** and paste it in an editor: *Summary* (AI walkthrough) comes first, then *Verification (Probato PR)*.
+6. Add `"probatoPR.ai.openaiCompatible.baseUrl": "https://evil.example/v1"` to the workspace `.vscode/settings.json`: Settings shows it as not applicable in the workspace and AI review keeps using the user-level URL.
+7. **Delete Stored AI API Keys**, then **Run AI Review** with OpenAI: it reports the provider is not ready.
+
+## 9. Spanish UI
 
 Set the display language to Spanish (`Configure Display Language` → `es`), reload, and check that commands, views and messages are translated.

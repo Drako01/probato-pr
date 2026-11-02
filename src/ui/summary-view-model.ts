@@ -55,8 +55,8 @@ export function workflowSteps(session: ReviewSession): SummaryStep[] {
       id: 'share',
       state: flow.share,
       title: vscode.l10n.t('Share'),
-      detail: vscode.l10n.t('Export SARIF, Markdown or JSON, or paste the summary into your pull request.'),
-      ...(flow.review === 'done' ? { action: { command: 'exportReport' as const, label: vscode.l10n.t('Export Report') } } : {}),
+      detail: vscode.l10n.t('Copy a pull request description with the evidence, or export SARIF, Markdown or JSON.'),
+      ...(flow.review === 'done' ? { action: { command: 'copyPullRequestDescription' as const, label: vscode.l10n.t('Copy PR Description') } } : {}),
     },
   ];
 }
@@ -84,18 +84,27 @@ function labels(): SummaryLabels {
     noChecks: vscode.l10n.t('No checks executed yet.'),
     evidence: vscode.l10n.t('Evidence'),
     markdown: vscode.l10n.t('Markdown for the PR description'),
-    aiReview: vscode.l10n.t('AI Review (Optional)'),
     cancel: vscode.l10n.t('Cancel'),
     reviewAgain: vscode.l10n.t('Review again'),
     staged: vscode.l10n.t('Staged Changes'),
     commit: vscode.l10n.t('Commit'),
     pullRequest: vscode.l10n.t('Pull Request'),
     statusLegend: vscode.l10n.t('Only executed checks count as proof.'),
+    aiTitle: vscode.l10n.t('AI reviewer'),
+    aiConnectHint: vscode.l10n.t('Add your own AI: GitHub Copilot, Claude, OpenAI or a local model. It reviews the change, writes the pull request summary, and you confirm the files every time.'),
+    aiConnect: vscode.l10n.t('Connect Your AI'),
+    aiReadyHint: vscode.l10n.t('Ask the AI for a second opinion and a pull request summary. Its findings stay suspected until a check proves them.'),
+    aiRun: vscode.l10n.t('Run AI Review'),
+    aiRunAgain: vscode.l10n.t('Run Again'),
+    aiWhereToLook: vscode.l10n.t('Where to look first'),
+    aiChange: vscode.l10n.t('Change AI'),
+    copyDescription: vscode.l10n.t('Copy PR Description'),
+    exportReport: vscode.l10n.t('Export Report'),
   };
 }
 
 /** Everything the summary panel renders. Repository-derived text is passed as data and rendered as text, never markup. */
-export function summaryState(session: ReviewSession): SummaryState {
+export function summaryState(session: ReviewSession, aiProvider: string | undefined): SummaryState {
   const review = session.current;
   const busy = session.busyLabel;
   const base = { labels: labels(), ...(busy ? { busy } : {}) };
@@ -146,6 +155,7 @@ export function summaryState(session: ReviewSession): SummaryState {
         note: c.attributionNote,
         ...(c.headEvidenceId ? { evidenceId: c.headEvidenceId } : {}),
       })),
+      ai: { ...(aiProvider ? { provider: aiProvider } : {}), ...(review.aiSummary ? { summary: review.aiSummary } : {}) },
     },
   };
 }

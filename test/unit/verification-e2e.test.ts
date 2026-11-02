@@ -4,13 +4,14 @@ import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createDefaultAnalyzers } from '../../src/analyzers';
 import type { PlannedCheck } from '../../src/core/model';
-import { ReviewEngine } from '../../src/core/review-engine';
+import { finalizeResult, ReviewEngine } from '../../src/core/review-engine';
 import { GitClient } from '../../src/git/git-client';
 import { LocalChangeCollector, NoChangesError } from '../../src/git/local-changes';
 import { NodeProcessRunner } from '../../src/infrastructure/process-runner';
 import { GitWorkspaceIndex } from '../../src/infrastructure/workspace-index';
 import { detectChecks, type ProjectProbe } from '../../src/verification/check-detector';
 import { applyVerification } from '../../src/verification/evidence-linker';
+import { parseAiReview } from '../../src/ai/ai-response';
 import { VerificationEngine } from '../../src/verification/verification-engine';
 import { git, initRepo, tempDir, writeFiles } from './helpers';
 
@@ -92,6 +93,25 @@ describe('end-to-end: review + verification with baseline attribution', () => {
     expect(verified.risk.level).toBe('high');
     // The temporary worktree is gone.
     expect(git(root, 'worktree', 'list').trim().split('\n')).toHaveLength(1);
+  }, 180_000);
+
+  it('confirms an AI suspicion when an executed check fails at that line only after the change', async () => {
+    const root = repo({ 'src/a.ts': 'export const total: number = 1;\n' });
+    writeFiles(root, { 'src/a.ts': "export const total: number = 1;\nexport const label: number = 'not a number';\n" });
+    const changes = await new LocalChangeCollector(gitClient).collect(root, { kind: 'working' }, limits);
+    const review = await new ReviewEngine(createDefaultAnalyzers(), 'test').review(changes, new GitWorkspaceIndex(gitClient, root, 1_000_000));
+
+    // The model's answer goes through the real validator: it is accepted as "suspected", never more.
+    const aiAnswer = JSON.stringify({ findings: [{ file: 'src/a.ts', line: 2, severity: 'high', title: 'String assigned to a number', description: 'label is typed number' }] });
+    const ai = parseAiReview(aiAnswer, changes, ['src/a.ts'], 'Test AI (m)');
+    expect(ai.accepted[0]).toMatchObject({ origin: 'ai', verification: 'suspected' });
+    const withAi = finalizeResult({ ...review, findings: [...review.findings, ...ai.accepted] });
+
+    const headSha = git(root, 'rev-parse', 'HEAD').trim();
+    const outcome = await engine.run({ repoRoot: root, approved: [tscCheck(['src/a.ts'])], baselineCommit: headSha, headSha, headDirty: true, timeoutMs: 120_000, maxOutputBytes: 500_000 });
+    const verified = applyVerification(withAi, outcome).findings.find((f) => f.origin === 'ai');
+    expect(verified).toMatchObject({ verification: 'confirmed', attribution: 'introduced', location: { file: 'src/a.ts', startLine: 2 } });
+    expect(verified?.verificationNote).toMatch(/not on the base revision/);
   }, 180_000);
 
   it('does not attribute a failure that already exists on the base revision (case 1)', async () => {

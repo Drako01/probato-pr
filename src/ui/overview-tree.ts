@@ -96,10 +96,12 @@ export class OverviewTreeProvider implements vscode.TreeDataProvider<Node>, vsco
         ...(step.id === 'share'
           ? {
               children: [
+                action('copy', vscode.l10n.t('Copy PR Description'), 'probatoPR.copyPullRequestDescription', 'copy'),
                 action('show', vscode.l10n.t('Show Review Results'), 'probatoPR.showResults', 'preview'),
                 action('export', vscode.l10n.t('Export Report…'), 'probatoPR.exportReport', 'export'),
                 action('markdown', vscode.l10n.t('Markdown for the PR description'), 'probatoPR.openMarkdownReport', 'markdown'),
                 action('ai', vscode.l10n.t('AI Review (Optional)'), 'probatoPR.aiReview', 'sparkle'),
+                action('connect-ai', vscode.l10n.t('Connect Your AI'), 'probatoPR.connectAi', 'plug'),
               ],
             }
           : {}),

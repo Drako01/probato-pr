@@ -1,5 +1,9 @@
 import * as vscode from 'vscode';
 import { z } from 'zod';
+import { OPENAI_BASE_URL } from '../ai/openai-compatible-provider';
+
+export const AI_PROVIDERS = ['none', 'vscode-lm', 'anthropic', 'openai-compatible'] as const;
+export type AiProviderId = (typeof AI_PROVIDERS)[number];
 
 const SettingsSchema = z.object({
   review: z.object({
@@ -14,8 +18,14 @@ const SettingsSchema = z.object({
     baseline: z.enum(['ask', 'always', 'never']).default('ask'),
   }),
   ai: z.object({
-    provider: z.enum(['none', 'vscode-lm', 'anthropic']).default('none'),
+    provider: z.enum(AI_PROVIDERS).default('none'),
     anthropicModel: z.string().trim().min(1).default('claude-opus-5-5'),
+    vscodeLmModel: z.string().trim().default(''),
+    openaiCompatible: z.object({
+      baseUrl: z.string().trim().default(OPENAI_BASE_URL),
+      model: z.string().trim().default(''),
+    }),
+    includeFileContent: z.boolean().default(true),
     maxContextChars: z.number().int().min(2000).max(1_000_000).default(120_000),
     exclude: z.array(z.string()).default([]),
   }),
@@ -44,6 +54,12 @@ export function readSettings(onInvalid: (message: string) => void): Settings & {
     ai: {
       provider: config.get('ai.provider'),
       anthropicModel: config.get('ai.anthropicModel'),
+      vscodeLmModel: config.get('ai.vscodeLmModel'),
+      openaiCompatible: {
+        baseUrl: config.get('ai.openaiCompatible.baseUrl'),
+        model: config.get('ai.openaiCompatible.model'),
+      },
+      includeFileContent: config.get('ai.includeFileContent'),
       maxContextChars: config.get('ai.maxContextChars'),
       exclude: config.get('ai.exclude'),
     },
@@ -53,5 +69,5 @@ export function readSettings(onInvalid: (message: string) => void): Settings & {
     return { ...parsed.data, maxFileBytes: MAX_FILE_BYTES };
   }
   onInvalid(`Invalid Probato PR settings, defaults used: ${parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`);
-  return { ...SettingsSchema.parse({ review: {}, verification: {}, ai: {} }), maxFileBytes: MAX_FILE_BYTES };
+  return { ...SettingsSchema.parse({ review: {}, verification: {}, ai: { openaiCompatible: {} } }), maxFileBytes: MAX_FILE_BYTES };
 }

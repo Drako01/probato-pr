@@ -1,10 +1,9 @@
 import * as vscode from 'vscode';
-import type { AIReviewProvider } from './ai/ai-provider';
-import { AnthropicProvider } from './ai/anthropic-provider';
-import { VsCodeLanguageModelProvider } from './ai/vscode-lm-provider';
 import { createDefaultAnalyzers } from './analyzers';
 import type { ReviewResult } from './core/model';
 import { ReviewEngine } from './core/review-engine';
+import { aiProviderLabel, createAiProvider } from './extension/ai-providers';
+import { AiSetup } from './extension/ai-setup';
 import { ReviewController } from './extension/review-controller';
 import { ReviewSession } from './extension/review-session';
 import { readSettings } from './extension/settings';
@@ -21,7 +20,6 @@ import { SUMMARY_VIEW_TYPE, SummaryPanel } from './ui/summary-panel';
 import { VerificationTreeProvider } from './ui/verification-tree';
 import { VerificationEngine } from './verification/verification-engine';
 
-const ANTHROPIC_KEY_SECRET = 'probatoPR.anthropicApiKey';
 const GITHUB_SCOPES = ['repo'];
 
 let activeSession: ReviewSession | undefined;
@@ -57,19 +55,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
     },
   );
 
-  const aiProvider = (): AIReviewProvider | undefined => {
-    const ai = settings().ai;
-    switch (ai.provider) {
-      case 'anthropic':
-        return new AnthropicProvider(() => Promise.resolve(context.secrets.get(ANTHROPIC_KEY_SECRET)), ai.anthropicModel);
-      case 'vscode-lm':
-        return new VsCodeLanguageModelProvider();
-      case 'none':
-        return undefined;
-    }
-  };
-
-  const summary = new SummaryPanel(session, context.extensionUri, log);
+  const aiSetup = new AiSetup(context.secrets, context.globalState, settings, log);
+  const summary = new SummaryPanel(session, context.extensionUri, log, () => aiProviderLabel(settings().ai));
   const controller = new ReviewController({
     session,
     git,
@@ -81,12 +68,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
       githubToken = auth.accessToken;
       return true;
     },
-    aiProvider,
+    aiProvider: () => createAiProvider(settings().ai, context.secrets),
     settings,
     log,
     showSummary: (preserveFocus) => {
       summary.show(preserveFocus);
     },
+    connectAi: () => aiSetup.run(),
   });
 
   const documents = new ReviewDocuments(session);
@@ -124,23 +112,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
       await session.clear();
       void vscode.window.showInformationMessage(vscode.l10n.t('Probato PR review history deleted from this workspace.'));
     }),
-    vscode.commands.registerCommand('probatoPR.setAnthropicApiKey', async () => {
-      const key = await vscode.window.showInputBox({
-        title: vscode.l10n.t('Anthropic API key'),
-        prompt: vscode.l10n.t('Stored in VS Code SecretStorage (OS keychain). Leave empty to remove the stored key.'),
-        password: true,
-        ignoreFocusOut: true,
-      });
-      if (key === undefined) {
-        return;
-      }
-      if (key.trim() === '') {
-        await context.secrets.delete(ANTHROPIC_KEY_SECRET);
-      } else {
-        await context.secrets.store(ANTHROPIC_KEY_SECRET, key.trim());
-      }
-      void vscode.window.showInformationMessage(key.trim() ? vscode.l10n.t('Anthropic API key saved.') : vscode.l10n.t('Anthropic API key removed.'));
-    }),
+    vscode.commands.registerCommand('probatoPR.connectAi', () => aiSetup.run()),
+    vscode.commands.registerCommand('probatoPR.forgetAiKeys', () => aiSetup.forgetKeys()),
+    vscode.commands.registerCommand('probatoPR.copyPullRequestDescription', () => controller.copyPullRequestDescription()),
     vscode.authentication.onDidChangeSessions((event) => {
       if (event.provider.id === 'github') {
         githubToken = undefined;

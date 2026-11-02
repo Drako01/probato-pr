@@ -19,10 +19,19 @@ export class SummaryPanel implements vscode.WebviewPanelSerializer, vscode.Dispo
     private readonly session: ReviewSession,
     private readonly extensionUri: vscode.Uri,
     private readonly log: vscode.LogOutputChannel,
+    /** Label of the configured AI provider; undefined when AI is off. */
+    private readonly aiLabel: () => string | undefined,
   ) {
-    this.subscription = session.onDidChange(() => {
-      this.post();
-    });
+    this.subscription = vscode.Disposable.from(
+      session.onDidChange(() => {
+        this.post();
+      }),
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        if (event.affectsConfiguration('probatoPR.ai')) {
+          this.post();
+        }
+      }),
+    );
   }
 
   /** Opens the panel, or reveals it if it is already open. */
@@ -103,7 +112,7 @@ export class SummaryPanel implements vscode.WebviewPanelSerializer, vscode.Dispo
 
   private post(): void {
     if (this.panel) {
-      void this.panel.webview.postMessage({ type: 'state', state: summaryState(this.session) } satisfies HostMessage);
+      void this.panel.webview.postMessage({ type: 'state', state: summaryState(this.session, this.aiLabel()) } satisfies HostMessage);
     }
   }
 

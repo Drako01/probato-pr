@@ -1,18 +1,16 @@
-// Generates media/logo.png (128x128, Marketplace requires PNG) without dependencies, from the same geometry
-// as media/logo.svg: the "P-Merge" mark (a P drawn as a merge graph) on a dark tile, rasterized with 4x4
-// supersampling and encoded with node:zlib.
+// Generates the PNG logos without dependencies, from the same geometry as media/mark.svg and media/logo.svg:
+// the "P-Merge" mark (a P drawn as a merge graph), rasterized with 4x4 supersampling and encoded with node:zlib.
+//   media/logo.png         128x128 Marketplace icon: white mark on a dark tile, brand-green branch commit.
+//   media/readme-logo.png  256x256 README header: brand-green mark on a transparent background (the Marketplace
+//                          does not allow SVG images in the README).
 import { writeFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 
-const SIZE = 128;
 const SS = 4;
-const BG = [20, 24, 29];
-const LINE = [255, 255, 255];
-const ACCENT = [46, 169, 143];
+const TILE = [20, 24, 29];
+const WHITE = [255, 255, 255];
+const BRAND_GREEN = [46, 169, 143];
 
-// Mark geometry in the 24-unit grid of media/mark.svg, placed on the tile like logo.svg (translate 2.2 2.4, scale .8).
-const UNIT = SIZE / 24;
-const toMark = (v, offset) => (v / UNIT - offset) / 0.8;
 const HALF_STROKE = 0.8;
 const BOWL = { cx: 13, cy: 9, r: 4.5 };
 // The bowl arc stops where it meets the branch commit's outline (radius 2) and resumes after it.
@@ -36,20 +34,10 @@ function distanceToArc(px, py, from, to) {
   return Math.min(end(from), end(to));
 }
 
-function insideRoundedSquare(x, y, radius) {
-  const cx = Math.min(Math.max(x, radius), SIZE - radius);
-  const cy = Math.min(Math.max(y, radius), SIZE - radius);
-  return Math.hypot(x - cx, y - cy) <= radius;
-}
-
-function colorAt(x, y) {
-  if (!insideRoundedSquare(x, y, 5 * UNIT)) {
-    return null;
-  }
-  const mx = toMark(x, 2.2);
-  const my = toMark(y, 2.4);
+/** Which part of the mark a point (in the 24-unit grid of mark.svg) falls on. */
+function markPartAt(mx, my) {
   if (Math.hypot(mx - 17.5, my - 9) <= 2.4 + HALF_STROKE) {
-    return ACCENT; // the branch commit: the change under review
+    return 'commit'; // the branch commit: the change under review
   }
   const strokes = [
     distanceToSegment(mx, my, [8, 6.5], [8, 17.5]),
@@ -59,28 +47,50 @@ function colorAt(x, y) {
     Math.abs(Math.hypot(mx - 8, my - 4.5) - 2),
     Math.abs(Math.hypot(mx - 8, my - 19.5) - 2),
   ];
-  return Math.min(...strokes) <= HALF_STROKE ? LINE : BG;
+  return Math.min(...strokes) <= HALF_STROKE ? 'line' : undefined;
 }
 
-const raw = Buffer.alloc((SIZE * 4 + 1) * SIZE);
-for (let y = 0; y < SIZE; y++) {
-  raw[y * (SIZE * 4 + 1)] = 0; // filter: none
-  for (let x = 0; x < SIZE; x++) {
-    let r = 0, g = 0, b = 0, a = 0;
-    for (let sy = 0; sy < SS; sy++) {
-      for (let sx = 0; sx < SS; sx++) {
-        const c = colorAt(x + (sx + 0.5) / SS, y + (sy + 0.5) / SS);
-        if (c) {
-          r += c[0]; g += c[1]; b += c[2]; a += 1;
+function insideRoundedSquare(x, y, size, radius) {
+  const cx = Math.min(Math.max(x, radius), size - radius);
+  const cy = Math.min(Math.max(y, radius), size - radius);
+  return Math.hypot(x - cx, y - cy) <= radius;
+}
+
+/**
+ * @param {{ size: number, tile: number[] | undefined, line: number[], commit: number[], offset: [number, number], scale: number }} variant
+ *   offset/scale place the 24-unit mark on a 24-unit canvas (like the SVG transform).
+ */
+function render(variant) {
+  const { size } = variant;
+  const unit = size / 24;
+  const colorAt = (x, y) => {
+    if (variant.tile && !insideRoundedSquare(x, y, size, 5 * unit)) {
+      return null;
+    }
+    const part = markPartAt((x / unit - variant.offset[0]) / variant.scale, (y / unit - variant.offset[1]) / variant.scale);
+    return part === 'commit' ? variant.commit : part === 'line' ? variant.line : (variant.tile ?? null);
+  };
+  const raw = Buffer.alloc((size * 4 + 1) * size);
+  for (let y = 0; y < size; y++) {
+    raw[y * (size * 4 + 1)] = 0; // filter: none
+    for (let x = 0; x < size; x++) {
+      let r = 0, g = 0, b = 0, a = 0;
+      for (let sy = 0; sy < SS; sy++) {
+        for (let sx = 0; sx < SS; sx++) {
+          const c = colorAt(x + (sx + 0.5) / SS, y + (sy + 0.5) / SS);
+          if (c) {
+            r += c[0]; g += c[1]; b += c[2]; a += 1;
+          }
         }
       }
+      const o = y * (size * 4 + 1) + 1 + x * 4;
+      raw[o] = a ? Math.round(r / a) : 0;
+      raw[o + 1] = a ? Math.round(g / a) : 0;
+      raw[o + 2] = a ? Math.round(b / a) : 0;
+      raw[o + 3] = Math.round((a / (SS * SS)) * 255);
     }
-    const o = y * (SIZE * 4 + 1) + 1 + x * 4;
-    raw[o] = a ? Math.round(r / a) : 0;
-    raw[o + 1] = a ? Math.round(g / a) : 0;
-    raw[o + 2] = a ? Math.round(b / a) : 0;
-    raw[o + 3] = Math.round((a / (SS * SS)) * 255);
   }
+  return encodePng(size, raw);
 }
 
 const crcTable = Array.from({ length: 256 }, (_, n) => {
@@ -101,16 +111,30 @@ const chunk = (type, data) => {
   crc.writeUInt32BE(crc32(body));
   return Buffer.concat([len, body, crc]);
 };
-const ihdr = Buffer.alloc(13);
-ihdr.writeUInt32BE(SIZE, 0);
-ihdr.writeUInt32BE(SIZE, 4);
-ihdr[8] = 8; // bit depth
-ihdr[9] = 6; // RGBA
-const png = Buffer.concat([
-  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-  chunk('IHDR', ihdr),
-  chunk('IDAT', deflateSync(raw, { level: 9 })),
-  chunk('IEND', Buffer.alloc(0)),
-]);
-writeFileSync(new URL('../media/logo.png', import.meta.url), png);
-console.log(`media/logo.png written (${png.length} bytes)`);
+
+function encodePng(size, raw) {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(size, 0);
+  ihdr.writeUInt32BE(size, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 6; // RGBA
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', deflateSync(raw, { level: 9 })),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+const OUTPUTS = [
+  // Same placement as logo.svg: translate(2.2 2.4) scale(.8).
+  { file: 'logo.png', size: 128, tile: TILE, line: WHITE, commit: BRAND_GREEN, offset: [2.2, 2.4], scale: 0.8 },
+  // Mark centered on the canvas at full size.
+  { file: 'readme-logo.png', size: 256, tile: undefined, line: BRAND_GREEN, commit: BRAND_GREEN, offset: [-0.75, 0], scale: 1 },
+];
+
+for (const output of OUTPUTS) {
+  const png = render(output);
+  writeFileSync(new URL(`../media/${output.file}`, import.meta.url), png);
+  console.log(`media/${output.file} written (${png.length} bytes)`);
+}

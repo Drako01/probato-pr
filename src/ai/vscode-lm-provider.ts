@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { AiProviderError, type AIReviewProvider, type AiPrompt, type AiRawResponse } from './ai-provider';
 
+const modelKey = (model: vscode.LanguageModelChat): string => `${model.vendor}/${model.id}`;
+
 /**
  * Uses a chat model the user already has in VS Code (Language Model API, e.g. GitHub Copilot).
  * VS Code itself asks the user to allow this extension to use the model.
@@ -10,13 +12,20 @@ export class VsCodeLanguageModelProvider implements AIReviewProvider {
   readonly name = 'VS Code language model';
   readonly destination = 'the provider of the chat model selected in VS Code (for example GitHub Copilot)';
 
+  /** @param modelId the chosen model ("vendor/id"); empty uses the first available model. */
+  constructor(private readonly modelId: string) {}
+
   private async model(): Promise<vscode.LanguageModelChat | undefined> {
     const models = await vscode.lm.selectChatModels();
-    return models[0];
+    return models.find((m) => modelKey(m) === this.modelId) ?? (this.modelId ? undefined : models[0]);
   }
 
   async isAvailable(): Promise<boolean> {
     return (await this.model()) !== undefined;
+  }
+
+  async listModels(): Promise<readonly string[]> {
+    return (await vscode.lm.selectChatModels()).map(modelKey);
   }
 
   async complete(prompt: AiPrompt, signal: AbortSignal): Promise<AiRawResponse> {
@@ -33,14 +42,14 @@ export class VsCodeLanguageModelProvider implements AIReviewProvider {
       // The LM API has no system role: instructions go first, data last, in separate messages.
       const response = await model.sendRequest(
         [vscode.LanguageModelChatMessage.User(prompt.instructions), vscode.LanguageModelChatMessage.User(prompt.data)],
-        { justification: vscode.l10n.t('Probato PR sends the reviewed diff to the model to look for defects.') },
+        { justification: vscode.l10n.t('Probato PR sends the reviewed change to the model to look for defects and summarize it.') },
         source.token,
       );
       let text = '';
       for await (const fragment of response.text) {
         text += fragment;
       }
-      return { model: `${model.vendor}/${model.id}`, text };
+      return { model: modelKey(model), text };
     } catch (error) {
       if (error instanceof vscode.LanguageModelError) {
         throw new AiProviderError(`Language model request failed: ${error.message}`, error.code === vscode.LanguageModelError.NoPermissions.name ? 'auth' : 'other');

@@ -16,12 +16,29 @@ export class AnthropicProvider implements AIReviewProvider {
     return (await this.apiKey()) !== undefined;
   }
 
-  async complete(prompt: AiPrompt, signal: AbortSignal): Promise<AiRawResponse> {
+  async listModels(signal: AbortSignal): Promise<readonly string[]> {
+    const client = await this.client();
+    try {
+      const ids: string[] = [];
+      for await (const model of client.models.list(undefined, { signal })) {
+        ids.push(model.id);
+      }
+      return ids;
+    } catch (error) {
+      throw this.translate(error, signal);
+    }
+  }
+
+  private async client(): Promise<Anthropic> {
     const apiKey = await this.apiKey();
     if (!apiKey) {
-      throw new AiProviderError('No Anthropic API key configured. Run "Probato PR: Set Anthropic API Key".', 'unavailable');
+      throw new AiProviderError('No Anthropic API key configured. Run "Probato PR: Connect Your AI".', 'unavailable');
     }
-    const client = new Anthropic({ apiKey, maxRetries: 2 });
+    return new Anthropic({ apiKey, maxRetries: 2 });
+  }
+
+  async complete(prompt: AiPrompt, signal: AbortSignal): Promise<AiRawResponse> {
+    const client = await this.client();
     try {
       // Server-side fallback lets the API re-run a policy-declined request on a fallback model.
       const response = await client.beta.messages.create(
@@ -41,22 +58,27 @@ export class AnthropicProvider implements AIReviewProvider {
       const text = response.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('\n');
       return { model: response.model, text };
     } catch (error) {
-      if (error instanceof AiProviderError || signal.aborted) {
-        throw error;
-      }
-      if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
-        throw new AiProviderError('Anthropic rejected the API key. Set a valid key and try again.', 'auth');
-      }
-      if (error instanceof Anthropic.RateLimitError) {
-        throw new AiProviderError('Anthropic rate limit reached. Try again later.', 'rate-limited');
-      }
-      if (error instanceof Anthropic.APIConnectionError) {
-        throw new AiProviderError('Could not reach the Anthropic API. Local review results are unaffected.', 'network');
-      }
-      if (error instanceof Anthropic.APIError) {
-        throw new AiProviderError(`Anthropic API error ${String(error.status)}: ${error.message}`, 'other');
-      }
-      throw error;
+      throw this.translate(error, signal);
     }
+  }
+
+  /** Maps SDK errors to actionable provider errors; cancellations and unknown errors pass through. */
+  private translate(error: unknown, signal: AbortSignal): unknown {
+    if (error instanceof AiProviderError || signal.aborted) {
+      return error;
+    }
+    if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
+      return new AiProviderError('Anthropic rejected the API key. Run "Probato PR: Connect Your AI" to set it again.', 'auth');
+    }
+    if (error instanceof Anthropic.RateLimitError) {
+      return new AiProviderError('Anthropic rate limit reached. Try again later.', 'rate-limited');
+    }
+    if (error instanceof Anthropic.APIConnectionError) {
+      return new AiProviderError('Could not reach the Anthropic API. Local review results are unaffected.', 'network');
+    }
+    if (error instanceof Anthropic.APIError) {
+      return new AiProviderError(`Anthropic API error ${String(error.status)}: ${error.message}`, 'other');
+    }
+    return error;
   }
 }
