@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { CheckResult, CommandEvidence, PlannedCheck } from '../core/model';
 import type { ReviewSession } from '../extension/review-session';
-import { checkIcon, checkResultLabel, safeMarkdown } from './presentation';
+import { checkIcon, checkResultLabel, checkStatusLabel, evidenceRevisionLabel, revisionLabel, safeMarkdown } from './presentation';
 
 type Node =
   | { readonly kind: 'section'; readonly id: string; readonly label: string; readonly children: readonly Node[] }
@@ -81,10 +81,16 @@ export class VerificationTreeProvider implements vscode.TreeDataProvider<Node>, 
       }
       case 'evidence': {
         const e = node.evidence;
-        const item = new vscode.TreeItem(`${e.revision === 'base' ? vscode.l10n.t('base') : vscode.l10n.t('head')} · ${e.commandLine}`);
+        const seconds = (e.durationMs / 1000).toFixed(1);
+        const item = new vscode.TreeItem(e.commandLine);
         item.id = `evidence:${e.id}`;
         item.iconPath = checkIcon(e.outcome);
-        item.description = `exit ${String(e.exitCode)} · ${(e.durationMs / 1000).toFixed(1)}s`;
+        item.description = `${revisionLabel(e.revision)} · exit ${String(e.exitCode)} · ${seconds}s`;
+        item.tooltip = safeMarkdown(
+          e.commandLine,
+          `${checkStatusLabel(e.outcome)} ${evidenceRevisionLabel(e)}`,
+          vscode.l10n.t('Exit code {0} · {1} s · click to open the full output', String(e.exitCode), seconds),
+        );
         item.command = { command: 'probatoPR.openEvidence', title: vscode.l10n.t('Open Evidence'), arguments: [e.id] };
         return item;
       }

@@ -12,13 +12,14 @@ import { GitClient } from './git/git-client';
 import { GitHubClient } from './github/github-client';
 import { HistoryStore } from './infrastructure/history-store';
 import { NodeProcessRunner } from './infrastructure/process-runner';
-import { FindingDiagnostics } from './ui/diagnostics';
+import { FindingCodeActions, FindingDiagnostics } from './ui/diagnostics';
 import { EVIDENCE_SCHEME, REPORT_SCHEME, ReviewDocuments } from './ui/documents';
 import { createFindingsView } from './ui/findings-tree';
 import { OverviewTreeProvider } from './ui/overview-tree';
 import { ReviewStatusBar } from './ui/status-bar';
 import { SUMMARY_VIEW_TYPE, SummaryPanel } from './ui/summary-panel';
 import { VerificationTreeProvider } from './ui/verification-tree';
+import { ApprovedChecks } from './verification/approved-checks';
 import { VerificationEngine } from './verification/verification-engine';
 
 const GITHUB_SCOPES = ['repo'];
@@ -64,6 +65,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
     git,
     engine: new ReviewEngine(createDefaultAnalyzers(), version),
     verification: new VerificationEngine(runner, git),
+    approvals: new ApprovedChecks(context.workspaceState),
     github,
     signInToGitHub: async () => {
       const auth = await vscode.authentication.getSession('github', GITHUB_SCOPES, { createIfNone: true });
@@ -80,13 +82,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
   });
 
   const documents = new ReviewDocuments(session);
+  const diagnostics = new FindingDiagnostics(session);
   context.subscriptions.push(
     log,
     session,
     documents,
     vscode.workspace.registerTextDocumentContentProvider(REPORT_SCHEME, documents),
     vscode.workspace.registerTextDocumentContentProvider(EVIDENCE_SCHEME, documents),
-    new FindingDiagnostics(session),
+    diagnostics,
+    vscode.languages.registerCodeActionsProvider({ scheme: 'file' }, new FindingCodeActions(diagnostics), { providedCodeActionKinds: FindingCodeActions.kinds }),
     summary,
     vscode.window.registerWebviewPanelSerializer(SUMMARY_VIEW_TYPE, summary),
     new ReviewStatusBar(session),
@@ -110,6 +114,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
     vscode.commands.registerCommand('probatoPR.cancel', () => session.cancel()),
     vscode.commands.registerCommand('probatoPR.dismissFinding', (node?: { finding?: { id: string } }) => (node?.finding ? session.dismiss(node.finding.id) : undefined)),
     vscode.commands.registerCommand('probatoPR.restoreDismissed', () => session.restoreDismissed()),
+    vscode.commands.registerCommand('probatoPR.forgetApprovedChecks', () => controller.forgetApprovedChecks()),
     vscode.commands.registerCommand('probatoPR.clearHistory', async () => {
       await session.clear();
       void vscode.window.showInformationMessage(vscode.l10n.t('Probato PR review history deleted from this workspace.'));

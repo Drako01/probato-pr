@@ -1,74 +1,20 @@
 import * as vscode from 'vscode';
-import type { Attribution, CheckResult, CheckStatus, ReviewFinding, ReviewResult, RiskLevel, Severity, VerificationStatus } from '../core/model';
+import type { CheckStatus, ReviewFinding, ReviewResult, RiskLevel, Severity } from '../core/model';
 import type { StepState } from './workflow';
 
-// Single source for how domain states look in the UI (trees, diagnostics, hovers).
+// Single source for how domain states look in the UI (icons, Markdown); their names live in core/labels.
 
-export function verificationLabel(status: VerificationStatus): string {
-  switch (status) {
-    case 'confirmed':
-      return vscode.l10n.t('Confirmed');
-    case 'evidenced':
-      return vscode.l10n.t('Evidenced');
-    case 'suspected':
-      return vscode.l10n.t('Suspected');
-    case 'not-verified':
-      return vscode.l10n.t('Not verified');
-  }
-}
-
-/** One-line meaning of each status, for legends and tooltips. */
-export function verificationHint(status: VerificationStatus): string {
-  switch (status) {
-    case 'confirmed':
-      return vscode.l10n.t('Proven by an executed check');
-    case 'evidenced':
-      return vscode.l10n.t('Backed by objective evidence in the code or a failing check');
-    case 'suspected':
-      return vscode.l10n.t('Probable issue from heuristics or AI, not proven');
-    case 'not-verified':
-      return vscode.l10n.t('The verification it needs could not be performed');
-  }
-}
-
-export function checkStatusLabel(status: CheckStatus): string {
-  switch (status) {
-    case 'passed':
-      return vscode.l10n.t('Passed');
-    case 'failed':
-      return vscode.l10n.t('Failed');
-    case 'timed-out':
-      return vscode.l10n.t('Timed out');
-    case 'cancelled':
-      return vscode.l10n.t('Cancelled');
-    case 'error':
-      return vscode.l10n.t('Error');
-    case 'pending':
-      return vscode.l10n.t('Not run');
-  }
-}
-
-/** Undefined when nothing is known about causality. */
-export function attributionLabel(attribution: Attribution | undefined): string | undefined {
-  switch (attribution) {
-    case 'introduced':
-      return vscode.l10n.t('Introduced by this change');
-    case 'pre-existing':
-      return vscode.l10n.t('Pre-existing');
-    case 'fixed':
-      return vscode.l10n.t('Fixed by this change');
-    case 'inconclusive':
-      return vscode.l10n.t('Attribution inconclusive');
-    case 'unknown':
-    case undefined:
-      return undefined;
-  }
-}
-
-/** Check status plus its attribution, e.g. "Failed · Introduced by this change". */
-export function checkResultLabel(check: CheckResult): string {
-  return [checkStatusLabel(check.status), attributionLabel(check.attribution)].filter(Boolean).join(' · ');
-}
+export {
+  attributionLabel,
+  checkResultLabel,
+  checkStatusLabel,
+  evidenceRevisionLabel,
+  revisionLabel,
+  riskLabel,
+  severityLabel,
+  verificationHint,
+  verificationLabel,
+} from '../core/labels';
 
 /** "branch · scope" line that identifies a review. */
 export function reviewSubtitle(review: ReviewResult): string {
@@ -77,23 +23,6 @@ export function reviewSubtitle(review: ReviewResult): string {
 
 export function reviewStatsLabel({ stats }: ReviewResult): string {
   return vscode.l10n.t('{0} files changed (+{1} / -{2}), {3} skipped', stats.filesChanged, stats.additions, stats.deletions, stats.filesSkipped);
-}
-
-export function severityLabel(severity: Severity): string {
-  switch (severity) {
-    case 'critical':
-      return vscode.l10n.t('Critical');
-    case 'high':
-      return vscode.l10n.t('High');
-    case 'medium':
-      return vscode.l10n.t('Medium');
-    case 'low':
-      return vscode.l10n.t('Low');
-  }
-}
-
-export function riskLabel(level: RiskLevel): string {
-  return level === 'unknown' ? vscode.l10n.t('Unknown') : severityLabel(level);
 }
 
 const SEVERITY_COLOR: Readonly<Record<Severity, string>> = {

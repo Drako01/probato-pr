@@ -18,6 +18,7 @@ import { renderJson } from '../reports/json';
 import { renderMarkdown, renderPullRequestDescription } from '../reports/markdown';
 import { renderSarif } from '../reports/sarif';
 import { evidenceUri, REPORT_URI } from '../ui/documents';
+import type { ApprovedChecks } from '../verification/approved-checks';
 import { detectChecks } from '../verification/check-detector';
 import type { VerificationEngine } from '../verification/verification-engine';
 import { BusyError, type ReviewSession } from './review-session';
@@ -28,6 +29,8 @@ export interface ControllerDeps {
   readonly git: GitClient;
   readonly engine: ReviewEngine;
   readonly verification: VerificationEngine;
+  /** Checks the user chose to run without being asked again, per repository. */
+  readonly approvals: ApprovedChecks;
   readonly github: GitHubClient;
   readonly signInToGitHub: () => Promise<boolean>;
   readonly aiProvider: () => AIReviewProvider | undefined;
@@ -191,7 +194,7 @@ export class ReviewController {
         );
         return;
       }
-      const approved = await this.approveChecks(plan);
+      const approved = await this.approveChecks(root, plan);
       if (!approved) {
         return;
       }
@@ -223,13 +226,34 @@ export class ReviewController {
     });
   }
 
-  private async approveChecks(plan: readonly PlannedCheck[]): Promise<PlannedCheck[] | undefined> {
+  /**
+   * Checks remembered for this repository run without asking while their command and script are unchanged.
+   * Otherwise the user picks and confirms, and may choose to be remembered.
+   */
+  private async approveChecks(root: string, plan: readonly PlannedCheck[]): Promise<readonly PlannedCheck[] | undefined> {
+    const { approved, changed } = this.deps.approvals.match(root, plan);
+    if (changed.length > 0) {
+      await this.deps.approvals.forget(root);
+      void vscode.window.showWarningMessage(
+        vscode.l10n.t('{0} changed since you approved it, so Probato PR asks again before running anything.', changed.map((c) => c.label).join(', ')),
+      );
+    } else if (approved.length > 0) {
+      const forget = vscode.l10n.t('Forget');
+      void vscode.window
+        .showInformationMessage(vscode.l10n.t('Running the checks you approved for this repository: {0}.', approved.map((c) => c.label).join(', ')), forget)
+        .then(async (answer) => {
+          if (answer === forget) {
+            await this.deps.approvals.forget(root);
+          }
+        });
+      return approved;
+    }
     const items = plan.map((check) => ({
       label: check.label,
       description: check.kind,
       detail: [...check.warnings, ...check.requires.map((r) => vscode.l10n.t('May require: {0}', r))].join(' · '),
-      // Pre-select only checks that do not run repository scripts; everything else is an explicit opt-in.
-      picked: !check.warnings.some((w) => w.startsWith('Executes repository code')),
+      // Pre-select only checks that do not run repository code; everything else is an explicit opt-in.
+      picked: !check.runsRepositoryCode,
       check,
     }));
     const picked = await vscode.window.showQuickPick(items, {
@@ -243,12 +267,28 @@ export class ReviewController {
     }
     const commands = picked.map((p) => `• ${p.check.label}  (${p.check.command.executable} ${p.check.command.args.join(' ')})`).join('\n');
     const confirm = vscode.l10n.t('Run');
+    const remember = vscode.l10n.t('Run and remember');
     const answer = await vscode.window.showWarningMessage(
       vscode.l10n.t('Run {0} command(s) in this repository?', picked.length),
-      { modal: true, detail: `${commands}\n\n${vscode.l10n.t('They execute with your normal user permissions (no sandbox). Repository scripts are untrusted code: review them before running.')}` },
+      {
+        modal: true,
+        detail: `${commands}\n\n${vscode.l10n.t('They execute with your normal user permissions (no sandbox). Repository scripts are untrusted code: review them before running.')}\n\n${vscode.l10n.t('"Run and remember" skips these questions next time for this repository, until a command or script changes.')}`,
+      },
       confirm,
+      remember,
     );
-    return answer === confirm ? picked.map((p) => p.check) : undefined;
+    const checks = picked.map((p) => p.check);
+    if (answer === remember) {
+      await this.deps.approvals.remember(root, checks);
+    }
+    return answer === confirm || answer === remember ? checks : undefined;
+  }
+
+  async forgetApprovedChecks(): Promise<void> {
+    const count = await this.deps.approvals.forgetAll();
+    void vscode.window.showInformationMessage(
+      count > 0 ? vscode.l10n.t('Probato PR will ask again before running checks in {0} repository(ies).', count) : vscode.l10n.t('There are no remembered checks.'),
+    );
   }
 
   private async chooseBaseline(review: ReviewResult): Promise<string | undefined> {
@@ -261,14 +301,22 @@ export class ReviewController {
       return base;
     }
     const yes = vscode.l10n.t('Compare with base');
+    const always = vscode.l10n.t('Always compare');
     const no = vscode.l10n.t('Head only');
     const answer = await vscode.window.showInformationMessage(
       vscode.l10n.t('If a check fails, re-run it on the base revision ({0}) to tell new failures from existing ones?', base.slice(0, 10)),
-      { modal: true, detail: vscode.l10n.t('A temporary git worktree is created outside your repository and removed afterwards. Your working tree is not modified.') },
+      {
+        modal: true,
+        detail: `${vscode.l10n.t('A temporary git worktree is created outside your repository and removed afterwards. Your working tree is not modified.')}\n\n${vscode.l10n.t('"Always compare" saves this choice in your user settings (Probato PR › Verification: Baseline).')}`,
+      },
       yes,
+      always,
       no,
     );
-    return answer === yes ? base : undefined;
+    if (answer === always) {
+      await vscode.workspace.getConfiguration('probatoPR').update('verification.baseline', 'always', vscode.ConfigurationTarget.Global);
+    }
+    return answer === yes || answer === always ? base : undefined;
   }
 
   // ---------------------------------------------------------------- AI

@@ -1,20 +1,9 @@
-import { SEVERITIES, type AiSummary, type CheckResult, type Evidence, type ReviewFinding, type ReviewResult } from '../core/model';
+import { tr } from '../core/i18n';
+import { attributionLabel, checkStatusLabel, evidenceRevisionLabel, riskLabel, severityLabel, verificationLabel } from '../core/labels';
+import { SEVERITIES, type AiSummary, type Evidence, type ReviewFinding, type ReviewResult } from '../core/model';
 
-const VERIFICATION_LABEL: Readonly<Record<ReviewFinding['verification'], string>> = {
-  confirmed: 'Confirmed',
-  evidenced: 'Evidenced',
-  suspected: 'Suspected',
-  'not-verified': 'Not verified',
-};
-
-const CHECK_ICON: Readonly<Record<CheckResult['status'], string>> = {
-  passed: 'PASS',
-  failed: 'FAIL',
-  'timed-out': 'TIMEOUT',
-  cancelled: 'CANCELLED',
-  error: 'ERROR',
-  pending: 'NOT RUN',
-};
+// Headings and fixed text follow the active locale like the findings themselves, so a report is never half
+// English and half Spanish. Rule ids, commands, paths and hashes stay as they are.
 
 /** Escapes text that is interpolated into Markdown so repository content cannot inject markup or links. */
 export function escapeMarkdown(text: string): string {
@@ -31,84 +20,114 @@ function location(f: ReviewFinding): string {
   return `${f.location.file}:${f.location.startLine}${f.location.endLine && f.location.endLine !== f.location.startLine ? `-${f.location.endLine}` : ''}`;
 }
 
+function code(text: string): string {
+  return `\`${text.replace(/[`|]/g, "'")}\``;
+}
+
 function evidenceBlock(evidence: Evidence): string {
   if (evidence.kind === 'static-analysis') {
-    return [`- Static analysis (${escapeMarkdown(evidence.analyzerId)}): ${escapeMarkdown(evidence.description)}`, evidence.excerpt ? `\n${fence(evidence.excerpt)}` : ''].join('');
+    const head = tr('Static analysis ({0}): {1}', escapeMarkdown(evidence.analyzerId), escapeMarkdown(evidence.description));
+    return [`- ${head}`, evidence.excerpt ? `\n${fence(evidence.excerpt)}` : ''].join('');
   }
-  const head = `- Command \`${evidence.commandLine.replace(/`/g, "'")}\` on ${evidence.revision} ${evidence.commitSha ? evidence.commitSha.slice(0, 10) : ''}${evidence.dirty ? ' (with uncommitted changes)' : ''}: **${evidence.outcome}**, exit ${String(evidence.exitCode)}, ${Math.round(evidence.durationMs / 100) / 10}s, output sha256 ${evidence.outputSha256.slice(0, 16)}…`;
-  return evidence.errorMessage ? `${head}\n  ${escapeMarkdown(evidence.errorMessage)}` : head;
+  const head = tr(
+    'Command {0} {1}: **{2}**, exit {3}, {4}s, output sha256 {5}…',
+    code(evidence.commandLine),
+    evidenceRevisionLabel(evidence),
+    checkStatusLabel(evidence.outcome),
+    String(evidence.exitCode),
+    Math.round(evidence.durationMs / 100) / 10,
+    evidence.outputSha256.slice(0, 16),
+  );
+  return evidence.errorMessage ? `- ${head}\n  ${escapeMarkdown(evidence.errorMessage)}` : `- ${head}`;
+}
+
+function riskLine(result: ReviewResult): string {
+  return `**${tr('Review risk: {0}', riskLabel(result.risk.level).toUpperCase())}**`;
 }
 
 export function renderMarkdown(result: ReviewResult): string {
   const evidenceById = new Map(result.evidence.map((e) => [e.id, e]));
   const { risk } = result;
   const lines: string[] = [];
-  lines.push(`# Probato PR review — ${escapeMarkdown(result.repository.name)}`);
+  lines.push(`# ${tr('Probato PR review — {0}', escapeMarkdown(result.repository.name))}`);
   lines.push('');
-  lines.push(`**Review risk: ${risk.level.toUpperCase()}**`);
+  lines.push(riskLine(result));
   lines.push('');
-  lines.push(`- Scope: ${escapeMarkdown(result.scope.label)}${result.repository.branch ? ` on \`${result.repository.branch.replace(/`/g, '')}\`` : ''}`);
+  const branch = result.repository.branch ? ` ${tr('on {0}', code(result.repository.branch))}` : '';
+  lines.push(`- ${tr('Scope: {0}', escapeMarkdown(result.scope.label))}${branch}`);
   if (result.scope.pullRequest) {
-    lines.push(`- Pull request: ${escapeMarkdown(`${result.scope.pullRequest.owner}/${result.scope.pullRequest.repo}#${result.scope.pullRequest.number}`)}`);
+    const pr = result.scope.pullRequest;
+    lines.push(`- ${tr('Pull request: {0}', escapeMarkdown(`${pr.owner}/${pr.repo}#${pr.number}`))}`);
   }
-  lines.push(`- Generated: ${result.createdAt} by Probato PR ${result.toolVersion}`);
-  lines.push(`- Files: ${result.stats.filesChanged} changed (+${result.stats.additions} / -${result.stats.deletions}), ${result.stats.filesSkipped} skipped`);
+  lines.push(`- ${tr('Generated: {0} by Probato PR {1}', result.createdAt, result.toolVersion)}`);
+  lines.push(`- ${tr('Files: {0} changed (+{1} / -{2}), {3} skipped', result.stats.filesChanged, result.stats.additions, result.stats.deletions, result.stats.filesSkipped)}`);
   lines.push('');
-  lines.push('| Confirmed | Evidenced | Suspected | Not verified | Checks passed | Checks failed | Checks not run | Regressions |');
-  lines.push('|---|---|---|---|---|---|---|---|');
+  const headers = [
+    verificationLabel('confirmed'),
+    verificationLabel('evidenced'),
+    verificationLabel('suspected'),
+    verificationLabel('not-verified'),
+    tr('Checks passed'),
+    tr('Checks failed'),
+    tr('Checks not run'),
+    tr('Regressions'),
+  ];
+  lines.push(`| ${headers.join(' | ')} |`);
+  lines.push(`|${'---|'.repeat(headers.length)}`);
   const v = risk.counts.byVerification;
   const c = risk.counts.checks;
   lines.push(`| ${v.confirmed} | ${v.evidenced} | ${v.suspected} | ${v['not-verified']} | ${c.passed} | ${c.failed} | ${c.notRun} | ${risk.counts.regressions} |`);
   lines.push('');
-  lines.push('## Why this risk level');
+  lines.push(`## ${tr('Why this risk level')}`);
   lines.push('');
   risk.reasons.forEach((r) => lines.push(`- ${escapeMarkdown(r)}`));
   if (risk.limitations.length > 0) {
     lines.push('');
-    lines.push('## Limitations');
+    lines.push(`## ${tr('Limitations')}`);
     lines.push('');
     risk.limitations.forEach((l) => lines.push(`- ${escapeMarkdown(l)}`));
   }
 
   lines.push('');
-  lines.push('## Verification');
+  lines.push(`## ${tr('Verification')}`);
   lines.push('');
   if (result.checks.length === 0) {
-    lines.push('No checks were executed.');
+    lines.push(tr('No checks were executed.'));
   } else {
-    lines.push('| Check | Result | Attribution | Note |');
+    lines.push(`| ${tr('Check')} | ${tr('Result')} | ${tr('Attribution')} | ${tr('Note')} |`);
     lines.push('|---|---|---|---|');
     for (const check of result.checks) {
-      lines.push(`| \`${check.commandLine.replace(/[`|]/g, "'")}\` | ${CHECK_ICON[check.status]} | ${check.attribution} | ${escapeMarkdown(check.attributionNote)} |`);
+      lines.push(`| ${code(check.commandLine)} | ${checkStatusLabel(check.status)} | ${attributionLabel(check.attribution) ?? '—'} | ${escapeMarkdown(check.attributionNote)} |`);
     }
   }
 
   lines.push('');
-  lines.push(`## Findings (${result.findings.length})`);
+  lines.push(`## ${tr('Findings ({0})', result.findings.length)}`);
   if (result.findings.length === 0) {
     lines.push('');
-    lines.push('No findings.');
+    lines.push(tr('No findings.'));
   }
   for (const finding of result.findings) {
     lines.push('');
-    lines.push(`### [${finding.severity.toUpperCase()}] ${escapeMarkdown(finding.title)}`);
+    lines.push(`### [${severityLabel(finding.severity).toUpperCase()}] ${escapeMarkdown(finding.title)}`);
     lines.push('');
-    lines.push(`- Location: \`${location(finding).replace(/`/g, '')}\``);
-    lines.push(`- Verification: **${VERIFICATION_LABEL[finding.verification]}** — ${escapeMarkdown(finding.verificationNote)}`);
-    if (finding.attribution && finding.attribution !== 'unknown') {
-      lines.push(`- Attribution: ${finding.attribution}`);
+    lines.push(`- ${tr('Location: {0}', code(location(finding)))}`);
+    lines.push(`- ${tr('Verification: {0}', `**${verificationLabel(finding.verification)}**`)} — ${escapeMarkdown(finding.verificationNote)}`);
+    const attribution = attributionLabel(finding.attribution);
+    if (attribution) {
+      lines.push(`- ${tr('Attribution: {0}', attribution)}`);
     }
-    lines.push(`- Rule: \`${finding.ruleId}\` (${finding.origin})`);
+    lines.push(`- ${tr('Rule: {0} ({1})', code(finding.ruleId), finding.origin)}`);
     lines.push('');
     lines.push(escapeMarkdown(finding.description));
     if (finding.suggestedFix) {
       lines.push('');
-      lines.push(`**Suggested fix:** ${escapeMarkdown(finding.suggestedFix)}`);
+      lines.push(`**${tr('Suggested fix:')}** ${escapeMarkdown(finding.suggestedFix)}`);
     }
     const evidence = finding.evidence.map((ref) => evidenceById.get(ref.evidenceId)).filter((e): e is Evidence => e !== undefined);
     if (evidence.length > 0) {
       lines.push('');
-      lines.push('**Evidence**');
+      lines.push(`**${tr('Evidence')}**`);
       lines.push('');
       evidence.forEach((e) => lines.push(evidenceBlock(e)));
     }
@@ -116,31 +135,41 @@ export function renderMarkdown(result: ReviewResult): string {
 
   if (result.aiSummary) {
     lines.push('');
-    lines.push(`## AI walkthrough (${escapeMarkdown(result.aiSummary.author)})`);
+    lines.push(`## ${tr('AI walkthrough ({0})', escapeMarkdown(result.aiSummary.author))}`);
     lines.push('');
     lines.push(...walkthrough(result.aiSummary));
   }
 
   if (result.aiRuns.length > 0) {
     lines.push('');
-    lines.push('## AI review');
+    lines.push(`## ${tr('AI review')}`);
     for (const run of result.aiRuns) {
       lines.push('');
-      lines.push(`- ${escapeMarkdown(run.providerId)} (${escapeMarkdown(run.model)}) at ${run.startedAt}: ${run.accepted} finding(s) accepted, ${run.rejected} rejected. Files shared: ${run.filesShared.length}.`);
-      run.rejectionReasons.slice(0, 10).forEach((r) => lines.push(`  - Rejected: ${escapeMarkdown(r)}`));
+      lines.push(
+        `- ${tr(
+          '{0} ({1}) at {2}: {3} finding(s) accepted, {4} rejected. Files shared: {5}.',
+          escapeMarkdown(run.providerId),
+          escapeMarkdown(run.model),
+          run.startedAt,
+          run.accepted,
+          run.rejected,
+          run.filesShared.length,
+        )}`,
+      );
+      run.rejectionReasons.slice(0, 10).forEach((r) => lines.push(`  - ${tr('Rejected: {0}', escapeMarkdown(r))}`));
     }
   }
 
   if (result.skipped.length > 0) {
     lines.push('');
-    lines.push('## Files not analyzed');
+    lines.push(`## ${tr('Files not analyzed')}`);
     lines.push('');
-    result.skipped.slice(0, 200).forEach((s) => lines.push(`- \`${s.path.replace(/`/g, '')}\` — ${escapeMarkdown(s.reason)}`));
+    result.skipped.slice(0, 200).forEach((s) => lines.push(`- ${code(s.path)} — ${escapeMarkdown(s.reason)}`));
   }
   lines.push('');
   lines.push('---');
   lines.push('');
-  lines.push('_Generated by Probato PR (ArmoTuSitio). AI and static findings are not proof; only executed checks count as verification._');
+  lines.push(`_${tr('Generated by Probato PR (ArmoTuSitio). AI and static findings are not proof; only executed checks count as verification.')}_`);
   lines.push('');
   return lines.join('\n');
 }
@@ -150,10 +179,10 @@ const DESCRIPTION_FINDINGS = 10;
 function walkthrough(summary: AiSummary): string[] {
   const lines = [escapeMarkdown(summary.overview)];
   if (summary.changes.length > 0) {
-    lines.push('', ...summary.changes.map((c) => `- \`${c.file.replace(/`/g, '')}\`: ${escapeMarkdown(c.summary)}`));
+    lines.push('', ...summary.changes.map((c) => `- ${code(c.file)}: ${escapeMarkdown(c.summary)}`));
   }
   if (summary.reviewFocus.length > 0) {
-    lines.push('', '**Where to look first**', '', ...summary.reviewFocus.map((f) => `- ${escapeMarkdown(f)}`));
+    lines.push('', `**${tr('Where to look first')}**`, '', ...summary.reviewFocus.map((f) => `- ${escapeMarkdown(f)}`));
   }
   return lines;
 }
@@ -167,26 +196,29 @@ export function renderPullRequestDescription(result: ReviewResult): string {
   const v = risk.counts.byVerification;
   const lines: string[] = [];
   if (result.aiSummary) {
-    lines.push('## Summary', '', ...walkthrough(result.aiSummary), '');
+    lines.push(`## ${tr('Summary')}`, '', ...walkthrough(result.aiSummary), '');
   }
-  lines.push('## Verification (Probato PR)', '');
-  lines.push(`**Review risk: ${risk.level.toUpperCase()}** · ${result.stats.filesChanged} file(s), +${result.stats.additions} / -${result.stats.deletions}`);
+  lines.push(`## ${tr('Verification (Probato PR)')}`, '');
+  lines.push(`${riskLine(result)} · ${tr('{0} file(s), +{1} / -{2}', result.stats.filesChanged, result.stats.additions, result.stats.deletions)}`);
   lines.push('');
-  lines.push(`Findings: ${v.confirmed} confirmed · ${v.evidenced} evidenced · ${v.suspected} suspected · ${v['not-verified']} not verified`);
+  lines.push(tr('Findings: {0} confirmed · {1} evidenced · {2} suspected · {3} not verified', v.confirmed, v.evidenced, v.suspected, v['not-verified']));
   if (result.checks.length > 0) {
     lines.push('');
-    result.checks.forEach((c) => lines.push(`- \`${c.commandLine.replace(/`/g, "'")}\`: ${CHECK_ICON[c.status]}${c.attribution !== 'unknown' ? ` (${c.attribution})` : ''}`));
+    result.checks.forEach((c) => {
+      const attribution = attributionLabel(c.attribution);
+      lines.push(`- ${code(c.commandLine)}: ${checkStatusLabel(c.status)}${attribution ? ` (${attribution})` : ''}`);
+    });
   } else {
-    lines.push('', 'No project checks were executed.');
+    lines.push('', tr('No project checks were executed.'));
   }
   const top = [...result.findings].sort((a, b) => SEVERITIES.indexOf(a.severity) - SEVERITIES.indexOf(b.severity)).slice(0, DESCRIPTION_FINDINGS);
   if (top.length > 0) {
-    lines.push('', '### Findings', '');
-    top.forEach((f) => lines.push(`- **${f.severity.toUpperCase()}** · ${VERIFICATION_LABEL[f.verification]} · ${escapeMarkdown(f.title)} (\`${location(f).replace(/`/g, '')}\`)`));
+    lines.push('', `### ${tr('Findings')}`, '');
+    top.forEach((f) => lines.push(`- **${severityLabel(f.severity).toUpperCase()}** · ${verificationLabel(f.verification)} · ${escapeMarkdown(f.title)} (${code(location(f))})`));
     if (result.findings.length > top.length) {
-      lines.push(`- …and ${result.findings.length - top.length} more in the full report.`);
+      lines.push(`- ${tr('…and {0} more in the full report.', result.findings.length - top.length)}`);
     }
   }
-  lines.push('', '<sub>Generated by Probato PR. Only executed checks count as proof; AI and static findings are not.</sub>', '');
+  lines.push('', `<sub>${tr('Generated by Probato PR. Only executed checks count as proof; AI and static findings are not.')}</sub>`, '');
   return lines.join('\n');
 }

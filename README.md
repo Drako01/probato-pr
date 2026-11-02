@@ -40,8 +40,8 @@ A review of a branch that adds loyalty discounts: the **Review Summary** gives t
 1. Install **Probato PR** from the Extensions view.
 2. Open a folder that is a Git repository and **trust** the workspace.
 3. Open the **Probato PR** view in the Activity Bar and click **Review Current Changes** (or use the compare button in the **Source Control** view, or run `Probato PR: Review Current Changes` from the Command Palette). In multi-root workspaces you pick the repository.
-4. The **Review Summary** opens with the review risk, the findings and the next step highlighted. Click a finding to open the code beside it. Findings also appear in the **Problems** panel.
-5. **Verify:** run your project's type-check, lint, tests or build. You choose exactly which commands run.
+4. The **Review Summary** opens with the review risk, the findings and the next step highlighted. Click a finding to open the code beside it. Findings also appear in the **Problems** panel, where the light bulb lets you dismiss a finding, open its evidence or jump to the summary.
+5. **Verify:** run your project's type-check, lint, tests or build. You choose exactly which commands run, and you can choose **Run and remember** so the same checks run without asking next time in that repository, until a command or script changes.
 6. **Share:** click **Copy PR Description** and paste it into your pull request, or export a **Markdown**, **SARIF** or **JSON** report.
 7. Optional: **Connect Your AI** to add a second opinion and a written walkthrough of the change (see below).
 
@@ -113,6 +113,7 @@ Python, PHP, Java, SQL migrations, OpenAPI, Docker and Terraform are on the road
 | `Probato PR: AI Review (Optional)` | Send the reviewed change to your AI after confirmation: second-opinion findings and a pull request walkthrough. |
 | `Probato PR: Connect Your AI` | Choose an AI provider, store its key and pick the model. |
 | `Probato PR: Delete Stored AI API Keys` | Removes every AI key Probato PR stored. |
+| `Probato PR: Forget Approved Checks` | Asks again before running any check that you chose to remember. |
 | `Probato PR: Show Review Summary` | Opens the Review Summary panel: risk, next step, findings and checks. |
 | `Probato PR: Copy PR Description` | Copies a pull request description: AI walkthrough (if any), risk, checks and top findings. |
 | `Probato PR: Export Review Report` | Markdown, SARIF or JSON. |
@@ -147,7 +148,7 @@ Everything except pull request review and AI review works fully offline. If GitH
 ## Security and privacy
 
 - Works only in **trusted workspaces**; Restricted Mode disables it, as VS Code requires for tools that run processes.
-- Read-only by default: reviews never modify your files. Verification commands run **only after explicit approval** and run with your normal user permissions — **they are not sandboxed**.
+- Read-only by default: reviews never modify your files. Verification commands run **only after explicit approval** and run with your normal user permissions — **they are not sandboxed**. A remembered approval is stored outside the repository and bound to a hash of the command and the script body: if a script changes (for example in a branch someone else wrote), Probato PR asks again.
 - Git is invoked with repository-config execution paths disabled (fsmonitor, external diff, textconv, hooks for the baseline worktree).
 - Secrets are redacted from stored evidence, reports and AI context. API keys live in VS Code SecretStorage, bound to the server they were entered for.
 - No telemetry. Nothing leaves your machine unless you use PR review (GitHub API) or AI review (after a confirmation that lists the files).

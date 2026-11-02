@@ -39,6 +39,8 @@ function tscCheck(files: string[]): PlannedCheck {
     warnings: [],
     requires: [],
     outputFormat: 'tsc',
+    runsRepositoryCode: false,
+    fingerprint: 'test',
   };
 }
 
