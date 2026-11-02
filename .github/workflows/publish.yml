@@ -1,6 +1,8 @@
 # Verifies every pull request and, when a merge to main changes the version in package.json, publishes that
 # version to the Visual Studio Marketplace (Trusted Publishing, no stored token) and to Open VSX, then creates
-# the GitHub release. Publishing is idempotent: a version that already exists in a store is skipped.
+# the GitHub release. The Marketplace is the primary channel: the release depends on it, not on Open VSX, whose
+# slower or held-back publishes are retried here and by open-vsx-sync.yml. Publishing is idempotent: a version
+# that already exists in a store is skipped.
 # Run it by hand (Actions → publish → Run workflow) to publish the version currently on main.
 # Setup and rotation: docs/RELEASE.md.
 name: publish
@@ -99,7 +101,7 @@ jobs:
 
   publish-marketplace:
     name: Publish to the Visual Studio Marketplace
-    needs: package
+    needs: [plan, package]
     runs-on: ubuntu-latest
     environment: marketplace
     permissions:
@@ -119,9 +121,26 @@ jobs:
         with:
           name: vsix
       - run: pnpm exec vsce publish --oidc --packagePath probato-pr.vsix --skip-duplicate
+      - name: Wait until the version is live on the Marketplace
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          query='{"filters":[{"criteria":[{"filterType":7,"value":"armotusitio.probato-pr"}]}],"flags":1}'
+          for attempt in $(seq 1 60); do
+            versions=$(curl -fsS -X POST https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery \
+              -H 'Content-Type: application/json' -H 'Accept: application/json;api-version=3.0-preview.1' -d "$query" \
+              | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).results[0].extensions[0].versions.map(v=>v.version).join(' ')))" || true)
+            case " $versions " in
+              *" $VERSION "*) echo "Version $VERSION is live on the Marketplace."; exit 0 ;;
+            esac
+            echo "Waiting for $VERSION on the Marketplace (attempt $attempt of 60)..."
+            sleep 15
+          done
+          echo "::error title=Marketplace::Version $VERSION did not become visible within 15 minutes."
+          exit 1
 
   publish-open-vsx:
-    name: Publish to Open VSX
+    name: Publish to Open VSX (does not block the release)
     needs: package
     runs-on: ubuntu-latest
     environment: open-vsx
@@ -138,14 +157,14 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: vsix
-      - name: Publish
+      - name: Publish with retries and wait for it to become active
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
-        run: pnpm exec ovsx publish probato-pr.vsix --skip-duplicate
+        run: node scripts/open-vsx-publish.mjs probato-pr.vsix
 
   release:
     name: GitHub release
-    needs: [plan, publish-marketplace, publish-open-vsx]
+    needs: [plan, publish-marketplace]
     runs-on: ubuntu-latest
     permissions:
       contents: write
