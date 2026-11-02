@@ -40,6 +40,7 @@ Escala: **PASS** (verificado con evidencia) · **WARN** (funciona con reservas) 
 | Paquete VSIX inspeccionado | **PASS** | `unzip -l`: solo bundles (extensión y script del webview), CSS del panel, avisos legales, iconos, manifiestos, l10n y docs de usuario. 1,24 MB. |
 | Instalación limpia comprobada | **PASS** | Perfil aislado (`--user-data-dir`/`--extensions-dir` temporales). |
 | Procedimiento de publicación documentado | **PASS** | `docs/RELEASE.md`. |
+| Gobierno del repositorio | **PASS** | Rulesets activos y verificados por API (2026-11-02): `main` solo por PR (aprobación de CODEOWNERS, conversaciones resueltas, historial lineal, solo squash, sin force-push ni borrado; el admin solo puede saltear la aprobación al mergear un PR) y tags `v*` creables solo por el admin, inmutables. Secret scanning + push protection, alertas y updates de seguridad de Dependabot, reporte privado de vulnerabilidades. El rechazo de un push directo a `main` no se probó en vivo. |
 | Release autorizado por el propietario | **PASS** | Autorizado por Alejandro el 2026-11-02 (Preview 0.1.0), con B1 y B4 como riesgos aceptados. |
 
 ## Requisitos de la directiva — estado
