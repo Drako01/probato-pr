@@ -1,5 +1,6 @@
 import type { Analyzer, AnalyzerContext, AnalyzerOutput } from '../core/analyzer';
 import { OutputCollector, staticFinding } from '../core/finding-factory';
+import { msg, tr } from '../core/i18n';
 import type { ChangeSet, FileChange } from '../core/model';
 import { addedLines } from '../git/diff-parser';
 import { collectImports, isScriptFile, parseSource } from './ts-ast';
@@ -63,7 +64,9 @@ function importedPackage(specifier: string): string | undefined {
 /** Dependency manifest changes: install-time scripts, major upgrades, removed packages still imported, go.mod replaces. */
 export class DependenciesAnalyzer implements Analyzer {
   readonly id = ID;
-  readonly description = 'Risky dependency and package manifest changes';
+  get description(): string {
+    return tr('Risky dependency and package manifest changes');
+  }
 
   appliesTo(changes: ChangeSet): boolean {
     return changes.files.some((f) => f.path.endsWith('package.json') || f.path.endsWith('go.mod'));
@@ -102,11 +105,15 @@ export class DependenciesAnalyzer implements Analyzer {
             ruleId: 'dependencies/install-script',
             severity: 'high',
             verification: 'evidenced',
-            verificationNote: `The "${script}" script ${before === undefined ? 'was added' : 'changed'} in ${file.path}.`,
-            title: `Install-time script ${before === undefined ? 'added' : 'changed'}: "${script}"`,
-            description: `"${script}" runs automatically on install for every developer and CI job. New or changed install hooks are a common supply-chain attack vector and must be reviewed line by line.`,
+            verificationNote:
+              before === undefined ? msg('The "{0}" script was added in {1}.', script, file.path) : msg('The "{0}" script changed in {1}.', script, file.path),
+            title: before === undefined ? msg('Install-time script added: "{0}"', script) : msg('Install-time script changed: "{0}"', script),
+            description: msg(
+              '"{0}" runs automatically on install for every developer and CI job. New or changed install hooks are a common supply-chain attack vector and must be reviewed line by line.',
+              script,
+            ),
             location: { file: file.path, startLine: lineOfKey(headText, script) },
-            evidenceDescription: `${script}: ${after.slice(0, 200)}`,
+            evidenceDescription: msg('{0}: {1}', script, after.slice(0, 200)),
             excerpt: after.slice(0, 200),
           }),
         );
@@ -126,11 +133,15 @@ export class DependenciesAnalyzer implements Analyzer {
             ruleId: 'dependencies/major-upgrade',
             severity: 'medium',
             verification: 'suspected',
-            verificationNote: `Version range moved from "${before ?? ''}" to "${after}". Breaking changes are likely but were not verified; run the type-check and tests.`,
-            title: `Major upgrade of ${name} (${String(majorBefore)} → ${String(majorAfter)})`,
-            description: 'Major versions may remove or change APIs. Review the package changelog and run the project checks.',
+            verificationNote: msg(
+              'Version range moved from "{0}" to "{1}". Breaking changes are likely but were not verified; run the type-check and tests.',
+              before ?? '',
+              after,
+            ),
+            title: msg('Major upgrade of {0} ({1} → {2})', name, majorBefore, majorAfter),
+            description: msg('Major versions may remove or change APIs. Review the package changelog and run the project checks.'),
             location: { file: file.path, startLine: lineOfKey(headText, name) },
-            evidenceDescription: `${name}: "${before ?? ''}" → "${after}"`,
+            evidenceDescription: msg('{0}: "{1}" → "{2}"', name, before ?? '', after),
           }),
         );
       }
@@ -145,7 +156,7 @@ export class DependenciesAnalyzer implements Analyzer {
     const allSources = await workspace.listFiles((p) => isScriptFile(p) && p.startsWith(dir));
     const sources = allSources.slice(0, MAX_IMPORT_SCAN);
     if (allSources.length > sources.length) {
-      out.limitations.push(`Import scan for removed dependencies limited to ${MAX_IMPORT_SCAN} of ${allSources.length} source files.`);
+      out.limitations.push(tr('Import scan for removed dependencies limited to {0} of {1} source files.', MAX_IMPORT_SCAN, allSources.length));
     }
     const reported = new Set<string>();
     for (const source of sources) {
@@ -163,11 +174,16 @@ export class DependenciesAnalyzer implements Analyzer {
               ruleId: 'dependencies/removed-but-imported',
               severity: 'high',
               verification: 'evidenced',
-              verificationNote: `"${pkg}" was removed from ${file.path} and is still imported by ${source}:${imp.line}.`,
-              title: `Removed dependency ${pkg} is still imported`,
-              description: `${source} imports "${imp.specifier}", but ${pkg} is no longer declared. Installs from a clean lockfile will fail at runtime or build time.`,
+              verificationNote: msg('"{0}" was removed from {1} and is still imported by {2}:{3}.', pkg, file.path, source, imp.line),
+              title: msg('Removed dependency {0} is still imported', pkg),
+              description: msg(
+                '{0} imports "{1}", but {2} is no longer declared. Installs from a clean lockfile will fail at runtime or build time.',
+                source,
+                imp.specifier,
+                pkg,
+              ),
               location: { file: source, startLine: imp.line },
-              evidenceDescription: `${pkg} removed from ${file.path}; imported at ${source}:${imp.line}.`,
+              evidenceDescription: msg('{0} removed from {1}; imported at {2}:{3}.', pkg, file.path, source, imp.line),
               evidenceLocations: [
                 { file: source, startLine: imp.line },
                 { file: file.path, startLine: 1 },
@@ -189,11 +205,11 @@ export class DependenciesAnalyzer implements Analyzer {
             ruleId: 'dependencies/go-local-replace',
             severity: 'medium',
             verification: 'evidenced',
-            verificationNote: 'An added go.mod line replaces a module with a local filesystem path.',
-            title: `Local replace directive for ${replace[1]}`,
-            description: 'Builds on other machines and in CI will fail or use different code unless the same local path exists.',
+            verificationNote: msg('An added go.mod line replaces a module with a local filesystem path.'),
+            title: msg('Local replace directive for {0}', replace[1]),
+            description: msg('Builds on other machines and in CI will fail or use different code unless the same local path exists.'),
             location: { file: file.path, startLine: line },
-            evidenceDescription: `Added line ${line}: ${text.trim()}`,
+            evidenceDescription: msg('Added line {0}: {1}', line, text.trim()),
             excerpt: text.trim(),
           }),
         );

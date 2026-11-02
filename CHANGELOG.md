@@ -2,9 +2,15 @@
 
 All notable changes to Probato PR are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
-## [0.1.0] — Unreleased
+## [0.1.1] — 2026-11-02
 
-First functional version (not published).
+### Fixed
+
+- Finding titles and descriptions, verification notes, risk reasons, limitations, check details and progress messages now follow the VS Code display language (Spanish included). Previously they were always shown in English inside a Spanish UI. Finding ids do not depend on the language, so dismissed findings stay dismissed after switching it.
+
+## [0.1.0] — 2026-11-02
+
+First public release (Preview) on the Visual Studio Marketplace.
 
 ### Added
 

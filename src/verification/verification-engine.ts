@@ -1,5 +1,6 @@
 import * as path from 'node:path';
 import { uniqueId } from '../core/ids';
+import { tr } from '../core/i18n';
 import type { CheckResult, CheckStatus, CommandEvidence, CommandOutcome, PlannedCheck, Revision } from '../core/model';
 import { redactSecrets } from '../core/secrets';
 import { formatCommandLine, type ProcessRunner, type RunResult } from '../infrastructure/process-runner';
@@ -78,7 +79,11 @@ export function toEvidence(check: PlannedCheck, run: RunResult, revision: Revisi
     outputTruncated: run.truncated || run.output.length > EXCERPT_CHARS,
     outputSha256: run.outputSha256,
     ...(run.spawnError
-      ? { errorMessage: /ENOENT/.test(run.spawnError) ? `"${check.command.executable}" is not installed or not on PATH (${run.spawnError}).` : run.spawnError }
+      ? {
+          errorMessage: /ENOENT/.test(run.spawnError)
+            ? tr('"{0}" is not installed or not on PATH ({1}).', check.command.executable, run.spawnError)
+            : run.spawnError,
+        }
       : {}),
   };
 }
@@ -97,7 +102,7 @@ export class VerificationEngine {
       if (request.signal?.aborted) {
         break;
       }
-      request.progress?.(`Running ${check.label}`);
+      request.progress?.(tr('Running {0}', check.label));
       const run = await this.runner.run(check.command, {
         cwd: path.join(request.repoRoot, check.cwd),
         timeoutMs: request.timeoutMs,
@@ -114,7 +119,7 @@ export class VerificationEngine {
     const bases = new Map<string, { evidence: CommandEvidence; diagnostics: ToolDiagnostic[] }>();
     let baselineError: string | undefined;
     if (request.baselineCommit && failing.length > 0 && !request.signal?.aborted) {
-      request.progress?.('Preparing base revision worktree');
+      request.progress?.(tr('Preparing base revision worktree'));
       let worktree: BaselineWorktree | undefined;
       try {
         worktree = await BaselineWorktree.create(this.git, request.repoRoot, request.baselineCommit);
@@ -122,7 +127,7 @@ export class VerificationEngine {
           if (request.signal?.aborted) {
             break;
           }
-          request.progress?.(`Running ${check.label} on base revision`);
+          request.progress?.(tr('Running {0} on base revision', check.label));
           const run = await this.runner.run(check.command, {
             cwd: path.join(worktree.directory, check.cwd),
             timeoutMs: request.timeoutMs,
@@ -135,10 +140,10 @@ export class VerificationEngine {
           bases.set(check.id, { evidence: ev, diagnostics: parseDiagnostics(run.output, check.outputFormat, check.cwd) });
         }
       } catch (error) {
-        baselineError = `Baseline could not be prepared: ${error instanceof Error ? error.message : String(error)}`;
+        baselineError = tr('Baseline could not be prepared: {0}', error instanceof Error ? error.message : String(error));
       } finally {
         await worktree?.dispose().catch((error: unknown) => {
-          baselineError = `${baselineError ? `${baselineError} ` : ''}Temporary worktree cleanup failed: ${error instanceof Error ? error.message : String(error)}`;
+          baselineError = `${baselineError ? `${baselineError} ` : ''}${tr('Temporary worktree cleanup failed: {0}', error instanceof Error ? error.message : String(error))}`;
         });
       }
     }
@@ -155,7 +160,7 @@ export class VerificationEngine {
           commandLine: formatCommandLine(check.command),
           status: 'pending',
           attribution: 'unknown',
-          attributionNote: 'Not executed (cancelled before it started).',
+          attributionNote: tr('Not executed (cancelled before it started).'),
         });
         continue;
       }

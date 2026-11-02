@@ -1,6 +1,7 @@
 import type { Analyzer, AnalyzerContext, AnalyzerOutput } from '../core/analyzer';
 import { OutputCollector, staticFinding } from '../core/finding-factory';
 import { matchesAnyGlob } from '../core/glob';
+import { msg, render, tr } from '../core/i18n';
 import type { ChangeSet, Severity } from '../core/model';
 import { findSecrets, redactSecrets, SENSITIVE_FILE_GLOBS, type SecretPattern } from '../core/secrets';
 import { addedLines } from '../git/diff-parser';
@@ -16,7 +17,9 @@ const SEVERITY: Readonly<Record<SecretPattern['confidence'], Readonly<Record<'so
 /** Detects credentials introduced by the change: known token formats on added lines and sensitive files added. */
 export class SecretsAnalyzer implements Analyzer {
   readonly id = ID;
-  readonly description = 'Credentials and sensitive files introduced by the change';
+  get description(): string {
+    return tr('Credentials and sensitive files introduced by the change');
+  }
 
   appliesTo(changes: ChangeSet): boolean {
     return changes.files.some((f) => !f.binary || f.status === 'added');
@@ -35,12 +38,12 @@ export class SecretsAnalyzer implements Analyzer {
             ruleId: 'secrets/sensitive-file-added',
             severity: 'high',
             verification: 'evidenced',
-            verificationNote: 'The file name matches a credential/key file pattern and the file is new in this change. Its content was not validated.',
-            title: `Sensitive file added: ${file.path}`,
-            description: 'Files of this type usually hold credentials or private keys and should not be versioned.',
+            verificationNote: msg('The file name matches a credential/key file pattern and the file is new in this change. Its content was not validated.'),
+            title: msg('Sensitive file added: {0}', file.path),
+            description: msg('Files of this type usually hold credentials or private keys and should not be versioned.'),
             location: { file: file.path, startLine: 1 },
-            evidenceDescription: `New file ${file.path} matches a sensitive file pattern.`,
-            suggestedFix: 'Remove the file from the change, add it to .gitignore and rotate any credential it contained.',
+            evidenceDescription: msg('New file {0} matches a sensitive file pattern.', file.path),
+            suggestedFix: msg('Remove the file from the change, add it to .gitignore and rotate any credential it contained.'),
           }),
         );
       }
@@ -60,16 +63,16 @@ export class SecretsAnalyzer implements Analyzer {
               severity: SEVERITY[match.pattern.confidence][inTestPath ? 'testPath' : 'source'],
               verification: high ? 'evidenced' : 'suspected',
               verificationNote: high
-                ? 'The added line contains a value in a known credential format. Whether the credential is live was not checked (no network calls are made).'
-                : 'An assignment to a secret-like name with a literal value was added; it may be a placeholder.',
-              title: `${match.pattern.label} added in ${file.path}`,
+                ? msg('The added line contains a value in a known credential format. Whether the credential is live was not checked (no network calls are made).')
+                : msg('An assignment to a secret-like name with a literal value was added; it may be a placeholder.'),
+              title: msg('{0} added in {1}', render(match.pattern.label), file.path),
               description: high
-                ? 'A credential in a recognizable format was committed. Anyone with repository access can read it, and it persists in history.'
-                : 'A literal value is assigned to a name that suggests a secret.',
+                ? msg('A credential in a recognizable format was committed. Anyone with repository access can read it, and it persists in history.')
+                : msg('A literal value is assigned to a name that suggests a secret.'),
               location: { file: file.path, startLine: line },
-              evidenceDescription: `Added line ${line} matches the "${match.pattern.label}" pattern.`,
+              evidenceDescription: msg('Added line {0} matches the "{1}" pattern.', line, render(match.pattern.label)),
               excerpt: redactSecrets(text.trim()).slice(0, 300),
-              suggestedFix: 'Load the value from the environment or a secret store, and rotate the exposed credential.',
+              suggestedFix: msg('Load the value from the environment or a secret store, and rotate the exposed credential.'),
             }),
           );
         }

@@ -1,3 +1,4 @@
+import { msg, render, tr, type Message } from '../core/i18n';
 import type { CheckKind, CommandSpec, OutputFormat, PlannedCheck } from '../core/model';
 
 /** Read-only view of repository files needed to plan checks (injected for testability). */
@@ -16,12 +17,12 @@ const SCRIPT_KINDS: readonly { readonly kind: CheckKind; readonly names: readonl
 ];
 
 /** Patterns in scripts or project files suggesting the command needs infrastructure beyond the repo. */
-const INFRA_HINTS: readonly { readonly pattern: RegExp; readonly label: string }[] = [
-  { pattern: /\bdocker\b|docker-compose|\bcompose\b|testcontainers/i, label: 'Docker' },
-  { pattern: /DATABASE_URL|postgres|\bpg\b|mysql|mariadb|mongo|prisma (?:migrate|db)/i, label: 'a database' },
-  { pattern: /\bredis\b/i, label: 'Redis' },
-  { pattern: /playwright|cypress|puppeteer|selenium/i, label: 'a browser (E2E tooling)' },
-  { pattern: /\bAWS_|\bGCP_|\bAZURE_|\.env\b|dotenv/i, label: 'credentials or environment variables' },
+const INFRA_HINTS: readonly { readonly pattern: RegExp; readonly label: Message }[] = [
+  { pattern: /\bdocker\b|docker-compose|\bcompose\b|testcontainers/i, label: msg('Docker') },
+  { pattern: /DATABASE_URL|postgres|\bpg\b|mysql|mariadb|mongo|prisma (?:migrate|db)/i, label: msg('a database') },
+  { pattern: /\bredis\b/i, label: msg('Redis') },
+  { pattern: /playwright|cypress|puppeteer|selenium/i, label: msg('a browser (E2E tooling)') },
+  { pattern: /\bAWS_|\bGCP_|\bAZURE_|\.env\b|dotenv/i, label: msg('credentials or environment variables') },
 ];
 
 const NPM_DEFAULT_TEST = /no test specified/;
@@ -42,7 +43,7 @@ function scriptCommand(pm: PackageManager, script: string): CommandSpec {
 }
 
 function infraNeeds(text: string): string[] {
-  return INFRA_HINTS.filter((h) => h.pattern.test(text)).map((h) => h.label);
+  return INFRA_HINTS.filter((h) => h.pattern.test(text)).map((h) => render(h.label));
 }
 
 /**
@@ -64,7 +65,9 @@ export async function detectChecks(probe: ProjectProbe): Promise<PlannedCheck[]>
     }
     const pm = await packageManagerOf(probe);
     const hasNodeModules = await probe.exists('node_modules');
-    const dependencyWarning = hasNodeModules ? [] : ['node_modules is missing: dependencies are not installed, so this check will likely fail. Probato PR never installs dependencies.'];
+    const dependencyWarning = hasNodeModules
+      ? []
+      : [tr('node_modules is missing: dependencies are not installed, so this check will likely fail. Probato PR never installs dependencies.')];
     const [composeFile, envFile] = await Promise.all([
       probe.exists('docker-compose.yml').then(async (a) => a || (await probe.exists('compose.yaml'))),
       probe.exists('.env'),
@@ -83,10 +86,10 @@ export async function detectChecks(probe: ProjectProbe): Promise<PlannedCheck[]>
       taken.add(kind);
       const requires = infraNeeds(body);
       if (kind === 'test' && composeFile && requires.length === 0) {
-        requires.push('possibly Docker services (a compose file exists)');
+        requires.push(tr('possibly Docker services (a compose file exists)'));
       }
       if (kind === 'test' && envFile) {
-        requires.push('environment variables from .env');
+        requires.push(tr('environment variables from .env'));
       }
       checks.push({
         id: `script:${name}`,
@@ -94,8 +97,8 @@ export async function detectChecks(probe: ProjectProbe): Promise<PlannedCheck[]>
         label: `${pm} run ${name}`,
         command: scriptCommand(pm, name),
         cwd: '',
-        rationale: `Project script "${name}" (${kind}).`,
-        warnings: [`Executes repository code: "${name}": ${body.slice(0, 300)}`, ...dependencyWarning],
+        rationale: tr('Project script "{0}" ({1}).', name, kind),
+        warnings: [tr('Executes repository code: "{0}": {1}', name, body.slice(0, 300)), ...dependencyWarning],
         requires,
         outputFormat: /\btsc\b/.test(body) ? 'tsc' : /\bgo (?:build|vet)\b/.test(body) ? 'go' : 'plain',
       });
@@ -108,8 +111,8 @@ export async function detectChecks(probe: ProjectProbe): Promise<PlannedCheck[]>
         label: 'tsc --noEmit',
         command: { executable: 'node', args: ['node_modules/typescript/bin/tsc', '--noEmit', '-p', 'tsconfig.json', '--pretty', 'false'] },
         cwd: '',
-        rationale: 'The project has a tsconfig.json and a locally installed TypeScript compiler.',
-        warnings: ['Runs the TypeScript compiler installed in node_modules (no repository scripts).'],
+        rationale: tr('The project has a tsconfig.json and a locally installed TypeScript compiler.'),
+        warnings: [tr('Runs the TypeScript compiler installed in node_modules (no repository scripts).')],
         requires: [],
         outputFormat: 'tsc',
       });
@@ -129,8 +132,11 @@ export async function detectChecks(probe: ProjectProbe): Promise<PlannedCheck[]>
         label: `go ${sub} ./...`,
         command: { executable: 'go', args: [sub, './...'] },
         cwd: '',
-        rationale: `Go module detected (go.mod); standard go ${sub}.`,
-        warnings: sub === 'test' ? ['Executes the repository test code.', 'May download modules if they are not cached (network).'] : ['May download modules if they are not cached (network).'],
+        rationale: tr('Go module detected (go.mod); standard go {0}.', sub),
+        warnings:
+          sub === 'test'
+            ? [tr('Executes the repository test code.'), tr('May download modules if they are not cached (network).')]
+            : [tr('May download modules if they are not cached (network).')],
         requires: [],
         outputFormat: format,
       });

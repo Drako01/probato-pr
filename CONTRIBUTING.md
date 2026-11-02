@@ -17,7 +17,7 @@ pnpm run verify
 - Processes are spawned only through `ProcessRunner` (enforced by ESLint).
 - Analyzers report only facts they observed and state their verification level honestly. New analyzers implement `Analyzer` and are registered in `src/analyzers/index.ts`; add true-positive and trap cases to `test/unit/benchmark.test.ts`.
 - Never fabricate evidence: `CommandEvidence` is created only from a real `RunResult`.
-- User-facing strings go through `vscode.l10n.t` (runtime) or `package.nls.json` (manifest).
+- User-facing strings go through `vscode.l10n.t` (UI layer), `tr()` / `msg()` from `src/core/i18n.ts` (engine layers, which cannot import `vscode`) or `package.nls.json` (manifest). Write message templates as single-quoted literals with `{0}` placeholders, and check the Spanish bundle with `node scripts/l10n-keys.mjs l10n/bundle.l10n.es.json`.
 
 ## Tests
 

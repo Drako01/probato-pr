@@ -1,6 +1,7 @@
 import * as ts from 'typescript';
 import type { Analyzer, AnalyzerContext, AnalyzerOutput } from '../core/analyzer';
 import { OutputCollector, staticFinding } from '../core/finding-factory';
+import { msg, tr } from '../core/i18n';
 import type { ChangeSet } from '../core/model';
 import { addedLines } from '../git/diff-parser';
 import { isAnalyzableScript, isTestFile, lineOf, lineText, parseSource, visit } from './ts-ast';
@@ -18,7 +19,9 @@ function isEmptyFunction(node: ts.Node): boolean {
 /** Errors swallowed by new code, and type/lint checks suppressed on added lines. */
 export class ErrorHandlingAnalyzer implements Analyzer {
   readonly id = ID;
-  readonly description = 'Swallowed errors and suppressed type/lint checks introduced by the change';
+  get description(): string {
+    return tr('Swallowed errors and suppressed type/lint checks introduced by the change');
+  }
 
   appliesTo(changes: ChangeSet): boolean {
     return changes.files.some((f) => isAnalyzableScript(f) && f.status !== 'deleted');
@@ -46,14 +49,14 @@ export class ErrorHandlingAnalyzer implements Analyzer {
               ruleId: directive.startsWith('@ts') ? 'errors/type-check-suppressed' : 'errors/lint-suppressed',
               severity: directive === '@ts-nocheck' ? 'medium' : 'low',
               verification: 'evidenced',
-              verificationNote: `The directive "${directive}" appears on a line added by this change.`,
-              title: `${directive} added in ${file.path}`,
+              verificationNote: msg('The directive "{0}" appears on a line added by this change.', directive),
+              title: msg('{0} added in {1}', directive, file.path),
               description:
                 directive === '@ts-nocheck'
-                  ? 'Type checking is disabled for the whole file, so type errors introduced now or later go unnoticed.'
-                  : 'A compiler or linter diagnostic is silenced instead of fixed; the underlying problem is hidden, not resolved.',
+                  ? msg('Type checking is disabled for the whole file, so type errors introduced now or later go unnoticed.')
+                  : msg('A compiler or linter diagnostic is silenced instead of fixed; the underlying problem is hidden, not resolved.'),
               location: { file: file.path, startLine: line },
-              evidenceDescription: `Added line ${line}: ${text.trim().slice(0, 200)}`,
+              evidenceDescription: msg('Added line {0}: {1}', line, text.trim().slice(0, 200)),
               excerpt: text.trim().slice(0, 200),
             }),
           );
@@ -81,14 +84,14 @@ export class ErrorHandlingAnalyzer implements Analyzer {
               ruleId: 'errors/empty-catch',
               severity: commented ? 'low' : 'medium',
               verification: 'evidenced',
-              verificationNote: 'AST shows a catch clause with no statements on a line added by this change.',
-              title: `Empty catch block in ${file.path}`,
+              verificationNote: msg('AST shows a catch clause with no statements on a line added by this change.'),
+              title: msg('Empty catch block in {0}', file.path),
               description: commented
-                ? 'The error is intentionally ignored (the block only has a comment). Confirm that failure here is truly harmless.'
-                : 'The error is silently discarded: failures will look like successes and be hard to diagnose.',
+                ? msg('The error is intentionally ignored (the block only has a comment). Confirm that failure here is truly harmless.')
+                : msg('The error is silently discarded: failures will look like successes and be hard to diagnose.'),
               location: { file: file.path, startLine: line },
-              evidenceDescription: `Line ${line}: ${lineText(sf, line).slice(0, 200)}`,
-              suggestedFix: 'Handle the error, rethrow it with context, or at least log it with enough detail to diagnose.',
+              evidenceDescription: msg('Line {0}: {1}', line, lineText(sf, line).slice(0, 200)),
+              suggestedFix: msg('Handle the error, rethrow it with context, or at least log it with enough detail to diagnose.'),
             }),
           );
         } else if (
@@ -108,11 +111,11 @@ export class ErrorHandlingAnalyzer implements Analyzer {
               ruleId: 'errors/empty-promise-catch',
               severity: 'medium',
               verification: 'evidenced',
-              verificationNote: 'AST shows .catch() with an empty handler on a line added by this change.',
-              title: `Promise rejection swallowed in ${file.path}`,
-              description: 'The rejection is discarded by an empty handler, hiding failures from callers and logs.',
+              verificationNote: msg('AST shows .catch() with an empty handler on a line added by this change.'),
+              title: msg('Promise rejection swallowed in {0}', file.path),
+              description: msg('The rejection is discarded by an empty handler, hiding failures from callers and logs.'),
               location: { file: file.path, startLine: line },
-              evidenceDescription: `Line ${line}: ${lineText(sf, line).slice(0, 200)}`,
+              evidenceDescription: msg('Line {0}: {1}', line, lineText(sf, line).slice(0, 200)),
             }),
           );
         }

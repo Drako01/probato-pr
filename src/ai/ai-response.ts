@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { tr } from '../core/i18n';
 import { stableId } from '../core/ids';
 import type { AiSummary, ChangeSet, ReviewFinding } from '../core/model';
 import { addedLines } from '../git/diff-parser';
@@ -105,7 +106,7 @@ export function parseAiReview(text: string, changes: ChangeSet, sharedFiles: rea
       ruleId: 'ai/review',
       severity: f.severity,
       verification: 'suspected',
-      verificationNote: `Reported by ${providerLabel}. AI output is not verification; no executed check backs this finding yet.`,
+      verificationNote: tr('Reported by {0}. AI output is not verification; no executed check backs this finding yet.', providerLabel),
       origin: 'ai',
       title: f.title,
       description: f.description,

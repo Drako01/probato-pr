@@ -1,5 +1,6 @@
 import type { Analyzer, AnalyzerContext, AnalyzerOutput } from '../core/analyzer';
 import { OutputCollector, staticFinding } from '../core/finding-factory';
+import { msg, tr } from '../core/i18n';
 import type { ChangeSet, FileChange } from '../core/model';
 import { addedLines } from '../git/diff-parser';
 
@@ -27,7 +28,9 @@ export function compilerFlag(text: string | undefined, flag: string): boolean | 
 /** Configuration changes that weaken safety nets: TypeScript strictness and CI workflow privileges. */
 export class ConfigRiskAnalyzer implements Analyzer {
   readonly id = ID;
-  readonly description = 'Configuration changes that weaken type safety or CI security';
+  get description(): string {
+    return tr('Configuration changes that weaken type safety or CI security');
+  }
 
   appliesTo(changes: ChangeSet): boolean {
     return changes.files.some((f) => isTsConfig(f.path) || isWorkflow(f.path));
@@ -51,7 +54,8 @@ export class ConfigRiskAnalyzer implements Analyzer {
   private async analyzeTsConfig(file: FileChange, changes: ChangeSet, out: OutputCollector): Promise<void> {
     const [base, head] = await Promise.all([changes.content.read(file.path, 'base'), changes.content.read(file.path, 'head')]);
     for (const flag of STRICT_FLAGS) {
-      if (compilerFlag(base, flag) === true && compilerFlag(head, flag) !== true) {
+      const after = compilerFlag(head, flag);
+      if (compilerFlag(base, flag) === true && after !== true) {
         const line = (head ?? '').split('\n').findIndex((l) => l.includes(`"${flag}"`)) + 1;
         out.add(
           staticFinding({
@@ -59,11 +63,14 @@ export class ConfigRiskAnalyzer implements Analyzer {
             ruleId: 'config/ts-strictness-reduced',
             severity: flag === 'strict' ? 'high' : 'medium',
             verification: 'evidenced',
-            verificationNote: `"${flag}" was true in the base tsconfig and is ${compilerFlag(head, flag) === false ? 'false' : 'absent'} in head.`,
-            title: `TypeScript "${flag}" disabled in ${file.path}`,
-            description: 'Weakening compiler strictness lets whole classes of bugs (null access, implicit any) pass type-checking.',
+            verificationNote:
+              after === false
+                ? msg('"{0}" was true in the base tsconfig and is false in head.', flag)
+                : msg('"{0}" was true in the base tsconfig and is absent in head.', flag),
+            title: msg('TypeScript "{0}" disabled in {1}', flag, file.path),
+            description: msg('Weakening compiler strictness lets whole classes of bugs (null access, implicit any) pass type-checking.'),
             location: { file: file.path, startLine: Math.max(line, 1) },
-            evidenceDescription: `${flag}: true → ${String(compilerFlag(head, flag) ?? 'unset')}`,
+            evidenceDescription: msg('{0}: true → {1}', flag, String(after ?? 'unset')),
           }),
         );
       }
@@ -83,13 +90,14 @@ export class ConfigRiskAnalyzer implements Analyzer {
             severity: checksOutHead ? 'critical' : 'high',
             verification: checksOutHead ? 'evidenced' : 'suspected',
             verificationNote: checksOutHead
-              ? 'Added lines both enable pull_request_target and reference the PR head ref/sha (line-level match).'
-              : 'pull_request_target was added; whether untrusted PR code is checked out was not determined.',
-            title: `pull_request_target trigger added in ${file.path}`,
-            description:
+              ? msg('Added lines both enable pull_request_target and reference the PR head ref/sha (line-level match).')
+              : msg('pull_request_target was added; whether untrusted PR code is checked out was not determined.'),
+            title: msg('pull_request_target trigger added in {0}', file.path),
+            description: msg(
               'pull_request_target runs with repository secrets and write permissions. Combined with checking out the PR head, any fork can run code with those privileges.',
+            ),
             location: { file: file.path, startLine: line },
-            evidenceDescription: `Added line ${line}: ${text.trim()}`,
+            evidenceDescription: msg('Added line {0}: {1}', line, text.trim()),
           }),
         );
       }
@@ -100,11 +108,11 @@ export class ConfigRiskAnalyzer implements Analyzer {
             ruleId: 'config/workflow-write-all',
             severity: 'medium',
             verification: 'evidenced',
-            verificationNote: 'An added line grants write-all permissions to the workflow token.',
-            title: `Workflow granted write-all permissions in ${file.path}`,
-            description: 'Grant only the scopes the job needs; a compromised step can otherwise push code or alter releases.',
+            verificationNote: msg('An added line grants write-all permissions to the workflow token.'),
+            title: msg('Workflow granted write-all permissions in {0}', file.path),
+            description: msg('Grant only the scopes the job needs; a compromised step can otherwise push code or alter releases.'),
             location: { file: file.path, startLine: line },
-            evidenceDescription: `Added line ${line}: ${text.trim()}`,
+            evidenceDescription: msg('Added line {0}: {1}', line, text.trim()),
           }),
         );
       }
