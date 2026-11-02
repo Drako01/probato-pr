@@ -1,3 +1,4 @@
+import { tr } from '../core/i18n';
 import type { ChangeSet, ChangeSide, ChangeStatus, FileChange, RepositoryInfo } from '../core/model';
 import { parseUnifiedDiff } from '../git/diff-parser';
 import { applyLimits, type ReviewLimits } from '../git/local-changes';
@@ -49,7 +50,7 @@ export async function pullRequestChangeSet(
   return {
     scope: {
       kind: 'pull-request',
-      label: `pull request #${pull.number}: ${pull.title}`,
+      label: tr('pull request #{0}: {1}', pull.number, pull.title),
       baseRef: pull.base.ref,
       baseSha: pull.base.sha,
       headRef: pull.head.ref,

@@ -2,7 +2,11 @@
 !dist/extension.js
 !dist/extension.js.LEGAL.txt
 !dist/webview/summary.js
-!media/**
+# Only what the extension uses; README images (readme-logo.png, screenshots/) are served from the repository.
+!media/logo.png
+!media/logo.svg
+!media/mark.svg
+!media/summary.css
 !l10n/**
 !package.json
 !package.nls*.json

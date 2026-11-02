@@ -23,6 +23,18 @@ Most AI review tools return a list of opinions. Probato PR classifies every find
 
 An AI claim on its own is never "confirmed": it becomes confirmed only when one of your executed checks fails at that exact line with this change and not on the base revision. A failing test is never blamed on your change without a passing baseline.
 
+## See it in action
+
+A review of a branch that adds loyalty discounts: the **Review Summary** gives the risk and the next step, you choose which of your own checks may run, and the failing type-check turns a static suspicion into a **Confirmed** finding.
+
+![Review Summary: risk, the three steps (Review, Verify, Share), the reasons for the risk and its limitations](media/screenshots/review-summary.png)
+
+![Findings grouped by severity with their evidence status, and the executed checks with their attribution to the change](media/screenshots/findings.png)
+
+![Approval step: the commands that would run are listed and nothing executes until you accept](media/screenshots/approve-checks.png)
+
+*The screenshots use the Spanish display language; Probato PR follows the language of VS Code (English and Spanish).*
+
 ## Quick start
 
 1. Install **Probato PR** from the Extensions view.
