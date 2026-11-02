@@ -2,6 +2,14 @@
 
 All notable changes to Probato PR are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.2.1] — 2026-11-02
+
+### Changed
+
+- **Faster contract analysis on large change sets.** Reading the base and head version of each changed file (one `git` process per read) now overlaps instead of running one after another. Measured on generated repositories: 1,000 files / 50 changed went from 3.6 s to 1.5 s, and 5,000 / 300 from 20.7 s to 8.8 s, with identical findings.
+- The status-bar progress of a review now names the analyzer that is running.
+- The release workflow verifies on macOS as well as Linux and Windows.
+
 ## [0.2.0] — 2026-11-02
 
 ### Added

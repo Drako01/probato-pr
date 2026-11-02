@@ -8,7 +8,7 @@ import { parseAiReview } from '../ai/ai-response';
 import { EMPTY_WORKSPACE, type WorkspaceIndex } from '../core/analyzer';
 import type { ChangeSet, PlannedCheck, ReviewResult } from '../core/model';
 import { isWithin, PathOutsideWorkspaceError, resolveInside } from '../core/paths';
-import { finalizeResult, type ReviewEngine } from '../core/review-engine';
+import { finalizeResult, type ProgressReporter, type ReviewEngine } from '../core/review-engine';
 import { CancelledError, GitError, GitNotFoundError, OutputTooLargeError, type GitClient } from '../git/git-client';
 import { LocalChangeCollector, NoChangesError, type LocalReviewRequest } from '../git/local-changes';
 import { GitHubError, parseGitHubRemote, type GitHubClient } from '../github/github-client';
@@ -53,13 +53,13 @@ export class ReviewController {
 
   /** `target` (optional) selects the repository, e.g. from the Source Control view or in multi-root workspaces. */
   reviewLocal(kind: 'working' | 'staged', target?: vscode.Uri): Promise<void> {
-    return this.run(vscode.l10n.t('Reviewing changes'), async (signal, root) => {
-      await this.reviewWith(root, { kind }, signal);
+    return this.run(vscode.l10n.t('Reviewing changes'), async (signal, root, report) => {
+      await this.reviewWith(root, { kind }, signal, report);
     }, target);
   }
 
   reviewBranch(target?: vscode.Uri): Promise<void> {
-    return this.run(vscode.l10n.t('Reviewing branch'), async (signal, root) => {
+    return this.run(vscode.l10n.t('Reviewing branch'), async (signal, root, report) => {
       const configured = this.deps.settings().review.baseBranch;
       let base = await this.deps.git.defaultBaseBranch(root, configured);
       if (!base) {
@@ -73,29 +73,29 @@ export class ReviewController {
           return;
         }
       }
-      await this.reviewWith(root, { kind: 'branch', baseBranch: base.trim() }, signal);
+      await this.reviewWith(root, { kind: 'branch', baseBranch: base.trim() }, signal, report);
     }, target);
   }
 
   reviewCommit(target?: vscode.Uri): Promise<void> {
-    return this.run(vscode.l10n.t('Reviewing commit'), async (signal, root) => {
+    return this.run(vscode.l10n.t('Reviewing commit'), async (signal, root, report) => {
       const ref = await vscode.window.showInputBox({ title: vscode.l10n.t('Commit to review'), value: 'HEAD', prompt: vscode.l10n.t('A commit SHA, tag or ref'), ignoreFocusOut: true });
       if (!ref) {
         return;
       }
-      await this.reviewWith(root, { kind: 'commit', ref: ref.trim() }, signal);
+      await this.reviewWith(root, { kind: 'commit', ref: ref.trim() }, signal, report);
     }, target);
   }
 
-  private async reviewWith(root: string, request: LocalReviewRequest, signal: AbortSignal): Promise<void> {
+  private async reviewWith(root: string, request: LocalReviewRequest, signal: AbortSignal, report: ProgressReporter): Promise<void> {
     const settings = this.deps.settings();
     const limits = { ...settings.review, maxFileBytes: settings.maxFileBytes };
     const changes = await new LocalChangeCollector(this.deps.git).collect(root, request, limits, signal);
-    await this.analyze(changes, new GitWorkspaceIndex(this.deps.git, root, settings.maxFileBytes), signal);
+    await this.analyze(changes, new GitWorkspaceIndex(this.deps.git, root, settings.maxFileBytes), signal, report);
   }
 
   reviewPullRequest(): Promise<void> {
-    return this.run(vscode.l10n.t('Reviewing pull request'), async (signal, root) => {
+    return this.run(vscode.l10n.t('Reviewing pull request'), async (signal, root, report) => {
       const remote = await this.deps.git.remoteUrl(root);
       const ref = remote ? parseGitHubRemote(remote) : undefined;
       if (!ref) {
@@ -130,15 +130,15 @@ export class ReviewController {
         signal,
       );
       const workspace: WorkspaceIndex = localMatchesHead ? new GitWorkspaceIndex(this.deps.git, root, settings.maxFileBytes) : EMPTY_WORKSPACE;
-      await this.analyze(changes, workspace, signal);
+      await this.analyze(changes, workspace, signal, report);
       if (!localMatchesHead) {
         this.deps.log.info(`PR #${picked.pull.number}: local HEAD ${headSha ?? 'none'} differs from PR head ${picked.pull.head.sha}; verification and cross-file analysis disabled.`);
       }
     });
   }
 
-  private async analyze(changes: ChangeSet, workspace: WorkspaceIndex, signal: AbortSignal): Promise<void> {
-    const review = await this.deps.engine.review(changes, workspace, { signal });
+  private async analyze(changes: ChangeSet, workspace: WorkspaceIndex, signal: AbortSignal, report: ProgressReporter): Promise<void> {
+    const review = await this.deps.engine.review(changes, workspace, { signal, progress: report });
     if (signal.aborted) {
       throw new CancelledError();
     }
@@ -598,13 +598,13 @@ export class ReviewController {
     return answer === review;
   }
 
-  private run(label: string, operation: (signal: AbortSignal, root: string) => Promise<void>, target?: vscode.Uri): Promise<void> {
+  private run(label: string, operation: (signal: AbortSignal, root: string, report: ProgressReporter) => Promise<void>, target?: vscode.Uri): Promise<void> {
     return this.guarded(async () => {
       const root = await this.pickRepository(target);
       if (!root || !(await this.confirmOutsideRoot(root))) {
         return;
       }
-      await this.exclusiveWithProgress(label, vscode.ProgressLocation.Window, `Probato PR: ${label}`, (signal) => operation(signal, root));
+      await this.exclusiveWithProgress(label, vscode.ProgressLocation.Window, `Probato PR: ${label}`, (signal, report) => operation(signal, root, report));
     });
   }
 

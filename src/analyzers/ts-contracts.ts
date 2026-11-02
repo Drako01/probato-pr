@@ -1,5 +1,6 @@
 import * as ts from 'typescript';
 import type { Analyzer, AnalyzerContext, AnalyzerOutput } from '../core/analyzer';
+import { mapLimit } from '../core/concurrency';
 import { OutputCollector, staticFinding } from '../core/finding-factory';
 import { msg, tr } from '../core/i18n';
 import type { ChangeSet, FileChange } from '../core/model';
@@ -7,6 +8,8 @@ import { collectImports, isScriptFile, isTestFile, lineOf, parsePathAliases, par
 
 const ID = 'ts-contracts';
 const MAX_IMPORTER_SCAN = 25_000;
+/** Source files read at the same time while looking for consumers of a changed module. */
+const READ_CONCURRENCY = 16;
 
 interface ExportedSymbol {
   readonly name: string;
@@ -159,30 +162,32 @@ export class TsContractsAnalyzer implements Analyzer {
 
   async analyze({ changes, workspace, signal }: AnalyzerContext): Promise<AnalyzerOutput> {
     const out = new OutputCollector();
-    const contractChanges: ContractChange[] = [];
-    for (const file of changes.files) {
-      if (file.binary || !isScriptFile(file.path) || isTestFile(file.path) || file.status === 'added') {
-        continue;
-      }
-      const basePath = file.oldPath ?? file.path;
-      const baseText = await changes.content.read(file.path, 'base');
-      if (baseText === undefined) {
-        continue;
-      }
-      const moved = file.status === 'renamed' || file.status === 'deleted';
-      const headText = moved ? undefined : await changes.content.read(file.path, 'head');
-      if (!moved && headText === undefined) {
-        continue;
-      }
-      const change = diffExports(
-        { ...file, path: basePath },
-        collectExports(basePath, baseText),
-        headText === undefined ? undefined : collectExports(file.path, headText),
-      );
-      if (change.moduleGone || change.removed.size > 0 || change.arity.size > 0 || change.removedMembers.size > 0) {
-        contractChanges.push(change);
-      }
-    }
+    const eligible = changes.files.filter((file) => !file.binary && isScriptFile(file.path) && !isTestFile(file.path) && file.status !== 'added');
+    // Each base/head read can spawn a git process: overlapping them is what keeps large change sets fast.
+    const detected = await mapLimit(
+      eligible,
+      READ_CONCURRENCY,
+      async (file): Promise<ContractChange | undefined> => {
+        const basePath = file.oldPath ?? file.path;
+        const baseText = await changes.content.read(file.path, 'base');
+        if (baseText === undefined) {
+          return undefined;
+        }
+        const moved = file.status === 'renamed' || file.status === 'deleted';
+        const headText = moved ? undefined : await changes.content.read(file.path, 'head');
+        if (!moved && headText === undefined) {
+          return undefined;
+        }
+        const change = diffExports(
+          { ...file, path: basePath },
+          collectExports(basePath, baseText),
+          headText === undefined ? undefined : collectExports(file.path, headText),
+        );
+        return change.moduleGone || change.removed.size > 0 || change.arity.size > 0 || change.removedMembers.size > 0 ? change : undefined;
+      },
+      signal,
+    );
+    const contractChanges = detected.filter((change): change is ContractChange => change !== undefined);
     if (contractChanges.length === 0) {
       return out;
     }
@@ -199,17 +204,25 @@ export class TsContractsAnalyzer implements Analyzer {
     const aliases = tsconfig === undefined ? undefined : parsePathAliases(tsconfig);
     const aliasPrefixes = (aliases?.entries ?? []).map((e) => e.pattern.split('*')[0] ?? '').filter((p) => p.length > 0);
 
-    for (const importerPath of files) {
-      if (signal?.aborted) {
-        break;
-      }
-      const changed = changedByPath.get(importerPath);
-      if (changed?.status === 'deleted') {
-        continue;
-      }
-      const text = changed ? await changes.content.read(importerPath, 'head') : await workspace.read(importerPath);
-      // Cheap prefilter before parsing; alias specifiers (e.g. "~api") may not contain the module name.
-      if (text === undefined || !(stems.some((stem) => text.includes(stem)) || aliasPrefixes.some((prefix) => text.includes(prefix)))) {
+    // Reads overlap (the bottleneck is I/O latency); parsing and reporting stay sequential and ordered.
+    const candidates = await mapLimit(
+      files,
+      READ_CONCURRENCY,
+      async (importerPath) => {
+        const changed = changedByPath.get(importerPath);
+        if (changed?.status === 'deleted') {
+          return undefined;
+        }
+        const text = changed ? await changes.content.read(importerPath, 'head') : await workspace.read(importerPath);
+        // Cheap prefilter before parsing; alias specifiers (e.g. "~api") may not contain the module name.
+        return text !== undefined && (stems.some((stem) => text.includes(stem)) || aliasPrefixes.some((prefix) => text.includes(prefix))) ? text : undefined;
+      },
+      signal,
+    );
+
+    for (const [index, text] of candidates.entries()) {
+      const importerPath = files[index];
+      if (text === undefined || importerPath === undefined) {
         continue;
       }
       const sf = parseSource(importerPath, text);
