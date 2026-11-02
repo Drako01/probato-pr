@@ -78,6 +78,8 @@ La forma recomendada es **Trusted Publishing** con GitHub Actions: GitHub demues
 1. En tu PR subí la versión en `package.json` y documentala en `CHANGELOG.md`.
 2. Mergeá el PR a `main`. Si la versión cambió, el workflow corre todos los chequeos, empaqueta **una sola vez** el VSIX y lo publica en el Marketplace y en Open VSX con ese mismo archivo. Después crea el release de GitHub con el VSIX y su SHA-256.
 3. Si el merge no cambia la versión, el workflow solo verifica y no publica nada.
+
+   **Open VSX no bloquea el release.** Si Open VSX tarda o retiene la versión (namespace sin verificar, escaneo), el release de GitHub se crea igual y el job de Open VSX deja una advertencia. Un workflow diario (`open-vsx-sync.yml`) reintenta, cierra su issue cuando la versión queda activa y abre uno si pasan 3 días sin que se active.
 4. Para republicar o publicar la versión actual a mano: **Actions → publish → Run workflow**. Es seguro repetirlo: una versión que ya existe en un store se omite.
 
 Cada pull request corre los chequeos en Linux y Windows. Si el repositorio fuera privado, el workflow tiene que correr dentro de las 48 horas de crear la política.
