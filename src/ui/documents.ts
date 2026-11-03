@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { CommandEvidence } from '../core/model';
+import { checkStatusLabel, revisionLabel } from '../core/labels';
 import type { ReviewSession } from '../extension/review-session';
 import { renderMarkdown } from '../reports/markdown';
 
@@ -12,20 +13,23 @@ export function evidenceUri(id: string): vscode.Uri {
 }
 
 function renderEvidence(e: CommandEvidence): string {
+  const revision = `${revisionLabel(e.revision)}${e.commitSha ? ` ${e.commitSha}` : ''}${e.dirty ? ` ${vscode.l10n.t('(with uncommitted changes)')}` : ''}`;
+  const signal = e.signal ? ` ${vscode.l10n.t('(signal {0})', e.signal)}` : '';
+  const truncated = e.outputTruncated ? ` ${vscode.l10n.t('(excerpt truncated to the final output)')}` : '';
   return [
-    `Probato PR — command evidence ${e.id}`,
+    vscode.l10n.t('Probato PR — command evidence {0}', e.id),
     '',
-    `Command:    ${e.commandLine}`,
-    `Directory:  ${e.cwd || '(repository root)'}`,
-    `Revision:   ${e.revision}${e.commitSha ? ` ${e.commitSha}` : ''}${e.dirty ? ' + uncommitted changes' : ''}`,
-    `Started:    ${e.startedAt}`,
-    `Duration:   ${(e.durationMs / 1000).toFixed(2)}s`,
-    `Outcome:    ${e.outcome}`,
-    `Exit code:  ${String(e.exitCode)}${e.signal ? ` (signal ${e.signal})` : ''}`,
-    `Output:     sha256 ${e.outputSha256}${e.outputTruncated ? ' (excerpt below is truncated: last part only)' : ''}`,
-    ...(e.errorMessage ? [`Error:      ${e.errorMessage}`] : []),
+    vscode.l10n.t('Command: {0}', e.commandLine),
+    vscode.l10n.t('Directory: {0}', e.cwd || vscode.l10n.t('(repository root)')),
+    vscode.l10n.t('Revision: {0}', revision),
+    vscode.l10n.t('Started: {0}', e.startedAt),
+    vscode.l10n.t('Duration: {0} s', (e.durationMs / 1000).toFixed(2)),
+    vscode.l10n.t('Outcome: {0}', checkStatusLabel(e.outcome)),
+    vscode.l10n.t('Exit code: {0}{1}', String(e.exitCode), signal),
+    vscode.l10n.t('Output: sha256 {0}{1}', e.outputSha256, truncated),
+    ...(e.errorMessage ? [vscode.l10n.t('Error: {0}', e.errorMessage)] : []),
     '',
-    '--- output (secrets redacted) ---',
+    vscode.l10n.t('--- output (secrets redacted) ---'),
     e.outputExcerpt,
   ].join('\n');
 }

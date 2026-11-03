@@ -1,5 +1,5 @@
 import { tr } from './i18n';
-import type { Attribution, CheckResult, CheckStatus, CommandEvidence, Revision, RiskLevel, Severity, VerificationStatus } from './model';
+import type { Attribution, CheckKind, CheckResult, CheckStatus, CommandEvidence, Revision, RiskLevel, Severity, VerificationStatus } from './model';
 
 // Single source for how domain states are named in the active locale: views, diagnostics and reports.
 
@@ -27,6 +27,17 @@ export function verificationHint(status: VerificationStatus): string {
       return tr('Probable issue from heuristics or AI, not proven');
     case 'not-verified':
       return tr('The verification it needs could not be performed');
+  }
+}
+
+/** Human-readable category names; command names and check IDs remain unchanged. */
+export function checkKindLabel(kind: CheckKind): string {
+  switch (kind) {
+    case 'typecheck': return tr('Type checking');
+    case 'lint': return tr('Lint');
+    case 'test': return tr('Tests');
+    case 'build': return tr('Build');
+    case 'vet': return tr('Go vet');
   }
 }
 

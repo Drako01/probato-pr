@@ -1,5 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as vscode from 'vscode';
+import spanishBundle from '../../l10n/bundle.l10n.es.json';
+import type { ReviewResult, RiskLevel } from '../../src/core/model';
+import { setTranslator } from '../../src/core/i18n';
 import type { ReviewSession } from '../../src/extension/review-session';
 import { HomePanel, type HomeDependencies, type HomeContext } from '../../src/ui/home-panel';
 
@@ -20,7 +23,7 @@ vi.mock('vscode', () => {
   };
 });
 
-function fixture() {
+function fixture(review?: ReviewResult) {
   const panel = {
     webview: { html: '', options: {}, cspSource: 'https://webview.test', asWebviewUri: (uri: { toString(): string }) => ({ toString: () => 'https://webview.test/' + uri.toString() }), postMessage: host.post, onDidReceiveMessage: (listener: (raw: unknown) => void) => { host.message = listener; return { dispose: () => undefined }; } },
     reveal: host.reveal,
@@ -36,7 +39,7 @@ function fixture() {
     saveSetting: vi.fn<HomeDependencies['saveSetting']>().mockResolvedValue(undefined),
     onError: vi.fn(),
   };
-  const session = { onDidChange: () => ({ dispose: () => undefined }), plan: [], visibleFindings: () => [] } as unknown as ReviewSession;
+  const session = { current: review, onDidChange: () => ({ dispose: () => undefined }), plan: [], visibleFindings: () => [] } as unknown as ReviewSession;
   const home = new HomePanel(session, {} as vscode.Uri, deps);
   home.show();
   return { home, panel, deps, context };
@@ -44,7 +47,23 @@ function fixture() {
 
 beforeEach(() => { vi.resetAllMocks(); host.message = undefined; host.disposed = undefined; host.post.mockResolvedValue(true); });
 
+afterEach(() => { setTranslator(undefined); });
+
 describe('Home control center host boundary', () => {
+  it.each<RiskLevel>(['low', 'medium', 'high', 'critical', 'unknown'])('localizes %s risk in both current review and history', async (risk) => {
+    const spanish: Record<string, string> = spanishBundle;
+    setTranslator((template) => spanish[template] ?? template);
+    const review = { repository: { name: 'repo' }, scope: { label: 'changes' }, risk: { level: risk }, checks: [], createdAt: '2026-11-03' } as unknown as ReviewResult;
+    const { home, deps, context } = fixture(review);
+    deps.loadContext.mockResolvedValue({ ...context, history: [{ id: 'r', repository: 'repo', scope: 'changes', risk, findings: 0, createdAt: '2026-11-03' }] });
+    await home.refresh();
+    const message = host.post.mock.calls[0]?.[0] as { state: { review: { risk: string }; history: { risk: string }[] } };
+    const expected = { low: 'Bajo', medium: 'Medio', high: 'Alto', critical: 'Crítico', unknown: 'Desconocido' }[risk];
+    expect(message.state.review.risk).toBe(expected);
+    expect(message.state.history[0]?.risk).toBe(expected);
+    home.dispose();
+  });
+
   it('dispatches only allowed actions and validates every editable setting', async () => {
     const { deps, home } = fixture();
     host.message?.({ type: 'action', action: 'workbench.action.terminal.new' });

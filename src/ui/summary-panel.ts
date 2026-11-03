@@ -118,6 +118,7 @@ export class SummaryPanel implements vscode.WebviewPanelSerializer, vscode.Dispo
 
   private html(webview: vscode.Webview): string {
     const nonce = randomBytes(16).toString('base64');
+    const title = vscode.l10n.t('Review Summary').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const script = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview', 'summary.js'));
     const style = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'media', 'summary.css'));
     const csp = [`default-src 'none'`, `style-src ${webview.cspSource}`, `img-src ${webview.cspSource}`, `script-src 'nonce-${nonce}'`].join('; ');
@@ -128,7 +129,7 @@ export class SummaryPanel implements vscode.WebviewPanelSerializer, vscode.Dispo
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="${style.toString()}">
-<title>Review Summary</title>
+<title>${title}</title>
 </head>
 <body>
 <main id="app" aria-live="polite"></main>

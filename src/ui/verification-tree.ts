@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { CheckResult, CommandEvidence, PlannedCheck } from '../core/model';
 import type { ReviewSession } from '../extension/review-session';
-import { checkIcon, checkResultLabel, checkStatusLabel, evidenceRevisionLabel, revisionLabel, safeMarkdown } from './presentation';
+import { checkIcon, checkKindLabel, checkResultLabel, checkStatusLabel, evidenceRevisionLabel, revisionLabel, safeMarkdown } from './presentation';
 
 type Node =
   | { readonly kind: 'section'; readonly id: string; readonly label: string; readonly children: readonly Node[] }
@@ -61,7 +61,7 @@ export class VerificationTreeProvider implements vscode.TreeDataProvider<Node>, 
       case 'planned': {
         const item = new vscode.TreeItem(node.check.label);
         item.iconPath = new vscode.ThemeIcon('circle-outline');
-        item.description = node.check.kind;
+        item.description = checkKindLabel(node.check.kind);
         item.tooltip = safeMarkdown(node.check.rationale, ...node.check.warnings, ...node.check.requires.map((r) => vscode.l10n.t('May require: {0}', r)));
         return item;
       }
@@ -85,7 +85,7 @@ export class VerificationTreeProvider implements vscode.TreeDataProvider<Node>, 
         const item = new vscode.TreeItem(e.commandLine);
         item.id = `evidence:${e.id}`;
         item.iconPath = checkIcon(e.outcome);
-        item.description = `${revisionLabel(e.revision)} · exit ${String(e.exitCode)} · ${seconds}s`;
+        item.description = vscode.l10n.t('{0} · exit code {1} · {2} s', revisionLabel(e.revision), String(e.exitCode), seconds);
         item.tooltip = safeMarkdown(
           e.commandLine,
           `${checkStatusLabel(e.outcome)} ${evidenceRevisionLabel(e)}`,

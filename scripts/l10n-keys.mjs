@@ -17,8 +17,11 @@ if (!bundlePath) {
   const bundle = JSON.parse(readFileSync(bundlePath, 'utf8'));
   const missing = [...keys].filter((k) => !(k in bundle));
   const stale = Object.keys(bundle).filter((k) => !keys.has(k));
-  console.log(`${keys.size} keys; missing ${missing.length}; stale ${stale.length}`);
+  const placeholders = (text) => [...new Set(text.match(/\{\d+\}/g) ?? [])].sort().join(',');
+  const invalid = Object.entries(bundle).filter(([key, value]) => placeholders(key) !== placeholders(typeof value === 'string' ? value : value.message ?? ''));
+  console.log(`${keys.size} keys; missing ${missing.length}; stale ${stale.length}; invalid placeholders ${invalid.length}`);
+  invalid.forEach(([key]) => console.log(`PLACEHOLDERS: ${key}`));
   missing.forEach((k) => console.log(`MISSING: ${k}`));
   stale.forEach((k) => console.log(`STALE: ${k}`));
-  process.exitCode = missing.length + stale.length > 0 ? 1 : 0;
+  process.exitCode = missing.length + stale.length + invalid.length > 0 ? 1 : 0;
 }

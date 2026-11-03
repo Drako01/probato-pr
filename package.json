@@ -2,7 +2,7 @@
   "name": "probato-pr",
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "publisher": "armotusitio",
   "author": {
     "name": "Alejandro Daniel Di Stefano",
@@ -613,7 +613,7 @@
     "build:prod": "node esbuild.mjs --production",
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc -p . --noEmit && tsc -p src/webview --noEmit",
-    "lint": "eslint .",
+    "lint": "eslint . && pnpm run lint:i18n",
     "test": "vitest run",
     "test:integration": "pnpm run build && tsc -p test/integration && node out/integration/run.js",
     "perf": "vitest run --config vitest.perf.config.mts",
@@ -623,7 +623,8 @@
     "vscode:prepublish": "pnpm run build:prod && node scripts/third-party-notices.mjs",
     "cli": "node dist/cli.cjs",
     "test:cli": "node scripts/test-cli.mjs",
-    "verify:delivery": "pnpm run verify && pnpm run build:prod && pnpm run test:cli"
+    "verify:delivery": "pnpm run verify && pnpm run build:prod && pnpm run test:cli",
+    "lint:i18n": "node scripts/l10n-keys.mjs l10n/bundle.l10n.es.json"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.3.0",

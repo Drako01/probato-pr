@@ -2,6 +2,14 @@
 
 All notable changes to Probato PR are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] — 2026-11-03
+
+### Fixed
+
+- Translate risk levels in Home and history, check types, evidence details and GitHub state labels.
+- Localize the welcome tagline, AI provider descriptions and authored integration errors.
+- Check translation coverage and interpolation placeholders in the standard lint gate.
+
 ## [0.4.0] — 2026-11-03
 
 ### Added
