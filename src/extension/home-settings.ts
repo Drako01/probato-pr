@@ -34,5 +34,3 @@ export function parseHomeSetting(raw: unknown): HomeSetting | undefined {
   const parsed = HomeSettingSchema.safeParse(raw);
   return parsed.success ? parsed.data : undefined;
 }
-
-
