@@ -1,3 +1,4 @@
+import type { ReadableStreamReadResult } from 'node:stream/web';
 import { z } from 'zod';
 
 export interface GitHubRepoRef {
@@ -17,7 +18,7 @@ export function parseGitHubRemote(url: string): GitHubRepoRef | undefined {
   return { owner: match[1], repo: match[2] };
 }
 
-const PullSchema = z.object({
+export const PullSchema = z.object({
   number: z.number().int(),
   title: z.string(),
   html_url: z.string(),
@@ -62,14 +63,18 @@ export class GitHubClient {
     private readonly token: () => Promise<string | undefined>,
   ) {}
 
-  private async request(path: string, accept: string, signal?: AbortSignal): Promise<Response> {
+  private async request(path: string, accept: string, signal?: AbortSignal, method = 'GET', body?: unknown): Promise<Response> {
     const token = await this.token();
     const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
     let response: Response;
     try {
       response = await this.fetchFn(`${API}${path}`, {
+        method,
+        redirect: 'error',
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         headers: {
           Accept: accept,
+          ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
           'X-GitHub-Api-Version': '2022-11-28',
           'User-Agent': 'probato-pr-vscode',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -96,7 +101,7 @@ export class GitHubClient {
     if (response.status === 404) {
       throw new GitHubError('Not found on GitHub. For private repositories, sign in with an account that has access.', 404, 'not-found');
     }
-    throw new GitHubError(`GitHub request failed with HTTP ${response.status}.`, response.status, 'http');
+    throw new GitHubError(`GitHub request failed with HTTP ${response.status}. The action may be blocked by permissions, branch protections or a changed pull request. Refresh before retrying.`, response.status, 'http');
   }
 
   private async json<T>(path: string, schema: z.ZodType<T>, signal?: AbortSignal): Promise<T> {
@@ -108,8 +113,8 @@ export class GitHubClient {
     return parsed.data;
   }
 
-  listOpenPulls(ref: GitHubRepoRef, signal?: AbortSignal): Promise<PullRequest[]> {
-    return this.json(`/repos/${ref.owner}/${ref.repo}/pulls?state=open&per_page=50`, z.array(PullSchema), signal);
+  async listOpenPulls(ref: GitHubRepoRef, signal?: AbortSignal): Promise<PullRequest[]> {
+    return this.paginate(`/repos/${ref.owner}/${ref.repo}/pulls?state=open`, z.array(PullSchema), signal);
   }
 
   getPull(ref: GitHubRepoRef, number: number, signal?: AbortSignal): Promise<PullRequest> {
@@ -125,7 +130,72 @@ export class GitHubClient {
         break;
       }
     }
+    if (files.length === MAX_FILE_PAGES * 100) throw new GitHubError('GitHub returned the maximum number of pull request files; this review would be incomplete.', undefined, 'invalid-response');
     return files;
+  }
+
+
+  /** Bounded, complete pagination. Reaching the ceiling is an error, never a silent partial result. */
+  async paginate<T>(endpoint: string, schema: z.ZodType<T[]>, signal?: AbortSignal): Promise<T[]> {
+    const values: T[] = [];
+    for (let page = 1; page <= 100; page++) {
+      const batch = await this.json(`${endpoint}${endpoint.includes('?') ? '&' : '?'}per_page=100&page=${page}`, schema, signal);
+      values.push(...batch);
+      if (batch.length < 100) return values;
+    }
+    throw new GitHubError('GitHub pagination limit reached. Narrow the selection before continuing.', undefined, 'invalid-response');
+  }
+
+  /** JSON transport shared by delivery actions. Requests always target api.github.com; redirects are refused. */
+  async rest<T>(endpoint: string, schema: z.ZodType<T>, method = 'GET', body?: unknown, signal?: AbortSignal): Promise<T> {
+    if (!endpoint.startsWith('/') || endpoint.includes('://') || /(?:^|\/)\.{1,2}(?:\/|$)/.test(endpoint)) {
+      throw new GitHubError('Invalid GitHub API path.', undefined, 'invalid-response');
+    }
+    const response = await this.request(endpoint, 'application/vnd.github+json', signal, method, body);
+    const parsed = schema.safeParse(await response.json());
+    if (!parsed.success) throw new GitHubError('GitHub returned an invalid delivery response.', response.status, 'invalid-response');
+    return parsed.data;
+  }
+
+  async graphql<T>(query: string, variables: Readonly<Record<string, unknown>>, schema: z.ZodType<T>, signal?: AbortSignal): Promise<T> {
+    const envelope = await this.rest('/graphql', z.object({ data: z.unknown().optional(), errors: z.array(z.object({ message: z.string() })).optional() }), 'POST', { query, variables }, signal);
+    if (envelope.errors?.length) throw new GitHubError('GitHub could not complete this action. Check repository permissions and branch requirements, then refresh.', undefined, 'http');
+    const parsed = schema.safeParse(envelope.data);
+    if (!parsed.success) throw new GitHubError('GitHub returned incomplete delivery data.', undefined, 'invalid-response');
+    return parsed.data;
+  }
+
+  /** Actions logs redirect to signed storage. Follow that one redirect without forwarding the GitHub token. */
+  async jobLog(ref: GitHubRepoRef, jobId: number, signal?: AbortSignal): Promise<string> {
+    if (!NAME.test(ref.owner) || !NAME.test(ref.repo) || !Number.isSafeInteger(jobId) || jobId < 1) throw new GitHubError('Invalid job.', undefined, 'invalid-response');
+    const token = await this.token();
+    const timeout = AbortSignal.timeout(20_000);
+    const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
+    let response = await this.fetchFn(`${API}/repos/${ref.owner}/${ref.repo}/actions/jobs/${jobId}/logs`, { redirect: 'manual', headers: { Accept: 'application/vnd.github+json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, signal: combined });
+    if (response.status === 302) {
+      const location = response.headers.get('location');
+      if (!location || new URL(location).protocol !== 'https:') throw new GitHubError('GitHub returned an invalid log download URL.', response.status, 'invalid-response');
+      response = await this.fetchFn(location, { redirect: 'error', signal: combined });
+    }
+    if (!response.ok) throw new GitHubError('CI logs are unavailable. Check Actions read permissions and log retention.', response.status, 'http');
+    const reader = response.body?.getReader();
+    if (!reader) return '';
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    try {
+      while (bytes < 1_000_000) {
+        const chunk: ReadableStreamReadResult<Uint8Array> = await reader.read();
+        if (chunk.done) break;
+        const bounded = chunk.value.subarray(0, 1_000_000 - bytes);
+        chunks.push(bounded); bytes += bounded.byteLength;
+      }
+    } finally { await reader.cancel(); }
+    return Buffer.concat(chunks).toString('utf8') + (bytes >= 1_000_000 ? '\n[Log truncated at 1 MB]' : '');
+  }
+
+  async mergeBase(ref: GitHubRepoRef, base: string, head: string, signal?: AbortSignal): Promise<string> {
+    const result = await this.json(`/repos/${ref.owner}/${ref.repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`, z.object({ merge_base_commit: z.object({ sha: z.string().min(1) }) }), signal);
+    return result.merge_base_commit.sha;
   }
 
   /** Raw file content at a commit; undefined when the file does not exist there or is too large. */

@@ -42,6 +42,7 @@ export async function pullRequestChangeSet(
   repository: RepositoryInfo,
   signal?: AbortSignal,
 ): Promise<ChangeSet> {
+  const mergeBase = await client.mergeBase(ref, pull.base.sha, pull.head.sha, signal);
   const files = (await client.listPullFiles(ref, pull.number, signal)).filter((f) => f.status !== 'unchanged').map(toFileChange);
   const limited = applyLimits(files, limits);
   const oldPaths = new Map(limited.files.filter((f) => f.oldPath).map((f) => [f.path, f.oldPath ?? f.path]));
@@ -52,7 +53,7 @@ export async function pullRequestChangeSet(
       kind: 'pull-request',
       label: tr('pull request #{0}: {1}', pull.number, pull.title),
       baseRef: pull.base.ref,
-      baseSha: pull.base.sha,
+      baseSha: mergeBase,
       headRef: pull.head.ref,
       headSha: pull.head.sha,
       headIsWorkingTree: false,
@@ -66,7 +67,7 @@ export async function pullRequestChangeSet(
         const key = `${side}:${path}`;
         let pending = cache.get(key);
         if (!pending) {
-          const sha = side === 'base' ? pull.base.sha : pull.head.sha;
+          const sha = side === 'base' ? mergeBase : pull.head.sha;
           const filePath = side === 'base' ? (oldPaths.get(path) ?? path) : path;
           pending = client.getFileContent(ref, filePath, sha, limits.maxFileBytes, signal);
           cache.set(key, pending);

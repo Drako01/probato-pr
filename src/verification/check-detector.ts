@@ -1,4 +1,5 @@
 import { sha256 } from '../core/ids';
+import { executionDefinition } from './execution-definition';
 import type { PlannedCheck } from '../core/model';
 import { goChecks } from './ecosystems/go';
 import { javaChecks } from './ecosystems/java';
@@ -24,5 +25,6 @@ function withFingerprint({ check, scriptBody = '' }: CheckDraft): PlannedCheck {
  */
 export async function detectChecks(probe: ProjectProbe, platform: NodeJS.Platform = process.platform): Promise<PlannedCheck[]> {
   const found = await Promise.all(ECOSYSTEMS.map((ecosystem) => ecosystem({ probe, platform })));
-  return found.flat().map(withFingerprint);
+  const definition = await executionDefinition(probe);
+  return found.flat().map((draft) => withFingerprint({ ...draft, scriptBody: `${draft.scriptBody ?? ''}:${definition}` }));
 }

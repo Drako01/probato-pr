@@ -1,4 +1,4 @@
-import { access, readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { buildAiContext } from '../ai/ai-context';
@@ -10,18 +10,23 @@ import type { ChangeSet, PlannedCheck, ReviewResult } from '../core/model';
 import { isWithin, PathOutsideWorkspaceError, resolveInside } from '../core/paths';
 import { finalizeResult, type ProgressReporter, type ReviewEngine } from '../core/review-engine';
 import { CancelledError, GitError, GitNotFoundError, OutputTooLargeError, type GitClient } from '../git/git-client';
+import { assertReviewCurrent, repositorySnapshot } from '../git/repository-snapshot';
 import { LocalChangeCollector, NoChangesError, type LocalReviewRequest } from '../git/local-changes';
 import { GitHubError, parseGitHubRemote, type GitHubClient } from '../github/github-client';
 import { pullRequestChangeSet } from '../github/pull-request-changes';
+import { RevisionWorkspaceIndex } from '../infrastructure/revision-workspace-index';
+import { importSarif } from '../reports/sarif-import';
 import { GitWorkspaceIndex } from '../infrastructure/workspace-index';
 import { renderJson } from '../reports/json';
 import { renderMarkdown, renderPullRequestDescription } from '../reports/markdown';
 import { renderSarif } from '../reports/sarif';
 import { evidenceUri, REPORT_URI } from '../ui/documents';
 import type { ApprovedChecks } from '../verification/approved-checks';
-import { detectChecks } from '../verification/check-detector';
+import { detectMonorepoChecks } from '../verification/monorepo-checks';
+import { ReviewedWorktree } from '../verification/review-worktree';
 import type { VerificationEngine } from '../verification/verification-engine';
 import { BusyError, type ReviewSession } from './review-session';
+import { ensureSavedRepository } from './review-state';
 import type { Settings } from './settings';
 
 export interface ControllerDeps {
@@ -45,6 +50,7 @@ export interface ControllerDeps {
 /** Orchestrates user commands. All operations are read-only unless the user approves otherwise. */
 export class ReviewController {
   private lastChanges: ChangeSet | undefined;
+  private lastReviewId: string | undefined;
   private lastRepo: string | undefined;
 
   constructor(private readonly deps: ControllerDeps) {}
@@ -90,8 +96,13 @@ export class ReviewController {
   private async reviewWith(root: string, request: LocalReviewRequest, signal: AbortSignal, report: ProgressReporter): Promise<void> {
     const settings = this.deps.settings();
     const limits = { ...settings.review, maxFileBytes: settings.maxFileBytes };
+    ensureSavedRepository(root);
+    const snapshot = await repositorySnapshot(this.deps.git, root, signal);
     const changes = await new LocalChangeCollector(this.deps.git).collect(root, request, limits, signal);
-    await this.analyze(changes, new GitWorkspaceIndex(this.deps.git, root, settings.maxFileBytes), signal, report);
+    const workspace = request.kind === 'working'
+      ? new GitWorkspaceIndex(this.deps.git, root, settings.maxFileBytes)
+      : new RevisionWorkspaceIndex(this.deps.git, root, request.kind === 'staged' ? '' : changes.scope.headSha ?? 'HEAD', settings.maxFileBytes);
+    await this.analyze(changes, workspace, signal, report, snapshot.fingerprint);
   }
 
   reviewPullRequest(): Promise<void> {
@@ -120,7 +131,8 @@ export class ReviewController {
       const settings = this.deps.settings();
       const headSha = await this.deps.git.resolveCommit(root, 'HEAD');
       // Repository files are only usable as context when the local checkout is exactly the PR head.
-      const localMatchesHead = headSha === picked.pull.head.sha;
+      const snapshot = await repositorySnapshot(this.deps.git, root, signal);
+      const localMatchesHead = headSha === picked.pull.head.sha && !snapshot.dirty;
       const changes = await pullRequestChangeSet(
         this.deps.github,
         ref,
@@ -130,21 +142,25 @@ export class ReviewController {
         signal,
       );
       const workspace: WorkspaceIndex = localMatchesHead ? new GitWorkspaceIndex(this.deps.git, root, settings.maxFileBytes) : EMPTY_WORKSPACE;
-      await this.analyze(changes, workspace, signal, report);
+      await this.analyze(changes, workspace, signal, report, localMatchesHead ? snapshot.fingerprint : undefined);
       if (!localMatchesHead) {
         this.deps.log.info(`PR #${picked.pull.number}: local HEAD ${headSha ?? 'none'} differs from PR head ${picked.pull.head.sha}; verification and cross-file analysis disabled.`);
       }
     });
   }
 
-  private async analyze(changes: ChangeSet, workspace: WorkspaceIndex, signal: AbortSignal, report: ProgressReporter): Promise<void> {
+  private async analyze(changes: ChangeSet, workspace: WorkspaceIndex, signal: AbortSignal, report: ProgressReporter, snapshot?: string): Promise<void> {
     const review = await this.deps.engine.review(changes, workspace, { signal, progress: report });
     if (signal.aborted) {
       throw new CancelledError();
     }
+    if (snapshot && (await repositorySnapshot(this.deps.git, changes.repository.root, signal)).fingerprint !== snapshot) {
+      throw new Error(vscode.l10n.t('Repository content changed during review. Run the review again.'));
+    }
     this.lastChanges = changes;
-    this.deps.session.setReview(review);
-    if (changes.repository.root) {
+    this.lastReviewId = review.id;
+    this.deps.session.setReview({ ...review, ...(snapshot ? { snapshot } : {}) });
+    if (changes.repository.root && changes.scope.headIsWorkingTree) {
       this.deps.session.setPlan(await this.planChecks(changes.repository.root));
     }
     this.deps.log.info(`Review ${review.id}: ${review.findings.length} finding(s), risk ${review.risk.level}, ${review.stats.filesChanged} file(s).`);
@@ -152,24 +168,9 @@ export class ReviewController {
     this.deps.showSummary();
   }
 
-  private planChecks(root: string): Promise<PlannedCheck[]> {
-    return detectChecks({
-      readText: async (rel) => {
-        try {
-          return await readFile(await resolveInside(root, rel), 'utf8');
-        } catch {
-          return undefined;
-        }
-      },
-      exists: async (rel) => {
-        try {
-          await access(await resolveInside(root, rel));
-          return true;
-        } catch {
-          return false;
-        }
-      },
-    });
+  private async planChecks(root: string): Promise<PlannedCheck[]> {
+    const snapshot = await repositorySnapshot(this.deps.git, root);
+    return detectMonorepoChecks(root, process.platform, snapshot.fingerprint);
   }
 
   // ---------------------------------------------------------------- verification
@@ -186,43 +187,43 @@ export class ReviewController {
         void vscode.window.showWarningMessage(vscode.l10n.t('Verification runs project checks locally, so it needs the pull request head checked out (for example with "gh pr checkout"). Then review the pull request again.'));
         return;
       }
-      const plan = await this.planChecks(root);
-      this.deps.session.setPlan(plan);
-      if (plan.length === 0) {
-        void vscode.window.showInformationMessage(
-          vscode.l10n.t(
-            'No verification tools detected. Probato PR looks for package.json scripts or a local TypeScript compiler, go.mod, Composer scripts or PHP tools in vendor/bin, configured pytest/mypy/ruff, Cargo.toml, and Maven or Gradle builds. Nothing is installed automatically.',
-          ),
-        );
-        return;
-      }
-      const approved = await this.approveChecks(root, plan);
-      if (!approved) {
-        return;
-      }
-      const baselineCommit = await this.chooseBaseline(review);
-      const settings = this.deps.settings();
-      const headSha = await this.deps.git.resolveCommit(root, 'HEAD');
-      const dirty = await this.deps.git.isDirty(root);
+      ensureSavedRepository(root);
+      await assertReviewCurrent(this.deps.git, review, undefined, false);
       await this.exclusiveWithProgress(vscode.l10n.t('Running verification'), vscode.ProgressLocation.Notification, 'Probato PR', async (signal, report) => {
-        const outcome = await this.deps.verification.run({
-          repoRoot: root,
-          approved,
-          baselineCommit,
-          headSha,
-          headDirty: dirty || review.scope.headIsWorkingTree,
-          timeoutMs: settings.verification.timeoutSeconds * 1000,
-          maxOutputBytes: settings.verification.maxOutputBytes,
-          signal,
-          progress: report,
-        });
-        for (const e of outcome.evidence) {
-          this.deps.log.info(`[evidence ${e.id}] ${e.revision} ${e.commandLine} → ${e.outcome} (exit ${String(e.exitCode)}, ${e.durationMs} ms)`);
-        }
-        if (outcome.baselineError) {
-          this.deps.log.warn(outcome.baselineError);
-        }
-        this.deps.session.setVerification(outcome);
+        if (this.currentReviewId() !== review.id) throw new Error(vscode.l10n.t('The active review changed. Run this action again.'));
+        let isolated: ReviewedWorktree | undefined;
+        try {
+          if (!review.scope.headIsWorkingTree) isolated = await ReviewedWorktree.create(this.deps.git, root, review.scope);
+          const executionRoot = isolated?.directory ?? root;
+          const plan = await detectMonorepoChecks(executionRoot, process.platform, review.snapshot, undefined, root);
+          await isolated?.linkDependencies(plan.map((check) => check.cwd));
+          this.deps.session.setPlan(plan);
+          if (!plan.length) {
+            void vscode.window.showInformationMessage(vscode.l10n.t('No verification tools detected in the reviewed project.'));
+            return;
+          }
+          const approved = await this.approveChecks(root, plan);
+          if (!approved) return;
+          const baselineCommit = await this.chooseBaseline(review);
+          ensureSavedRepository(root);
+          await assertReviewCurrent(this.deps.git, review, signal, false);
+          const settings = this.deps.settings();
+          const outcome = await this.deps.verification.run({
+            repoRoot: executionRoot, dependencyRoot: root, approved, baselineCommit,
+            headSha: review.scope.headSha ?? review.repository.headSha,
+            headDirty: review.scope.headIsWorkingTree || review.scope.kind === 'staged',
+            timeoutMs: settings.verification.timeoutSeconds * 1000,
+            maxOutputBytes: settings.verification.maxOutputBytes,
+            signal, progress: report,
+          });
+          for (const e of outcome.evidence) this.deps.log.info(`[evidence ${e.id}] ${e.revision} ${e.commandLine} -> ${e.outcome}`);
+          if (outcome.baselineError) this.deps.log.warn(outcome.baselineError);
+          ensureSavedRepository(root);
+          try { await assertReviewCurrent(this.deps.git, review, signal.aborted ? undefined : signal, false); }
+          catch (error) { this.deps.session.invalidate(); throw error; }
+          if (this.currentReviewId() !== review.id) throw new Error(vscode.l10n.t('The active review changed. Run this action again.'));
+          this.deps.session.setVerification(outcome);
+        } finally { await isolated?.dispose(); }
       });
       this.deps.showSummary(true);
     });
@@ -242,7 +243,7 @@ export class ReviewController {
     } else if (approved.length > 0) {
       const forget = vscode.l10n.t('Forget');
       void vscode.window
-        .showInformationMessage(vscode.l10n.t('Running the checks you approved for this repository: {0}.', approved.map((c) => c.label).join(', ')), forget)
+        .showInformationMessage(vscode.l10n.t('Running the checks you approved for this exact repository state: {0}.', approved.map((c) => c.label).join(', ')), forget)
         .then(async (answer) => {
           if (answer === forget) {
             await this.deps.approvals.forget(root);
@@ -274,7 +275,7 @@ export class ReviewController {
       vscode.l10n.t('Run {0} command(s) in this repository?', picked.length),
       {
         modal: true,
-        detail: `${commands}\n\n${vscode.l10n.t('They execute with your normal user permissions (no sandbox). Repository scripts are untrusted code: review them before running.')}\n\n${vscode.l10n.t('"Run and remember" skips these questions next time for this repository, until a command or script changes.')}`,
+        detail: `${commands}\n\n${vscode.l10n.t('They execute with your normal user permissions (no sandbox). Repository scripts are untrusted code: review them before running.')}\n\n${vscode.l10n.t('"Run and remember" applies only while the repository content, commands and configuration remain unchanged.')}`,
       },
       confirm,
       remember,
@@ -327,7 +328,7 @@ export class ReviewController {
     return this.guarded(async () => {
       const review = this.deps.session.base;
       const changes = this.lastChanges;
-      if (!review || changes?.scope !== review.scope) {
+      if (!review || !changes || this.lastReviewId !== review.id) {
         void vscode.window.showInformationMessage(vscode.l10n.t('Run a review in this session first; AI review uses the same diff.'));
         return;
       }
@@ -344,6 +345,7 @@ export class ReviewController {
         return;
       }
       const settings = this.deps.settings();
+      await this.ensureCurrentResult(review);
       const context = await buildAiContext(changes, {
         exclude: settings.ai.exclude,
         maxChars: settings.ai.maxContextChars,
@@ -375,7 +377,9 @@ export class ReviewController {
       }
       await this.exclusiveWithProgress(vscode.l10n.t('AI review'), vscode.ProgressLocation.Notification, vscode.l10n.t('Probato PR: AI review'), async (signal) => {
         const startedAt = new Date().toISOString();
+        await this.ensureCurrentResult(review, signal);
         const response = await provider.complete(context.prompt, signal);
+        await this.ensureCurrentResult(review, signal);
         const parsed = parseAiReview(response.text, changes, context.sharedFiles, `${provider.name} (${response.model})`);
         parsed.rejected.forEach((r) => {
           this.deps.log.info(`AI output rejected: ${r}`);
@@ -424,9 +428,29 @@ export class ReviewController {
       void vscode.window.showInformationMessage(vscode.l10n.t('No review yet. Run "Probato PR: Review Current Changes".'));
       return;
     }
+    try { await this.ensureCurrentResult(review); } catch (error) { await this.report(error); return; }
     await vscode.env.clipboard.writeText(renderPullRequestDescription(review));
     const hint = review.aiSummary ? '' : ` ${vscode.l10n.t('Run AI Review to add a written summary of the change.')}`;
     void vscode.window.showInformationMessage(`${vscode.l10n.t('Pull request description copied to the clipboard.')}${hint}`);
+  }
+
+  importExternalReport(): Promise<void> {
+    return this.guarded(async () => {
+      const review = this.deps.session.base;
+      if (!review) return;
+      const chosen = await vscode.window.showOpenDialog({ canSelectMany: false, filters: { SARIF: ['sarif', 'json'] }, title: vscode.l10n.t('Import SARIF evidence') });
+      const uri = chosen?.[0];
+      if (!uri || uri.scheme !== 'file') return;
+      if ((await stat(uri.fsPath)).size > 20_000_000) throw new Error(vscode.l10n.t('The SARIF report exceeds the 20 MB import limit.'));
+      await this.deps.session.exclusive(vscode.l10n.t('Import SARIF evidence'), async () => {
+        if (this.currentReviewId() !== review.id) throw new Error(vscode.l10n.t('The active review changed. Run this action again.'));
+        await this.ensureCurrentResult(review);
+        const imported = importSarif(await readFile(uri.fsPath, 'utf8'), review);
+        await this.ensureCurrentResult(review);
+        this.deps.session.updateReview(imported);
+      });
+      this.deps.showSummary();
+    });
   }
 
   // ---------------------------------------------------------------- results
@@ -441,6 +465,7 @@ export class ReviewController {
       void vscode.window.showInformationMessage(vscode.l10n.t('No review yet. Run "Probato PR: Review Current Changes".'));
       return;
     }
+    try { await this.ensureCurrentResult(this.deps.session.current); } catch (error) { await this.report(error); return; }
     await vscode.commands.executeCommand('markdown.showPreview', REPORT_URI);
   }
 
@@ -469,6 +494,7 @@ export class ReviewController {
       if (!target) {
         return;
       }
+      await this.ensureCurrentResult(review);
       await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(format.render(review)));
       this.deps.log.info(`Exported ${format.label} report to ${target.fsPath}`);
       const open = vscode.l10n.t('Open');
@@ -567,6 +593,17 @@ export class ReviewController {
     );
     this.lastRepo = picked?.root ?? this.lastRepo;
     return picked?.root;
+  }
+
+  private currentReviewId(): string | undefined { return this.deps.session.base?.id; }
+
+  private async ensureCurrentResult(review: ReviewResult, signal?: AbortSignal): Promise<void> {
+    if (this.currentReviewId() !== review.id) throw new Error(vscode.l10n.t('The active review changed. Run this action again.'));
+    if (review.repository.root) {
+      ensureSavedRepository(review.repository.root);
+      await assertReviewCurrent(this.deps.git, review, signal, false);
+    }
+    if (this.currentReviewId() !== review.id) throw new Error(vscode.l10n.t('The active review changed. Run this action again.'));
   }
 
   private ensureTrusted(): boolean {

@@ -59,7 +59,7 @@ function repo(files: Record<string, string>): string {
 }
 
 describe('end-to-end: review + verification with baseline attribution', () => {
-  it('confirms a static contract finding when the type-check fails only after the change', async () => {
+  it('reports a proven compiler error separately from the related static contract finding', async () => {
     const root = repo({
       'src/a.ts': 'export function foo(): number { return 1; }\n',
       'src/b.ts': "import { foo } from './a';\nexport const value: number = foo();\n",
@@ -90,14 +90,15 @@ describe('end-to-end: review + verification with baseline attribution', () => {
 
     const verified = applyVerification(review, outcome);
     const confirmed = verified.findings.find((f) => f.id === staticFinding?.id);
-    expect(confirmed).toMatchObject({ verification: 'confirmed', attribution: 'introduced' });
-    expect(confirmed?.evidence.length).toBe(2);
+    expect(confirmed).toMatchObject({ verification: 'evidenced' });
+    expect(confirmed?.evidence.length).toBe(1);
+    expect(verified.findings.some((f) => f.origin === 'verification' && f.verification === 'confirmed')).toBe(true);
     expect(verified.risk.level).toBe('high');
     // The temporary worktree is gone.
     expect(git(root, 'worktree', 'list').trim().split('\n')).toHaveLength(1);
   }, 180_000);
 
-  it('confirms an AI suspicion when an executed check fails at that line only after the change', async () => {
+  it('does not transfer compiler proof to an AI claim on the same line', async () => {
     const root = repo({ 'src/a.ts': 'export const total: number = 1;\n' });
     writeFiles(root, { 'src/a.ts': "export const total: number = 1;\nexport const label: number = 'not a number';\n" });
     const changes = await new LocalChangeCollector(gitClient).collect(root, { kind: 'working' }, limits);
@@ -112,8 +113,8 @@ describe('end-to-end: review + verification with baseline attribution', () => {
     const headSha = git(root, 'rev-parse', 'HEAD').trim();
     const outcome = await engine.run({ repoRoot: root, approved: [tscCheck(['src/a.ts'])], baselineCommit: headSha, headSha, headDirty: true, timeoutMs: 120_000, maxOutputBytes: 500_000 });
     const verified = applyVerification(withAi, outcome).findings.find((f) => f.origin === 'ai');
-    expect(verified).toMatchObject({ verification: 'confirmed', attribution: 'introduced', location: { file: 'src/a.ts', startLine: 2 } });
-    expect(verified?.verificationNote).toMatch(/not on the base revision/);
+    expect(verified).toMatchObject({ verification: 'suspected', location: { file: 'src/a.ts', startLine: 2 } });
+    expect(applyVerification(withAi, outcome).findings.some((f) => f.origin === 'verification' && f.verification === 'confirmed')).toBe(true);
   }, 180_000);
 
   it('does not attribute a failure that already exists on the base revision (case 1)', async () => {
@@ -128,7 +129,7 @@ describe('end-to-end: review + verification with baseline attribution', () => {
     expect(plan.map((p) => p.id)).toEqual(['script:test']);
     const headSha = git(root, 'rev-parse', 'HEAD').trim();
     const outcome = await engine.run({ repoRoot: root, approved: plan, baselineCommit: headSha, headSha, headDirty: true, timeoutMs: 120_000, maxOutputBytes: 100_000 });
-    expect(outcome.checks[0]).toMatchObject({ status: 'failed', attribution: 'pre-existing' });
+    expect(outcome.checks[0]).toMatchObject({ status: 'failed', attribution: 'inconclusive' });
   }, 180_000);
 
   it('attributes a test failure introduced by the change (case 2)', async () => {
@@ -158,6 +159,21 @@ describe('end-to-end: review + verification with baseline attribution', () => {
     const outcome = await engine.run({ repoRoot: root, approved: plan, baselineCommit: undefined, headSha: undefined, headDirty: false, timeoutMs: 60_000, maxOutputBytes: 10_000 });
     expect(outcome.checks[0]).toMatchObject({ status: 'failed', attribution: 'inconclusive' });
   }, 120_000);
+
+  it('does not execute a changed baseline script definition', async () => {
+    const root = repo({
+      'package.json': JSON.stringify({ scripts: { test: 'node old-check.cjs' } }),
+      'old-check.cjs': 'process.exit(0);',
+      'new-check.cjs': 'process.exit(1);',
+    });
+    writeFiles(root, { 'package.json': JSON.stringify({ scripts: { test: 'node new-check.cjs' } }) });
+    const plan = await detectChecks(probeOf(root));
+    const headSha = git(root, 'rev-parse', 'HEAD').trim();
+    const outcome = await engine.run({ repoRoot: root, approved: plan, baselineCommit: headSha, headSha, headDirty: true, timeoutMs: 120_000, maxOutputBytes: 10_000 });
+    expect(outcome.checks[0]?.attribution).toBe('inconclusive');
+    expect(outcome.baselineError).toMatch(/definitions differ/);
+    expect(outcome.evidence.map((e) => e.revision)).toEqual(['head']);
+  });
 
   it('never deletes the real node_modules when cleaning the baseline worktree', async () => {
     const root = repo({

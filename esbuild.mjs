@@ -29,11 +29,21 @@ const webview = await esbuild.context({
   outfile: 'dist/webview/summary.js',
 });
 
+const cli = await esbuild.context({
+  ...shared,
+  entryPoints: ['src/cli-main.ts'],
+  format: 'cjs',
+  platform: 'node',
+  target: 'node20',
+  outfile: 'dist/cli.cjs',
+  legalComments: 'linked',
+});
+
 if (watch) {
-  await Promise.all([extension.watch(), webview.watch()]);
+  await Promise.all([extension.watch(), webview.watch(), cli.watch()]);
 } else {
-  const [result] = await Promise.all([extension.rebuild(), webview.rebuild()]);
+  const [result] = await Promise.all([extension.rebuild(), webview.rebuild(), cli.rebuild()]);
   // The metafile lists every bundled input; scripts/third-party-notices.mjs derives license notices from it.
   writeFileSync('dist/metafile.json', JSON.stringify(result.metafile));
-  await Promise.all([extension.dispose(), webview.dispose()]);
+  await Promise.all([extension.dispose(), webview.dispose(), cli.dispose()]);
 }

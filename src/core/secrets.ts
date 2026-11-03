@@ -16,7 +16,7 @@ export const SECRET_PATTERNS: readonly SecretPattern[] = [
     id: 'private-key',
     label: msg('Private key block'),
     confidence: 'high',
-    regex: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY(?: BLOCK)?-----/g,
+    regex: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY(?: BLOCK)?-----[\s\S]*?(?:-----END (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY(?: BLOCK)?-----|$)/g,
   },
   { id: 'aws-access-key', label: msg('AWS access key ID'), confidence: 'high', regex: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g },
   { id: 'github-token', label: msg('GitHub token'), confidence: 'high', regex: /\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{60,})\b/g },
@@ -72,16 +72,22 @@ export function findSecrets(text: string): SecretMatch[] {
 
 /** Replaces every detected secret with a marker naming its type, so redacted text stays readable. */
 export function redactSecrets(text: string): string {
-  const matches = findSecrets(text).sort((a, b) => b.index - a.index);
-  let result = text;
-  let lastStart = Number.POSITIVE_INFINITY;
+  // Merge overlapping spans first: a token inside a PEM block must never prevent the larger
+  // private-key block from being removed. Keep offsets from the original text throughout.
+  const matches = findSecrets(text).sort((a, b) => a.index - b.index || b.length - a.length);
+  const spans: { start: number; end: number; id: string }[] = [];
   for (const match of matches) {
+    const previous = spans.at(-1);
     const end = match.index + match.length;
-    if (end > lastStart) {
-      continue; // overlapping match already redacted
+    if (previous && match.index < previous.end) {
+      previous.end = Math.max(previous.end, end);
+    } else {
+      spans.push({ start: match.index, end, id: match.pattern.id });
     }
-    result = `${result.slice(0, match.index)}[REDACTED:${match.pattern.id}]${result.slice(end)}`;
-    lastStart = match.index;
+  }
+  let result = text;
+  for (const span of spans.reverse()) {
+    result = `${result.slice(0, span.start)}[REDACTED:${span.id}]${result.slice(span.end)}`;
   }
   return result;
 }

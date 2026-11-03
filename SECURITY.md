@@ -5,7 +5,7 @@
 Probato PR treats the following as **untrusted input**: repository files, Git configuration, package-manager scripts, pull request metadata and diffs, and every AI model response.
 
 | Risk | Mitigation |
-|---|---|
+| --- | --- |
 | Command injection | Processes are spawned with argument arrays and `shell: false`. On Windows, `npm`/`pnpm`/`yarn` shims go through `cmd.exe` only after every argument matches a strict allowlist (`[\w:./=@+-]`). Git refs are validated before use. |
 | Repository config executing code during Git reads | Every Git call sets `core.fsmonitor=false`, `diff.external=`, `--no-ext-diff`, `--no-textconv`, `core.pager=cat`; baseline worktrees disable hooks. A test verifies a malicious `core.fsmonitor` is not executed. |
 | Running repository scripts | Never without approval. Verification shows the exact commands and script bodies, requires selection plus modal confirmation, and states that commands run with normal user permissions. **There is no sandbox.** Checks that run repository code are never pre-selected. With *Run and remember*, the approval is stored in the extension's workspace storage (never in the repository) and bound to a SHA-256 of the command, its directory and the script body: any change, including one introduced by a branch you check out, voids it and asks again. *Forget Approved Checks* removes every remembered approval. |
@@ -26,7 +26,7 @@ Probato PR treats the following as **untrusted input**: repository files, Git co
 
 ## Reporting a vulnerability
 
-Please report vulnerabilities privately through GitHub: **Security → Report a vulnerability** (https://github.com/Drako01/probato-pr/security/advisories/new). If you cannot use GitHub, email **addistefano76@gmail.com** with the subject `Probato PR security`. Include the version, platform and reproduction steps. Do not open public issues for security problems. You will receive an acknowledgement within 5 business days.
+Please report vulnerabilities privately through GitHub: **Security → Report a vulnerability** (<https://github.com/Drako01/probato-pr/security/advisories/new>). If you cannot use GitHub, email **<addistefano76@gmail.com>** with the subject `Probato PR security`. Include the version, platform and reproduction steps. Do not open public issues for security problems. You will receive an acknowledgement within 5 business days.
 
 ## Supported versions
 

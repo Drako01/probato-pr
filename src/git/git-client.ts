@@ -1,3 +1,6 @@
+import { mkdtemp, rmdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
 import type { ProcessRunner, RunResult } from '../infrastructure/process-runner';
 
 /** Git's well-known empty tree object, used as the base for root commits and unborn branches. */
@@ -29,7 +32,6 @@ export const SAFE_DIFF_ARGS: readonly string[] = [
   '--unified=3',
 ];
 
-const NO_HOOKS_DIR = '.probato-pr-hooks-disabled';
 
 const REF_PATTERN =/^(?!-)(?!.*\.\.)[\w./@^~:-]+$/;
 
@@ -197,9 +199,21 @@ export class GitClient {
     }
   }
 
+  /** Checkout/apply cannot invoke repo-configured filter commands or hooks. */
+  async execWithoutCheckoutCode(root: string, args: readonly string[], options: GitExecOptions = {}): Promise<string> {
+    const configured = await this.exec(root, ['config', '--null', '--name-only', '--get-regexp', '^filter\\..*\\.(clean|smudge|process|required)$'], { allowExitCodes: [0, 1] });
+    const overrides: string[] = [];
+    for (const key of configured.split('\0').filter(Boolean)) {
+      if (!/^filter\.[\w.-]+\.(clean|smudge|process|required)$/i.test(key)) throw new GitError('Invalid checkout filter configuration.', [], '', null);
+      overrides.push('-c', `${key}=${key.endsWith('.required') ? 'false' : ''}`);
+    }
+    const hooks = await mkdtemp(path.join(tmpdir(), 'probato-empty-hooks-'));
+    try { return await this.exec(root, ['-c', `core.hooksPath=${hooks}`, ...overrides, ...args], options); }
+    finally { await rmdir(hooks); }
+  }
+
   async addDetachedWorktree(root: string, target: string, commit: string): Promise<void> {
-    // Hooks disabled: a checkout would otherwise run post-checkout scripts from the repository.
-    await this.exec(root, ['-c', `core.hooksPath=${NO_HOOKS_DIR}`, 'worktree', 'add', '--detach', '--force', target, assertSafeRef(commit)]);
+    await this.execWithoutCheckoutCode(root, ['worktree', 'add', '--detach', '--force', target, assertSafeRef(commit)]);
   }
 
   async removeWorktree(root: string, target: string): Promise<void> {

@@ -5,6 +5,12 @@ import { setTranslator } from './core/i18n';
 import { ReviewEngine } from './core/review-engine';
 import { aiProviderLabel, createAiProvider } from './extension/ai-providers';
 import { AiSetup } from './extension/ai-setup';
+import { DeliveryController } from './extension/delivery-controller';
+import { LocalDeliveryController } from './extension/local-delivery-controller';
+import { ensureSavedRepository } from './extension/review-state';
+import { assertReviewCurrent, repositorySnapshot } from './git/repository-snapshot';
+import { isWithin } from './core/paths';
+import { withIncrementalCache } from './infrastructure/review-cache';
 import { ReviewController } from './extension/review-controller';
 import { ReviewSession } from './extension/review-session';
 import { readSettings } from './extension/settings';
@@ -63,7 +69,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
   const controller = new ReviewController({
     session,
     git,
-    engine: new ReviewEngine(createDefaultAnalyzers(), version),
+    engine: new ReviewEngine(withIncrementalCache(createDefaultAnalyzers(), version), version),
     verification: new VerificationEngine(runner, git),
     approvals: new ApprovedChecks(context.workspaceState),
     github,
@@ -81,6 +87,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
     connectAi: () => aiSetup.run(),
   });
 
+  const localDelivery = new LocalDeliveryController(session, git);
+  const delivery = new DeliveryController({
+    session, git, github, state: context.workspaceState, log,
+    signInToGitHub: async () => {
+      githubToken = (await vscode.authentication.getSession('github', GITHUB_SCOPES, { createIfNone: true })).accessToken;
+      return true;
+    },
+    ensureReviewCurrent: async (review) => {
+      ensureSavedRepository(review.repository.root);
+      await assertReviewCurrent(git, review);
+    },
+  });
+  let saveTimer: ReturnType<typeof setTimeout> | undefined;
+  let pendingSaveRoot: string | undefined;
   const documents = new ReviewDocuments(session);
   const diagnostics = new FindingDiagnostics(session);
   context.subscriptions.push(
@@ -102,6 +122,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
     vscode.commands.registerCommand('probatoPR.reviewBranch', (arg?: unknown) => controller.reviewBranch(reviewTarget(arg))),
     vscode.commands.registerCommand('probatoPR.reviewCommit', (arg?: unknown) => controller.reviewCommit(reviewTarget(arg))),
     vscode.commands.registerCommand('probatoPR.reviewPullRequest', () => controller.reviewPullRequest()),
+    vscode.commands.registerCommand('probatoPR.localGit', () => localDelivery.open()),
+    vscode.commands.registerCommand('probatoPR.delivery', () => delivery.open()),
+    vscode.commands.registerCommand('probatoPR.publishPullRequest', () => delivery.publishPullRequest()),
+    vscode.commands.registerCommand('probatoPR.publishReview', () => delivery.publishReview()),
+    vscode.commands.registerCommand('probatoPR.pullRequestStatus', () => delivery.status()),
+    vscode.commands.registerCommand('probatoPR.mergePullRequest', () => delivery.merge()),
+    vscode.commands.registerCommand('probatoPR.importSarif', () => controller.importExternalReport()),
     vscode.commands.registerCommand('probatoPR.verify', () => controller.verify()),
     vscode.commands.registerCommand('probatoPR.aiReview', () => controller.aiReview()),
     vscode.commands.registerCommand('probatoPR.showResults', () => {
@@ -116,7 +143,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
     vscode.commands.registerCommand('probatoPR.restoreDismissed', () => session.restoreDismissed()),
     vscode.commands.registerCommand('probatoPR.forgetApprovedChecks', () => controller.forgetApprovedChecks()),
     vscode.commands.registerCommand('probatoPR.clearHistory', async () => {
-      await session.clear();
+      if (session.busyLabel) { void vscode.window.showWarningMessage(vscode.l10n.t('Cancel the running operation before deleting review history.')); return; }
+      await session.exclusive(vscode.l10n.t('Delete Local Review History'), () => session.clear());
       void vscode.window.showInformationMessage(vscode.l10n.t('Probato PR review history deleted from this workspace.'));
     }),
     vscode.commands.registerCommand('probatoPR.connectAi', () => aiSetup.run()),
@@ -127,6 +155,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
         githubToken = undefined;
       }
     }),
+    { dispose: () => { clearTimeout(saveTimer); } },
+    vscode.workspace.onDidSaveTextDocument((document) => {
+      const review = session.current;
+      const root = review?.repository.root ?? pendingSaveRoot;
+      if (!root || document.uri.scheme !== 'file' || !isWithin(root, document.uri.fsPath)) return;
+      if (session.busyLabel) return;
+      session.invalidate();
+      clearTimeout(saveTimer);
+      if ((review && review.scope.kind !== 'working') || !vscode.workspace.getConfiguration('probatoPR').get<boolean>('review.onSave', false)) { pendingSaveRoot = undefined; return; }
+      pendingSaveRoot = root;
+      saveTimer = setTimeout(() => {
+        pendingSaveRoot = undefined;
+        if (vscode.workspace.isTrusted && !session.busyLabel) void controller.reviewLocal('working', vscode.Uri.file(root));
+      }, 600);
+    }),
     vscode.workspace.onDidGrantWorkspaceTrust(() => {
       session.updateViews();
     }),
@@ -134,8 +177,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
 
   await vscode.commands.executeCommand('setContext', 'probatoPR.busy', false);
   const stored = await history.load();
-  if (stored.latest) {
-    session.restore(stored.latest.review, stored.latest.verified);
+  if (stored.latest?.review.snapshot && stored.latest.review.repository.root && vscode.workspace.isTrusted) {
+    try {
+      const current = await repositorySnapshot(git, stored.latest.review.repository.root);
+      if (current.fingerprint === stored.latest.review.snapshot) session.restore(stored.latest.review, stored.latest.verified);
+    } catch (error) { log.warn(`Stored review could not be restored: ${String(error)}`); }
   }
   log.info(`Probato PR ${version} activated (VS Code ${vscode.version}, ${process.platform}).`);
   return { currentReview: () => session.current };

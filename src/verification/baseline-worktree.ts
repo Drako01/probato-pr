@@ -1,7 +1,8 @@
-import { lstat, mkdir, rm, symlink, unlink } from 'node:fs/promises';
+import { lstat, mkdir, readdir, realpath, rm, symlink, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { uniqueId } from '../core/ids';
+import { isWithin, resolveInside } from '../core/paths';
 import type { GitClient } from '../git/git-client';
 
 /**
@@ -17,37 +18,61 @@ export class BaselineWorktree {
     private readonly git: GitClient,
     private readonly repoRoot: string,
     readonly directory: string,
-    private readonly linkedModules: string | undefined,
+    private readonly linkedModules: string[],
+    private readonly dependencyRoot: string = repoRoot,
   ) {}
 
-  static async create(git: GitClient, repoRoot: string, commit: string): Promise<BaselineWorktree> {
+  static async create(git: GitClient, repoRoot: string, commit: string, checkDirectories: readonly string[] = [''], dependencyRoot: string = repoRoot): Promise<BaselineWorktree> {
     const parent = path.join(tmpdir(), 'probato-pr');
     await mkdir(parent, { recursive: true });
     const directory = path.join(parent, `baseline-${uniqueId()}`);
     await git.addDetachedWorktree(repoRoot, directory, commit);
 
-    let linkedModules: string | undefined;
-    const source = path.join(repoRoot, 'node_modules');
+    const worktree = new BaselineWorktree(git, repoRoot, directory, [], dependencyRoot);
     try {
-      if ((await lstat(source)).isDirectory()) {
-        linkedModules = path.join(directory, 'node_modules');
-        await symlink(source, linkedModules, process.platform === 'win32' ? 'junction' : 'dir');
-      }
+      await worktree.linkDependencies(checkDirectories);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        await new BaselineWorktree(git, repoRoot, directory, undefined).dispose();
+      await worktree.dispose();
+      throw error;
+    }
+    return worktree;
+  }
+
+  /** Also called after staged files introduce a new package directory into an isolated checkout. */
+  async linkDependencies(checkDirectories: readonly string[]): Promise<void> {
+    for (const cwd of new Set(['', ...checkDirectories])) {
+      const source = path.resolve(this.dependencyRoot, cwd, 'node_modules');
+      if (!isWithin(this.dependencyRoot, source)) throw new Error('Invalid baseline check directory.');
+      const target = path.join(this.directory, cwd, 'node_modules');
+      if (this.linkedModules.includes(target)) continue;
+      let info;
+      try { info = await lstat(source); } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
         throw error;
       }
-      linkedModules = undefined;
+      if (!info.isDirectory()) continue;
+      await assertNoHeadSourceLinks(source, this.dependencyRoot);
+      const parentDirectory = await resolveInside(this.directory, cwd || '.');
+      try { await lstat(parentDirectory); } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        throw error;
+      }
+      // Never overwrite a dependency path that the reviewed revision tracked.
+      const existing = await lstat(target).catch((error: unknown) => {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+        throw error;
+      });
+      if (existing) continue;
+      await symlink(source, target, process.platform === 'win32' ? 'junction' : 'dir');
+      this.linkedModules.push(target);
     }
-    return new BaselineWorktree(git, repoRoot, directory, linkedModules);
   }
 
   async dispose(): Promise<void> {
-    if (this.linkedModules) {
-      const info = await lstat(this.linkedModules).catch(() => undefined);
+    for (const linked of this.linkedModules) {
+      const info = await lstat(linked).catch(() => undefined);
       if (info?.isSymbolicLink()) {
-        await unlink(this.linkedModules);
+        await unlink(linked);
       } else if (info) {
         // Not a link (unexpected): refuse to delete anything rather than risk removing real dependencies.
         throw new Error(`Refusing to clean up ${this.directory}: node_modules is not the expected link.`);
@@ -55,5 +80,29 @@ export class BaselineWorktree {
     }
     await this.git.removeWorktree(this.repoRoot, this.directory);
     await rm(this.directory, { recursive: true, force: true });
+  }
+}
+
+/** A workspace link into head source would make baseline evidence false. Dependencies are reused
+ * only when their links stay in installed dependencies or outside this repository entirely. */
+async function assertNoHeadSourceLinks(directory: string, root: string): Promise<void> {
+  const canonicalRoot = await realpath(root);
+  const queue = [directory];
+  let inspected = 0;
+  while (queue.length > 0) {
+    const current = queue.pop();
+    if (!current) continue;
+    for (const entry of await readdir(current, { withFileTypes: true })) {
+      if (++inspected > 100_000) throw new Error('Dependency-link scan limit reached; baseline comparability cannot be guaranteed.');
+      const item = path.join(current, entry.name);
+      if (entry.isSymbolicLink()) {
+        const target = await realpath(item).catch(() => undefined);
+        if (target && isWithin(canonicalRoot, target) && !path.relative(canonicalRoot, target).split(path.sep).includes('node_modules')) {
+          throw new Error(`Workspace dependency ${path.relative(root, item)} resolves into the head source; baseline attribution is inconclusive.`);
+        }
+      } else if (entry.isDirectory()) {
+        queue.push(item);
+      }
+    }
   }
 }

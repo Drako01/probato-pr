@@ -17,3 +17,5 @@
 !PRIVACY.md
 !SUPPORT.md
 !THIRD_PARTY_NOTICES.md
+!dist/cli.cjs
+!dist/cli.cjs.LEGAL.txt

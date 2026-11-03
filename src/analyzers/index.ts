@@ -1,5 +1,6 @@
 import type { Analyzer } from '../core/analyzer';
 import { ConfigRiskAnalyzer } from './config-risk';
+import { CrossStackAnalyzer } from './cross-stack';
 import { DependenciesAnalyzer } from './dependencies';
 import { ErrorHandlingAnalyzer } from './error-handling';
 import { SecretsAnalyzer } from './secrets';
@@ -15,5 +16,6 @@ export function createDefaultAnalyzers(): Analyzer[] {
     new ErrorHandlingAnalyzer(),
     new DependenciesAnalyzer(),
     new ConfigRiskAnalyzer(),
+    new CrossStackAnalyzer(),
   ];
 }

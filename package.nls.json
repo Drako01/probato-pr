@@ -65,5 +65,13 @@
   "config.ai.vscodeLmModel": "Chat model used with the VS Code provider, as vendor/id. Empty: the first available model.",
   "config.ai.openaiCompatible.baseUrl": "Base URL of the OpenAI-compatible API (ends before `/chat/completions`). HTTPS is required except for servers on this machine. User-level setting only: a workspace cannot redirect your API key.",
   "config.ai.openaiCompatible.model": "Model ID for the OpenAI-compatible API. Pick it from the provider's list with **Connect Your AI**.",
-  "config.ai.includeFileContent": "Also send the full current content of changed files (after the diffs, within maxContextChars) so the AI understands the surrounding code. The confirmation dialog lists these files."
+  "config.ai.includeFileContent": "Also send the full current content of changed files (after the diffs, within maxContextChars) so the AI understands the surrounding code. The confirmation dialog lists these files.",
+  "command.localGit": "Local Git Actions",
+  "command.delivery": "GitHub Delivery",
+  "command.publishPullRequest": "Create or Update Pull Request",
+  "command.publishReview": "Publish Selected Findings",
+  "command.pullRequestStatus": "Pull Request and CI Status",
+  "command.mergePullRequest": "Merge Pull Request",
+  "command.importSarif": "Import SARIF Evidence",
+  "config.review.onSave": "Review current changes again when a file is saved. Does not run checks or send content to AI."
 }

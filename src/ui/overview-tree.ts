@@ -46,6 +46,8 @@ export class OverviewTreeProvider implements vscode.TreeDataProvider<Node>, vsco
     if (busy) {
       nodes.push({ id: 'busy', label: busy, icon: new vscode.ThemeIcon('loading~spin'), command: { command: 'probatoPR.cancel', title: vscode.l10n.t('Cancel') }, description: vscode.l10n.t('click to cancel') });
     }
+    nodes.push(action('local-git', vscode.l10n.t('Local Git actions'), 'probatoPR.localGit', 'git-branch'));
+    nodes.push(action('delivery', vscode.l10n.t('GitHub delivery'), 'probatoPR.delivery', 'git-pull-request'));
     const review = this.session.current;
     if (!review) {
       return nodes; // empty: the welcome view presents the three steps and the review buttons
@@ -96,6 +98,11 @@ export class OverviewTreeProvider implements vscode.TreeDataProvider<Node>, vsco
         ...(step.id === 'share'
           ? {
               children: [
+                action('publish', vscode.l10n.t('Create or Update Pull Request'), 'probatoPR.publishPullRequest', 'git-pull-request'),
+                action('review-publish', vscode.l10n.t('Publish Selected Findings'), 'probatoPR.publishReview', 'comment-discussion'),
+                action('ci', vscode.l10n.t('Pull Request and CI Status'), 'probatoPR.pullRequestStatus', 'checklist'),
+                action('merge', vscode.l10n.t('Merge Pull Request'), 'probatoPR.mergePullRequest', 'git-merge'),
+                action('import', vscode.l10n.t('Import SARIF evidence'), 'probatoPR.importSarif', 'file-code'),
                 action('copy', vscode.l10n.t('Copy PR Description'), 'probatoPR.copyPullRequestDescription', 'copy'),
                 action('show', vscode.l10n.t('Show Review Results'), 'probatoPR.showResults', 'preview'),
                 action('export', vscode.l10n.t('Export Report…'), 'probatoPR.exportReport', 'export'),
