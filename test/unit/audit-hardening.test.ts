@@ -162,4 +162,18 @@ describe('audit: per-package baseline dependencies', () => {
       expect(existsSync(path.join(temp.dir, 'packages/a/package.json'))).toBe(true);
     } finally { temp.cleanup(); }
   });
+  it('uses canonical dependency roots when temporary directories have aliases', async () => {
+    const temp = tempDir();
+    const alias = tempDir('probato-root-alias-');
+    try {
+      initRepo(temp.dir, { '.gitignore': '**/node_modules/\n', 'packages/a/package.json': '{}' });
+      mkdirSync(path.join(temp.dir, 'node_modules'), { recursive: true });
+      symlinkSync(path.join(temp.dir, 'packages/a'), path.join(temp.dir, 'node_modules/a'), process.platform === 'win32' ? 'junction' : 'dir');
+      const rootAlias = path.join(alias.dir, 'repo');
+      symlinkSync(temp.dir, rootAlias, process.platform === 'win32' ? 'junction' : 'dir');
+      await expect(BaselineWorktree.create(gitClient, temp.dir, git(temp.dir, 'rev-parse', 'HEAD').trim(), [''], rootAlias)).rejects.toThrow(/head source/);
+      expect(git(temp.dir, 'worktree', 'list').trim().split('\n')).toHaveLength(1);
+    } finally { alias.cleanup(); temp.cleanup(); }
+  });
+
 });

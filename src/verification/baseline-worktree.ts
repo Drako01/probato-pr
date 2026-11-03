@@ -86,6 +86,7 @@ export class BaselineWorktree {
 /** A workspace link into head source would make baseline evidence false. Dependencies are reused
  * only when their links stay in installed dependencies or outside this repository entirely. */
 async function assertNoHeadSourceLinks(directory: string, root: string): Promise<void> {
+  const canonicalRoot = await realpath(root);
   const queue = [directory];
   let inspected = 0;
   while (queue.length > 0) {
@@ -96,7 +97,7 @@ async function assertNoHeadSourceLinks(directory: string, root: string): Promise
       const item = path.join(current, entry.name);
       if (entry.isSymbolicLink()) {
         const target = await realpath(item).catch(() => undefined);
-        if (target && isWithin(root, target) && !path.relative(root, target).split(path.sep).includes('node_modules')) {
+        if (target && isWithin(canonicalRoot, target) && !path.relative(canonicalRoot, target).split(path.sep).includes('node_modules')) {
           throw new Error(`Workspace dependency ${path.relative(root, item)} resolves into the head source; baseline attribution is inconclusive.`);
         }
       } else if (entry.isDirectory()) {
