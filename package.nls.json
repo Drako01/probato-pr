@@ -73,5 +73,7 @@
   "command.pullRequestStatus": "Pull Request and CI Status",
   "command.mergePullRequest": "Merge Pull Request",
   "command.importSarif": "Import SARIF Evidence",
-  "config.review.onSave": "Review current changes again when a file is saved. Does not run checks or send content to AI."
+  "config.review.onSave": "Review current changes again when a file is saved. Does not run checks or send content to AI.",
+  "command.openHome": "Open Probato Home",
+  "config.home.openOnStartup": "Open the Probato control center when its sidebar first becomes visible in this window."
 }

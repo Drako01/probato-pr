@@ -38,6 +38,21 @@ function singleRepoTests(): void {
       }
     });
 
+    test('Home opens as one persistent editor tab', async () => {
+      await api();
+      const homeTabs = () => vscode.window.tabGroups.all.flatMap((group) => group.tabs).filter((tab) =>
+        tab.input instanceof vscode.TabInputWebview && tab.input.viewType.endsWith('probatoPR.home'));
+      await vscode.commands.executeCommand('probatoPR.openHome');
+      if (!homeTabs().length) await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => { listener.dispose(); reject(new Error('Home tab did not appear')); }, 10_000);
+        const listener = vscode.window.tabGroups.onDidChangeTabs(() => {
+          if (homeTabs().length) { clearTimeout(timer); listener.dispose(); resolve(); }
+        });
+      });
+      await vscode.commands.executeCommand('probatoPR.openHome');
+      assert.equal(homeTabs().length, 1, 'reopening Home reveals the existing panel');
+    });
+
     test('Review Current Changes finds the broken consumer and publishes a diagnostic', async () => {
       const probato = await api();
       await vscode.commands.executeCommand('probatoPR.reviewCurrentChanges');

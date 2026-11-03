@@ -73,5 +73,7 @@
   "command.pullRequestStatus": "Estado del pull request y de CI",
   "command.mergePullRequest": "Integrar un pull request",
   "command.importSarif": "Importar evidencia SARIF",
-  "config.review.onSave": "Volver a revisar los cambios locales al guardar un archivo. No ejecuta checks ni envía contenido a una IA."
+  "config.review.onSave": "Volver a revisar los cambios locales al guardar un archivo. No ejecuta checks ni envía contenido a una IA.",
+  "command.openHome": "Abrir Inicio de Probato",
+  "config.home.openOnStartup": "Abrir el panel de control de Probato cuando su barra lateral se muestre por primera vez en esta ventana."
 }

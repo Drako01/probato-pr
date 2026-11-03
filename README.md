@@ -9,11 +9,22 @@
 Probato PR reviews your Git changes and pull requests inside VS Code and tells you **what is proven, what is only
 suspected, and why**. It runs deterministic analyzers locally, can execute your project's own checks with your approval,
 and compares results against the base revision to tell a regression *introduced by your change* from a failure that was
-already there. Version 0.3 adds the complete GitHub delivery flow: prepare commits, publish a PR, collaborate,
-follow CI and merge from the editor.
+already there. Version 0.4 brings a persistent control center: configure your workspace, review changes,
+verify evidence and deliver pull requests from the editor.
 
 No account, no AI key, no server, no subscription is needed for the core review. When you want more, **bring your own
 AI**: GitHub Copilot, Claude, OpenAI or a local model.
+
+## Control center
+
+Open **Probato PR → Open Probato Home** from the sidebar or Command Palette. Home stays in one editor tab
+and brings together repository status, review scopes, verification, GitHub delivery, and local review history.
+The first sidebar visit opens Home automatically; turn this off in **Settings → Open Home on startup**.
+
+Use **Settings** inside Home to adjust review and verification preferences at the **User** or **Workspace**
+level. AI credentials remain in the existing secure connection flow. Reviewing, running checks, and publishing
+continue to use their existing approval steps. In a multi-root workspace, choose the repository for local reviews;
+Git and GitHub delivery retain their own repository selection.
 
 ## Why Probato PR
 
@@ -30,32 +41,35 @@ An AI claim stays suspected. Executed tool diagnostics are reported independentl
 when a comparable baseline establishes the regression. A compiler error at the same location does not prove
 an unrelated AI hypothesis.
 
-## See version 0.3 in action
+## See version 0.4 in action
 
-Review, verify and deliver from the same panel. The summary separates static evidence from executed checks and
-shows the GitHub actions available for the reviewed change.
+Home brings repository status, the current review and setup steps into one persistent editor tab.
+The original Probato PR logo and green accent remain consistent with your editor theme.
 
-![Probato PR 0.3: review risk, evidence and the Review, Verify, Deliver workflow](media/screenshots/review-summary.png)
+![Probato PR 0.4 Home in a dark theme: repository status, review and workspace setup](media/screenshots/home-dark.png)
 
-Prepare a branch, stage selected files, commit and push without leaving the editor. Each write asks for confirmation.
+Choose User or Workspace settings to configure reviews, baseline comparison, timeouts and optional AI.
+Each scope shows its own values; workspace preferences can override user preferences.
 
-![Local Git actions: branches, staging, commits, push and synchronization](media/screenshots/local-git.png)
+![Probato PR 0.4 Settings in a dark theme: review and verification preferences](media/screenshots/settings-dark.png)
 
-Create or update a PR, publish selected findings, manage conversations and reviews, follow CI, and merge or enqueue
-when GitHub requirements are satisfied.
+The same control center adapts to light themes, including navigation, text, controls and the brand accent.
 
-![GitHub delivery: pull requests, conversations, reviews, CI and merge](media/screenshots/github-delivery.png)
+![Probato PR 0.4 Home in a light theme](media/screenshots/home-light.png)
 
-*Real screenshots of version 0.3.0 in English, using a local demonstration repository with seeded defects.
-Opening the action menus does not publish anything. Probato PR also includes Spanish translations.*
+![Probato PR 0.4 Settings in a light theme](media/screenshots/settings-light.png)
+
+*Real screenshots of version 0.4.0 in English, using a local demonstration repository.
+No GitHub account is connected and no code is published during these captures.
+Probato PR also includes Spanish translations.*
 
 ## Quick start
 
 1. Install **Probato PR** from the Extensions view.
 2. Open a folder that is a Git repository and **trust** the workspace.
-3. Open the **Probato PR** view in the Activity Bar and click **Review Current Changes** (or use the compare button in
-   the **Source Control** view, or run `Probato PR: Review Current Changes` from the Command Palette). In multi-root
-   workspaces you pick the repository.
+3. Open the **Probato PR** view in the Activity Bar. **Home** opens on the first visit; you can return with
+   **Open Probato Home**. Choose your repository and click **Review current changes**. You can also start a review
+   from Source Control or the Command Palette.
 4. The **Review Summary** opens with the review risk, the findings and the next step highlighted. Click a finding to
    open the code beside it. Findings also appear in the **Problems** panel, where the light bulb lets you dismiss a
    finding, open its evidence or jump to the summary.
@@ -306,8 +320,9 @@ Bug reports and feature requests: see `SUPPORT.md`.
 
 ## License
 
-[MIT](LICENSE) © 2026 Alejandro Daniel Di Stefano. Bundled third-party components keep their own licenses
-(`THIRD_PARTY_NOTICES.md`).
+© 2026 Alejandro Daniel Di Stefano — [ArmoTuSitio.com.ar](https://armotusitio.com.ar).
+All rights reserved except those granted under the [MIT License](LICENSE).
+Bundled third-party components keep their own licenses (`THIRD_PARTY_NOTICES.md`).
 
 ---
 
