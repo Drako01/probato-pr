@@ -686,5 +686,6 @@
   "Invalid setting value.": "El valor de la configuración no es válido.",
   "Open a folder before saving workspace settings.": "Abrí una carpeta antes de guardar la configuración del workspace.",
   "Trust this workspace before changing its settings.": "Marcá este workspace como confiable antes de cambiar su configuración.",
-  "Probato Home: {0}": "Inicio de Probato: {0}"
+  "Probato Home: {0}": "Inicio de Probato: {0}",
+  "All rights reserved except those granted under the MIT License.": "Todos los derechos reservados, salvo los otorgados por la licencia MIT."
 }

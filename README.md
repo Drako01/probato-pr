@@ -320,8 +320,9 @@ Bug reports and feature requests: see `SUPPORT.md`.
 
 ## License
 
-[MIT](LICENSE) © 2026 Alejandro Daniel Di Stefano. Bundled third-party components keep their own licenses
-(`THIRD_PARTY_NOTICES.md`).
+© 2026 Alejandro Daniel Di Stefano — [ArmoTuSitio.com.ar](https://armotusitio.com.ar).
+All rights reserved except those granted under the [MIT License](LICENSE).
+Bundled third-party components keep their own licenses (`THIRD_PARTY_NOTICES.md`).
 
 ---
 
