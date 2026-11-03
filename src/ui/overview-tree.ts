@@ -39,9 +39,9 @@ export class OverviewTreeProvider implements vscode.TreeDataProvider<Node>, vsco
       return [...(node.children ?? [])];
     }
     if (!vscode.workspace.isTrusted || !vscode.workspace.workspaceFolders?.length) {
-      return []; // welcome content explains what to do
+      return [action('home', vscode.l10n.t('Open Probato Home'), 'probatoPR.openHome', 'home')];
     }
-    const nodes: Node[] = [];
+    const nodes: Node[] = [action('home', vscode.l10n.t('Open Probato Home'), 'probatoPR.openHome', 'home')];
     const busy = this.session.busyLabel;
     if (busy) {
       nodes.push({ id: 'busy', label: busy, icon: new vscode.ThemeIcon('loading~spin'), command: { command: 'probatoPR.cancel', title: vscode.l10n.t('Cancel') }, description: vscode.l10n.t('click to cancel') });

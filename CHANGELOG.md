@@ -2,6 +2,15 @@
 
 All notable changes to Probato PR are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-11-03
+
+### Added
+
+- Persistent Home control center with repository status, review scopes, verification, GitHub delivery and history.
+- First-visit welcome flow, direct sidebar access and a preference to control automatic opening.
+- Validated User and Workspace settings inside Home, with separate values for each scope.
+- Original Probato PR logo and green accent, responsive layouts, keyboard navigation and theme-aware surfaces.
+
 ## [0.3.0] — 2026-11-02
 
 ### Added

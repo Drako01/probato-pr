@@ -15,6 +15,17 @@ follow CI and merge from the editor.
 No account, no AI key, no server, no subscription is needed for the core review. When you want more, **bring your own
 AI**: GitHub Copilot, Claude, OpenAI or a local model.
 
+## Control center
+
+Open **Probato PR → Open Probato Home** from the sidebar or Command Palette. Home stays in one editor tab
+and brings together repository status, review scopes, verification, GitHub delivery, and local review history.
+The first sidebar visit opens Home automatically; turn this off in **Settings → Open Home on startup**.
+
+Use **Settings** inside Home to adjust review and verification preferences at the **User** or **Workspace**
+level. AI credentials remain in the existing secure connection flow. Reviewing, running checks, and publishing
+continue to use their existing approval steps. In a multi-root workspace, choose the repository for local reviews;
+Git and GitHub delivery retain their own repository selection.
+
 ## Why Probato PR
 
 Most AI review tools return a list of opinions. Probato PR classifies every finding by the strength of its evidence:

@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { createDefaultAnalyzers } from './analyzers';
 import type { ReviewResult } from './core/model';
@@ -21,6 +22,8 @@ import { NodeProcessRunner } from './infrastructure/process-runner';
 import { FindingCodeActions, FindingDiagnostics } from './ui/diagnostics';
 import { EVIDENCE_SCHEME, REPORT_SCHEME, ReviewDocuments } from './ui/documents';
 import { createFindingsView } from './ui/findings-tree';
+import { HomePanel, HOME_VIEW_TYPE } from './ui/home-panel';
+import { parseHomeSetting } from './extension/home-settings';
 import { OverviewTreeProvider } from './ui/overview-tree';
 import { ReviewStatusBar } from './ui/status-bar';
 import { SUMMARY_VIEW_TYPE, SummaryPanel } from './ui/summary-panel';
@@ -99,6 +102,93 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
       await assertReviewCurrent(git, review);
     },
   });
+  let selectedFolder = vscode.workspace.workspaceFolders?.find((folder) => folder.uri.toString() === context.workspaceState.get<string>('probatoPR.home.repository')) ?? vscode.workspace.workspaceFolders?.[0];
+  const home = new HomePanel(session, context.extensionUri, {
+    loadContext: async () => {
+      const folders = vscode.workspace.workspaceFolders ?? [];
+      if (!folders.some((folder) => folder.uri.toString() === selectedFolder?.uri.toString())) selectedFolder = folders[0];
+      const folder = selectedFolder;
+      let repository: { name: string; branch: string; changes: number } | undefined;
+      if (folder && vscode.workspace.isTrusted) {
+        try {
+          const root = await git.topLevel(folder.uri.fsPath);
+          if (root) {
+            const [branch, status] = await Promise.all([
+              git.currentBranch(root), git.exec(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all']),
+            ]);
+            // A rename has a second NUL-delimited path; count status records, not paths.
+            const records = status.split('\0');
+            let changes = 0;
+            for (let i = 0; i < records.length; i++) {
+              const record = records[i];
+              if (!record) continue;
+              changes++;
+              if (/^[RC]|^.[RC]/.test(record)) i++;
+            }
+            repository = { name: path.basename(root), branch: branch ?? vscode.l10n.t('Detached HEAD'), changes };
+          }
+        } catch (error) { log.warn(`Home repository status unavailable: ${String(error)}`); }
+      }
+      const auth = await Promise.resolve(vscode.authentication.getSession('github', GITHUB_SCOPES, { silent: true })).catch((error: unknown) => { log.warn(`Home account status unavailable: ${String(error)}`); return undefined; });
+      const config = vscode.workspace.getConfiguration('probatoPR');
+      const keys = ['home.openOnStartup', 'review.onSave', 'review.baseBranch', 'review.maxFiles', 'verification.baseline', 'verification.timeoutSeconds', 'ai.provider', 'ai.includeFileContent'];
+      const storedHistory = (await history.load()).history;
+      const latest = session.current;
+      // Persistence is asynchronous; include the current review before its disk write completes.
+      const recentHistory = latest ? [{
+        id: latest.id, createdAt: latest.createdAt, repository: latest.repository.name,
+        scope: latest.scope.label, risk: latest.risk.level, findings: latest.findings.length,
+      }, ...storedHistory.filter((entry) => entry.id !== latest.id)].slice(0, 20) : storedHistory;
+      return {
+        trusted: vscode.workspace.isTrusted,
+        ...(repository ? { repository } : {}),
+        ...(auth ? { github: auth.account.label } : {}),
+        settings: Object.fromEntries(keys.map((key) => [key, config.get(key)])),
+        userSettings: Object.fromEntries(keys.map((key) => { const value = config.inspect(key); return [key, value?.globalValue ?? value?.defaultValue]; })),
+        workspaceSettings: Object.fromEntries(keys.map((key) => { const value = config.inspect(key); return [key, value?.workspaceValue ?? value?.globalValue ?? value?.defaultValue]; })),
+        history: recentHistory,
+      };
+    },
+    execute: async (action) => {
+      if (action === 'refresh') return;
+      if (action === 'selectRepository') {
+        const choices = (vscode.workspace.workspaceFolders ?? []).map((folder) => ({ label: folder.name, description: folder.uri.fsPath, folder }));
+        if (!choices.length) { await vscode.commands.executeCommand('workbench.action.files.openFolder'); return; }
+        const chosen = await vscode.window.showQuickPick(choices, { title: vscode.l10n.t('Select a repository') });
+        if (chosen) { selectedFolder = chosen.folder; await context.workspaceState.update('probatoPR.home.repository', chosen.folder.uri.toString()); }
+        return;
+      }
+      if (action === 'openSettings') { await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:armotusitio.probato-pr'); return; }
+      if (action === 'connectGitHub') {
+        githubToken = (await vscode.authentication.getSession('github', GITHUB_SCOPES, { createIfNone: true })).accessToken;
+        return;
+      }
+      // Only declared HomeAction values arrive here; the panel never accepts arbitrary command IDs.
+      await vscode.commands.executeCommand(`probatoPR.${action}`, ...(['reviewCurrentChanges', 'reviewStagedChanges', 'reviewBranch', 'reviewCommit'].includes(action) && selectedFolder ? [selectedFolder.uri] : []));
+    },
+    saveSetting: async (key, value, target) => {
+      const setting = parseHomeSetting({ key, value, target });
+      if (!setting) throw new Error(vscode.l10n.t('Invalid setting value.'));
+      if (setting.target === 'workspace' && (!vscode.workspace.workspaceFile && !vscode.workspace.workspaceFolders?.length)) throw new Error(vscode.l10n.t('Open a folder before saving workspace settings.'));
+      if (!vscode.workspace.isTrusted && setting.target === 'workspace') throw new Error(vscode.l10n.t('Trust this workspace before changing its settings.'));
+      await vscode.workspace.getConfiguration('probatoPR').update(setting.key, setting.value, setting.target === 'user' ? vscode.ConfigurationTarget.Global : vscode.ConfigurationTarget.Workspace);
+    },
+    onError: (error) => { log.warn(String(error)); void vscode.window.showErrorMessage(vscode.l10n.t('Probato Home: {0}', error instanceof Error ? error.message : String(error))); },
+  });
+  const overviewProvider = new OverviewTreeProvider(session);
+  const overviewView = vscode.window.createTreeView('probatoPR.overview', { treeDataProvider: overviewProvider });
+  let sidebarVisited = false;
+  const openHomeOnFirstVisit = () => {
+    if (!overviewView.visible || sidebarVisited) return;
+    sidebarVisited = true;
+    if (vscode.workspace.getConfiguration('probatoPR').get<boolean>('home.openOnStartup', true)) home.show('home', true);
+  };
+  context.subscriptions.push(home, overviewView, overviewProvider,
+    vscode.window.registerWebviewPanelSerializer(HOME_VIEW_TYPE, home),
+    vscode.commands.registerCommand('probatoPR.openHome', () => { home.show(); }),
+    overviewView.onDidChangeVisibility(openHomeOnFirstVisit),
+  );
+  openHomeOnFirstVisit();
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
   let pendingSaveRoot: string | undefined;
   const documents = new ReviewDocuments(session);
@@ -114,7 +204,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
     summary,
     vscode.window.registerWebviewPanelSerializer(SUMMARY_VIEW_TYPE, summary),
     new ReviewStatusBar(session),
-    registerTree('probatoPR.overview', new OverviewTreeProvider(session)),
     createFindingsView(session, context.workspaceState),
     registerTree('probatoPR.verification', new VerificationTreeProvider(session)),
     vscode.commands.registerCommand('probatoPR.reviewCurrentChanges', (arg?: unknown) => controller.reviewLocal('working', reviewTarget(arg))),
