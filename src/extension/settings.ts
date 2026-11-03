@@ -5,6 +5,8 @@ import { OPENAI_BASE_URL } from '../ai/openai-compatible-provider';
 export const AI_PROVIDERS = ['none', 'vscode-lm', 'anthropic', 'openai-compatible'] as const;
 export type AiProviderId = (typeof AI_PROVIDERS)[number];
 
+export const DEFAULT_MUTATION_SETTINGS = { timeoutSeconds: 600, concurrency: 1, memoryMb: 1024, maxFiles: 30, gateEnabled: false, failOnDegradation: false, minimumScore: 0, tolerancePoints: 0 } as const;
+
 const SettingsSchema = z.object({
   review: z.object({
     baseBranch: z.string().trim().default(''),
@@ -17,6 +19,16 @@ const SettingsSchema = z.object({
     maxOutputBytes: z.number().int().min(10_000).default(1_000_000),
     baseline: z.enum(['ask', 'always', 'never']).default('ask'),
   }),
+  mutation: z.object({
+    timeoutSeconds: z.number().int().min(5).max(7200).default(600),
+    concurrency: z.number().int().min(1).max(8).default(1),
+    memoryMb: z.number().int().min(256).max(8192).default(1024),
+    maxFiles: z.number().int().min(1).max(100).default(30),
+    gateEnabled: z.boolean().default(false),
+    failOnDegradation: z.boolean().default(false),
+    minimumScore: z.number().min(0).max(100).default(0),
+    tolerancePoints: z.number().min(0).max(100).default(0),
+  }).optional(),
   ai: z.object({
     provider: z.enum(AI_PROVIDERS).default('none'),
     anthropicModel: z.string().trim().min(1).default('claude-opus-5-5'),
@@ -40,6 +52,12 @@ const MAX_FILE_BYTES = 2_000_000;
 export function readSettings(onInvalid: (message: string) => void): Settings & { readonly maxFileBytes: number } {
   const config = vscode.workspace.getConfiguration(SETTINGS_SECTION);
   const raw = {
+    mutation: {
+      timeoutSeconds: config.get('mutation.timeoutSeconds'), concurrency: config.get('mutation.concurrency'),
+      memoryMb: config.get('mutation.memoryMb'), maxFiles: config.get('mutation.maxFiles'),
+      gateEnabled: config.get('mutation.gateEnabled'), failOnDegradation: config.get('mutation.failOnDegradation'),
+      minimumScore: config.get('mutation.minimumScore'), tolerancePoints: config.get('mutation.tolerancePoints'),
+    },
     review: {
       baseBranch: config.get('review.baseBranch'),
       maxFiles: config.get('review.maxFiles'),

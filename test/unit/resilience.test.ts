@@ -98,7 +98,7 @@ describe('history store', () => {
     writeFileSync(path.join(dir, 'reviews.json'), '{ truncated');
     expect((await store.load()).history).toEqual([]);
     await store.save(review, undefined);
-    expect((JSON.parse(readFileSync(path.join(dir, 'reviews.json'), 'utf8')) as { version: number }).version).toBe(1);
+    expect((JSON.parse(readFileSync(path.join(dir, 'reviews.json'), 'utf8')) as { version: number }).version).toBe(2);
     await store.clear();
     expect((await store.load()).latest).toBeUndefined();
   });

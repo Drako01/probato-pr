@@ -20,6 +20,14 @@ const HomeSettingSchema = z.discriminatedUnion('key', [
   setting('ai.provider', z.enum(['none', 'vscode-lm', 'anthropic', 'openai-compatible'])),
   setting('ai.includeFileContent', z.boolean()),
   setting('home.openOnStartup', z.boolean()),
+  setting('mutation.timeoutSeconds', z.number().int().min(5).max(7200)),
+  setting('mutation.concurrency', z.number().int().min(1).max(8)),
+  setting('mutation.memoryMb', z.number().int().min(256).max(8192)),
+  setting('mutation.maxFiles', z.number().int().min(1).max(100)),
+  setting('mutation.gateEnabled', z.boolean()),
+  setting('mutation.failOnDegradation', z.boolean()),
+  setting('mutation.minimumScore', z.number().min(0).max(100)),
+  setting('mutation.tolerancePoints', z.number().min(0).max(100)),
 ]);
 
 export type HomeSetting = z.infer<typeof HomeSettingSchema>;

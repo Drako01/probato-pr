@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
-import type { PlannedCheck, ReviewFinding, ReviewResult } from '../core/model';
-import type { HistoryStore } from '../infrastructure/history-store';
+import type { CommandEvidence, PlannedCheck, ReviewFinding, ReviewResult } from '../core/model';
+import type { HistoryEntry, HistoryStore } from '../infrastructure/history-store';
+import { compareReviews, comparisonBlocker, type ReviewComparison } from '../core/review-comparison';
+import type { MutationResult } from '../mutation/model';
 import { workflowOf, type Workflow } from '../ui/workflow';
 import { applyVerification } from '../verification/evidence-linker';
 import type { VerificationOutcome } from '../verification/verification-engine';
@@ -21,6 +23,10 @@ export class BusyError extends Error {
  */
 export class ReviewSession implements vscode.Disposable {
   private review: ReviewResult | undefined;
+  private comparisonBase: ReviewResult | undefined;
+  private comparisonResult: ReviewComparison | undefined;
+  private comparisonGeneration = 0;
+  private previousReview: ReviewResult | undefined;
   private outcome: VerificationOutcome | undefined;
   private view: ReviewResult | undefined;
   /** Checks detected for the current review; undefined until detection ran (e.g. after a restore). */
@@ -40,6 +46,36 @@ export class ReviewSession implements vscode.Disposable {
 
   get current(): ReviewResult | undefined {
     return this.view;
+  }
+
+  get comparison(): ReviewComparison | undefined { return this.comparisonResult; }
+
+  /** Historical snapshots are read only; selecting one never restores current evidence or approvals. */
+  async comparisonOptions(): Promise<readonly HistoryEntry[]> {
+    const current = this.view;
+    if (!current) return [];
+    const stored = await this.history.load();
+    if (this.view !== current) return [];
+    return stored.history.filter((entry) => stored.snapshots.some((snapshot) => snapshot.id === entry.id && comparisonBlocker(snapshot, current) === undefined));
+  }
+
+  async compareWith(id: string): Promise<ReviewComparison | undefined> {
+    const current = this.view;
+    if (!current || this.running) return undefined;
+    const generation = ++this.comparisonGeneration;
+    const previous = await this.history.findReview(id);
+    if (!previous || this.view !== current || generation !== this.comparisonGeneration) return undefined;
+    this.comparisonBase = previous;
+    this.comparisonResult = compareReviews(previous, current);
+    this.emitter.fire();
+    return this.comparisonResult;
+  }
+
+  clearComparison(): void {
+    this.comparisonGeneration++;
+    this.comparisonBase = undefined;
+    this.comparisonResult = undefined;
+    this.emitter.fire();
   }
 
   get base(): ReviewResult | undefined {
@@ -72,6 +108,9 @@ export class ReviewSession implements vscode.Disposable {
   }
 
   restore(review: ReviewResult, verified: ReviewResult | undefined): void {
+    this.comparisonGeneration++;
+    this.comparisonBase = undefined;
+    this.comparisonResult = undefined;
     this.review = review;
     this.outcome = undefined;
     this.view = verified ?? review;
@@ -79,6 +118,10 @@ export class ReviewSession implements vscode.Disposable {
   }
 
   setReview(review: ReviewResult): void {
+    this.comparisonGeneration++;
+    const previous = this.view ?? this.previousReview;
+    this.comparisonBase = previous && comparisonBlocker(previous, review) === undefined ? previous : undefined;
+    this.previousReview = undefined;
     this.review = review;
     this.outcome = undefined;
     this.planned = undefined;
@@ -110,6 +153,15 @@ export class ReviewSession implements vscode.Disposable {
     this.outcome = outcome;
     this.view = applyVerification(this.review, outcome);
     this.changed(true);
+  }
+
+  /** Mutation has its own outcomes; normal verification evidence and status stay independent. */
+  setMutation(result: MutationResult, evidence: readonly CommandEvidence[]): void {
+    if (!this.review) return;
+    const priorIds = new Set([this.review.mutation?.head?.id, this.review.mutation?.base?.id].filter((id): id is string => id !== undefined));
+    this.review = { ...this.review, mutation: result, evidence: [...this.review.evidence.filter((entry) => !priorIds.has(entry.id)), ...evidence] };
+    this.view = this.outcome ? applyVerification(this.review, this.outcome) : this.review;
+    this.changed(result.execution.status === 'COMPLETED' || result.execution.status === 'CANCELLED');
   }
 
   async dismiss(findingId: string): Promise<void> {
@@ -152,6 +204,10 @@ export class ReviewSession implements vscode.Disposable {
 
   /** A Git/content mutation invalidates evidence and results until a new review completes. */
   invalidate(): void {
+    this.previousReview = this.view ?? this.previousReview;
+    this.comparisonGeneration++;
+    this.comparisonBase = undefined;
+    this.comparisonResult = undefined;
     this.review = undefined;
     this.outcome = undefined;
     this.view = undefined;
@@ -160,6 +216,10 @@ export class ReviewSession implements vscode.Disposable {
   }
 
   async clear(): Promise<void> {
+    this.previousReview = undefined;
+    this.comparisonGeneration++;
+    this.comparisonBase = undefined;
+    this.comparisonResult = undefined;
     this.review = undefined;
     this.outcome = undefined;
     this.view = undefined;
@@ -169,9 +229,11 @@ export class ReviewSession implements vscode.Disposable {
   }
 
   private changed(persist: boolean): void {
+    this.comparisonGeneration++;
+    this.comparisonResult = this.comparisonBase && this.view ? compareReviews(this.comparisonBase, this.view) : undefined;
     void vscode.commands.executeCommand('setContext', 'probatoPR.hasReview', this.view !== undefined);
     if (persist && this.review) {
-      this.history.save(this.review, this.view === this.review ? undefined : this.view).catch(this.onPersistError);
+      this.history.save(this.review, this.view === this.review ? undefined : this.view).then(() => { this.emitter.fire(); }).catch(this.onPersistError);
     }
     this.emitter.fire();
   }

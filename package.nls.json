@@ -75,5 +75,14 @@
   "command.importSarif": "Import SARIF Evidence",
   "config.review.onSave": "Review current changes again when a file is saved. Does not run checks or send content to AI.",
   "command.openHome": "Open Probato Home",
-  "config.home.openOnStartup": "Open the Probato control center when its sidebar first becomes visible in this window."
+  "config.home.openOnStartup": "Open the Probato control center when its sidebar first becomes visible in this window.",
+  "command.mutationTesting": "Run Mutation Testing (Optional)",
+  "config.mutation.timeoutSeconds": "Total mutation testing time budget in seconds, shared by both revisions. An in-flight Git setup operation may finish within its own timeout before cancellation.",
+  "config.mutation.concurrency": "Maximum number of Stryker workers. Mutation testing always requires explicit authorization.",
+  "config.mutation.memoryMb": "Node heap budget in MB per process. This is not an operating-system memory limit or sandbox.",
+  "config.mutation.maxFiles": "Maximum impacted source files permitted in one mutation request.",
+  "config.mutation.gateEnabled": "Enable the separate mutation quality gate. This does not authorize execution or change ordinary verification thresholds.",
+  "config.mutation.failOnDegradation": "Fail the enabled mutation gate when comparable measurements demonstrate a decrease beyond the allowed tolerance.",
+  "config.mutation.minimumScore": "Absolute minimum Stryker Mutation Score. Zero disables this absolute threshold; differential degradation can still fail the gate.",
+  "config.mutation.tolerancePoints": "Allowed Mutation Score decrease in percentage points, only for technically comparable measurements."
 }

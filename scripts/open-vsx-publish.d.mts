@@ -8,7 +8,7 @@ export type FetchLike = (url: string) => Promise<RegistryResponse>;
 
 export function classify(output: string, exitCode: number): PublishKind;
 
-export function parseArgs(argv: readonly string[]): { mode: 'publish'; vsix: string; version?: string } | { mode: 'check'; version: string };
+export function parseArgs(argv: readonly string[]): { mode: 'publish'; vsix: string; version?: string; trustedPublishing?: boolean } | { mode: 'check'; version: string };
 
 export function publishWithRetry(options: {
   run: () => Promise<{ code: number; output: string }>;
@@ -29,3 +29,5 @@ export function waitUntilActive(options: {
   timeoutMs?: number;
   intervalMs?: number;
 }): Promise<boolean>;
+
+export function publishInvocation(vsix: string, trustedPublishing: boolean, environment?: Record<string, string | undefined>): { args: string[]; env: Record<string, string | undefined> };

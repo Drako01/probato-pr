@@ -1,119 +1,98 @@
-# Arquitectura de Probato PR
+# Probato PR architecture
 
-Documento interno (español). La documentación pública está en inglés.
+## Governing principle
 
-## Principio rector
+An observation is not proof. Probato keeps detection, executed verification and causal attribution separate.
+Static analyzers and optional AI produce observations or hypotheses. Only actual process executions produce
+command evidence, and only technically comparable base/head evidence can establish a regression.
 
-**Una observación no es una prueba.** El sistema separa tres cosas: *detección* (analizadores, IA), *verificación*
-(comandos realmente ejecutados) y *atribución causal* (comparación base vs. cambio). La evidencia de comandos solo se
-crea a partir de una ejecución real (`toEvidence(RunResult)`); nada la sintetiza.
+## Layers
 
-## Capas y dependencias
+| Layer | Responsibility |
+|---|---|
+| `extension.ts`, `extension/` | VS Code composition, user approval, exact-state guards and commands. |
+| `ui/`, `webview/` | Home, Summary, native trees, diagnostics and validated webview intentions. |
+| `core/` | Pure review model, risk, labels, policies, explanations and observational comparison. |
+| `analyzers/` | Deterministic detection, bounded AST and snapshot-only semantic analysis. |
+| `git/` | Hardened Git reads, local actions, diffs and reviewed-content identity. |
+| `github/` | Authenticated API access, PR delivery, conversations, checks and guarded merge. |
+| `verification/` | Check discovery, approval binding, baselines, comparability and attribution. |
+| `mutation/` | Optional installed Stryker adapter, independent states, normalization and differential gate. |
+| `infrastructure/` | Process runner, worker RPC, revision indexes, bounded history and policy loading. |
+| `reports/`, `cli.ts` | Markdown, JSON, SARIF and explicit command-line execution. |
 
-```text
-extension.ts (composition root)
-   │
-   ├─ extension/   comandos, sesión, settings        ← depende de vscode
-   ├─ ui/          árboles, diagnósticos, documentos, panel Review Summary, status bar ← depende de vscode
-   │                (ui/workflow.ts y ui/summary-protocol.ts son puros: sin vscode)
-   ├─ webview/     script del panel (navegador, DOM); importa solo tipos de ui/summary-protocol
-   ├─ ai/vscode-lm-provider.ts                       ← depende de vscode
-   │
-   ├─ core/          modelo de dominio, motor, riesgo, secretos, paths, glob   (sin vscode)
-   ├─ analyzers/     analizadores deterministas (AST con TypeScript)           (sin vscode)
-   ├─ git/           cliente Git endurecido, parser de diff, change sets      (sin vscode)
-   ├─ github/        cliente REST de solo lectura, change set de PR           (sin vscode)
-   ├─ verification/  detección de checks, motor, baseline, atribución, enlace (sin vscode)
-   ├─ ai/            contexto, parser/validador, proveedor Anthropic          (sin vscode)
-   ├─ reports/       Markdown, SARIF 2.1.0, JSON                              (sin vscode)
-   └─ infrastructure/ process runner, índice del workspace, historial         (sin vscode)
-```
+Core and analysis layers do not depend on `vscode`. Repository text cannot define executable policy commands or
+webview command IDs. The process runner is the sole subprocess boundary for verifiers; Git uses its hardened client.
 
-Reglas verificadas por tests (`test/unit/ai-github-reports.test.ts`): las capas marcadas "sin vscode" no importan
-`vscode`, y no hay ciclos de importación. ESLint prohíbe `child_process` fuera de `ProcessRunner`.
+## Review and analysis worker
 
-## Flujo de una revisión
+The controller obtains the requested repository, checks trust and saves, acquires the session lock and records an
+exact repository snapshot. Working, staged and historical reviews use content providers for the correct revision.
+The lazy analysis worker runs the compiler and analyzers outside the extension host, receiving source through
+bounded RPC. Cancellation terminates the worker; the next review creates a fresh one.
 
-1. `ReviewController` resuelve el repositorio (multi-root: selector), verifica Workspace Trust y adquiere el lock de
-   `ReviewSession.exclusive` (evita ejecuciones duplicadas).
-2. `LocalChangeCollector` (o `pullRequestChangeSet`) produce un `ChangeSet`: archivos, hunks, límites aplicados y un
-   `ContentProvider` perezoso para leer base/head.
-3. `ReviewEngine` ejecuta cada `Analyzer` aplicable; un analizador que falla queda registrado como `failed` sin ocultar
-   a los demás; los recortes de cobertura se informan como limitaciones.
-4. `finalizeResult` deduplica, ordena y calcula el riesgo explicable (`assessRisk`).
-5. La UI se suscribe a `ReviewSession.onDidChange` (árboles, diagnósticos, panel, status bar, reporte virtual) y el
-   historial se persiste de forma atómica.
+The engine isolates analyzer failures, surfaces coverage limitations, deduplicates findings and calculates risk.
+The in-memory cache reuses results only when reviewed content and consumer/configuration snapshots agree.
+Recorded durations are performance measurements, not evidence that code is correct.
 
-## Interfaz: flujo guiado
+## Semantic contracts
 
-`workflowOf` (`src/ui/workflow.ts`, puro y testeado) deriva el estado de los pasos Review → Verify → Share y la acción
-siguiente a partir de la sesión. `workflowSteps` le agrega textos localizados y es la única fuente que consumen el árbol
-Overview, el panel Review Summary y la status bar, así las tres superficies nunca se contradicen.
+TypeScript Programs use a bounded in-memory host supplied by the review snapshot. Supported aliases, reexports
+and workspace packages can establish static dependency relationships. No compiler plugins, network access,
+external filesystem resolution or emit are required. Incomplete graphs fall back conservatively and disclose limits.
+Static semantic relationships do not prove runtime behavior or causal regression.
 
-El panel (`SummaryPanel`) es un webview: el host arma un `SummaryState` serializable (textos ya localizados con
-`vscode.l10n`) y lo envía con `postMessage`; el script del webview (`src/webview/summary.ts`, bundle IIFE aparte) solo
-renderiza con `textContent` y devuelve intenciones (`webviewMessageSchema`, Zod), que el host valida contra la lista
-blanca `SUMMARY_COMMANDS` antes de actuar.
+## Verification and policies
 
-## Verificación
+Check discovery proposes tools already present in the project. Impact recommendations annotate the complete plan;
+unknown relationships trigger a full-plan fallback. Only explicit approval, or a still-valid remembered approval,
+can execute repository code. Approvals bind to content and executable definitions.
 
-1. `detectChecks` arma el plan solo con herramientas presentes (scripts de `package.json`, `tsc` local, `go
-   build/vet/test`), con advertencias (scripts del repo = código no confiable) y requisitos de infraestructura
-   detectados.
-2. El usuario elige y confirma (QuickPick + modal). Nada se ejecuta sin eso.
-3. `VerificationEngine` corre cada check con `ProcessRunner` (sin shell, timeout, límite de salida, cancelación con kill
-   del árbol).
-4. Solo los checks que fallan se re-ejecutan en un `BaselineWorktree` (worktree temporal desacoplado en `%TEMP%`, hooks
-   desactivados, `node_modules` enlazado y desenlazado con `unlink` antes de borrar).
-5. `attribute` clasifica: `introduced`, `pre-existing`, `fixed`, `inconclusive`. Con diagnósticos parseables (tsc/go)
-   compara huellas `archivo|código|mensaje`, independientes de los números de línea.
-6. `applyVerification` se aplica siempre sobre la revisión pre-verificación: crea hallazgos de diagnósticos
-   independientes (`confirmed` si el error es nuevo respecto de la base), agrega hallazgos de verificación y degrada a
-   `suspected` los hallazgos de contrato cuando el type-check pasa.
+Baselines run failing checks in isolated worktrees. Dependency manifests, lockfiles and supported installed metadata
+must support comparison before failures are attributed. Source links back into the head checkout are rejected.
+Incompatible or incomplete environments produce inconclusive attribution, with reasons and preparation guidance.
 
-## Decisiones (ADR resumidos)
+`.probato.yml` is bounded, versioned and declarative. It can adjust supported severities, recommend detected check
+IDs and configure the optional mutation gate. It cannot define executables, provide credentials, approve execution
+or suppress findings. Critical and secret findings cannot be downgraded. Policy decisions survive risk recalculation
+through explicit notes rather than stale prior verification limitations.
 
-| Decisión | Motivo | Alternativa descartada |
-|---|---|---|
-| Git por CLI con flags seguros, no la Git Extension API | Necesitamos merge-base, worktrees, blobs por revisión y tests fuera de VS Code; control explícito de config peligrosa | `vscode.git` API: no expone todo y no es testeable sin el host |
-| Parser de diff propio | Renombres, binarios, rutas citadas y cambios de modo de Git | `diff.parsePatch`: maneja mal cabeceras de Git |
-| TypeScript 6.0.3 como dependencia de runtime (bundle) | AST real para analizadores; typescript-eslint exige `<6.1` | TS 7 (compilador nativo) no expone la API de JS |
-| Un solo webview (Review Summary), el resto nativo | El flujo con solo árboles resultó confuso en pruebas de uso; el panel muestra riesgo, pasos y hallazgos de un vistazo. Superficie acotada: CSP con nonce, sin `innerHTML`, mensajes validados con Zod y lista blanca de comandos. Árboles, diagnósticos y status bar siguen nativos (tema y accesibilidad de VS Code) | Solo árboles nativos (decisión del MVP, revisada); UI completa en webview: más superficie y peor integración con el tema |
-| Baseline solo para checks fallidos | Reduce el costo a la mitad o menos; un check que pasa no puede ser regresión | Correr todo dos veces |
-| PR vía API, sin fetch/checkout | Solo lectura, no toca el repo del usuario | `git fetch pull/N/head`: escribe refs |
-| IA solo como transporte de texto | Proveedores intercambiables; validación y redacción comunes | Lógica por proveedor |
-| BYOK con un proveedor genérico compatible con OpenAI vía `fetch` | Un solo adaptador cubre OpenAI, OpenRouter, Azure, Ollama y LM Studio sin dependencias nuevas; claves por origen y URL con scope `application` evitan redirigir la clave desde un workspace | SDK por proveedor: más dependencias y superficie |
-| La IA no verifica: sus sospechas se mantienen separadas de los diagnósticos ejecutados | `applyVerification` conserva la hipótesis y crea un hallazgo independiente para el diagnóstico ejecutado; coincidir en una línea no demuestra causalidad | Confiar en la IA o descartarla: ninguna da evidencia |
-| SDK oficial `@anthropic-ai/sdk` | Recomendación oficial; errores tipados | `fetch` crudo |
+## Mutation testing
 
-## Puntos de extensión
+Mutation testing is a separate optional verifier, not another mandatory check kind. It invokes existing local
+Stryker in isolated reviewed/base worktrees through the bounded runner. Its total time, concurrency, Node heap,
+file and report limits are visible before approval. No Stryker installation occurs during normal product execution.
 
-- **Nuevo analizador:** implementar `Analyzer` (`src/core/analyzer.ts`) y registrarlo en `src/analyzers/index.ts`.
-  Agregar casos verdaderos y trampas al corpus (`test/unit/benchmark.test.ts`).
-- **Nuevo proveedor de IA:** implementar `AIReviewProvider` (`src/ai/ai-provider.ts`, incluye `listModels` para el
-  asistente), agregarlo a `createAiProvider` (`src/extension/ai-providers.ts`, única fábrica para revisión y asistente),
-  a `AI_PROVIDERS` en settings y al asistente `AiSetup`. La mayoría de los proveedores nuevos no necesitan código:
-  alcanza con `openai-compatible` y otra URL.
-- **Nuevo tipo de check:** extender `detectChecks` y, si la salida es parseable, `parseDiagnostics`.
-- **Nuevo formato de reporte:** función pura `ReviewResult → string` en `src/reports/`.
+Execution status, verification outcome, baseline comparability, quality trend and gate decision remain independent.
+Mutants retain their original Stryker status and normalized state. Comparable scores require equivalent source,
+mutant population, dependencies, configuration and execution conditions. Only real run records become command
+evidence. See [Mutation Testing](docs/MUTATION_TESTING.md) for score math, states and limits.
 
-## Marca
+## Session, history and interface
 
-El nombre visible (`Probato PR`) vive en `package.nls*.json`, README y reportes. Los contratos funcionales
-(`probatoPR.*` en comandos/settings, `probato-report:` y `probato-evidence:` como esquemas) no dependen del nombre
-comercial salvo el prefijo técnico, que puede mantenerse aunque cambie la marca.
+The session is the single current-state source for Home, Summary, trees, diagnostics, status and reports.
+Home and Summary are separate persistent webviews with nonce CSP, restricted resources, safe DOM text rendering
+and allowlisted messages. Existing native surfaces remain available. New evidence and mutant detail is disclosed
+progressively instead of replacing the primary workflow.
 
-## Entrega y estado exacto
+History stores bounded sanitized summaries and a limited set of validated full review snapshots. Legacy records
+remain readable. Comparison requires the same known base, repository, branch, scope and target. It labels observations
+as new, persisting or no longer observed; disappearance never implies resolution. Historical evidence cannot become
+current execution approval.
 
-`repositorySnapshot` identifica HEAD, rama, índice y contenido visible para Git. El controlador compara ese estado
-antes y después del análisis y de los checks. `RevisionWorkspaceIndex` lee consumidores desde el índice o commit
-revisado. `ReviewedWorktree` ejecuta staged y commits históricos en una copia aislada. Las aprobaciones incluyen
-el snapshot y las definiciones ejecutables. Los checkouts aislados deshabilitan hooks y filtros configurados.
+## Delivery, export and localization
 
-`LocalDelivery` contiene las acciones Git explícitas. `GitHubDelivery` administra PR, comentarios, conversaciones,
-checks y merge mediante un transporte autenticado de destino fijo. `DeliveryController` presenta y confirma cada
-escritura; el merge vincula head y destino. La extensión registra esos comandos y el panel permite acceder a ellos.
+Local Git writes require previews and confirmation. GitHub writes validate target identity, reviewed head and
+available protections; a merge request conditions the expected head and rechecks its destination. API atomicity
+must not be overstated for the base branch.
 
-La CLI reutiliza motor, recolector, detección y reportes. La importación SARIF agrega evidencia externa sin afirmar
-una ejecución propia. El caché conserva resultados solo en memoria y los invalida por cambios de contenido o de
-consumidores/configuración. Los checks cross-stack permanecen como sospechas cuando no prueban la relación.
+JSON preserves structural identifiers and optional new fields. Markdown localizes explanatory text. SARIF keeps
+machine states and mutation metadata without inventing confirmed source defects. English templates and Spanish
+translations cover authored UI messages; rule IDs, paths, hashes, commands and external output remain unchanged.
+
+## Extension points
+
+New analyzers implement `Analyzer` and add real defect/trap cases. New tools extend discovery and diagnostic parsing.
+Mutation adapters remain separate from the core state and gate evaluator. New AI providers remain text transports;
+AI responses never create execution evidence. Existing report and historical contracts stay backward compatible
+through optional fields and validated migrations.

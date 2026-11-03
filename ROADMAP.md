@@ -2,40 +2,35 @@
 
 Priorities follow the product principle: precision and proof over volume.
 
-## Delivered through 0.3
+## Delivered before 0.5
 
-Local and PR review, verification with exact-state guards, GitHub delivery, CLI, monorepo discovery, external SARIF,
-conservative cross-stack checks and incremental analysis are implemented. See [CHANGELOG](CHANGELOG.md) and
-[delivery workflow](docs/DELIVERY.md). The sections below retain the longer-term direction; semantic analysis and
-platform acceptance remain separate from command availability.
+Local and PR review, exact-state verification, GitHub delivery, CLI, monorepo discovery, external SARIF,
+conservative cross-stack checks, incremental analysis and the Home control center are implemented.
 
-## 0.2 — Release hardening
+## 0.5 — Proof-driven upgrade
 
-- Verify and document Linux, macOS, WSL, Dev Containers and Remote SSH (CI matrix prepared in `docs/ci/`, not enabled).
-- Resolve `tsconfig` `paths` aliases and workspace package imports in contract analysis.
-- Per-package baselines for monorepos (pnpm/yarn workspaces).
-- Spanish runtime localization bundle complete.
-- Screenshots and short demo for the Marketplace listing.
+- Explain each finding through explicit evidence and missing-proof notes.
+- Compare compatible reviews without treating disappearance as resolution.
+- Resolve supported TypeScript aliases and reexports through bounded snapshot-only semantics.
+- Run analyzers in a lazy cancellable worker and expose measured analysis time.
+- Recommend existing checks by impact and disclose baseline dependency comparability.
+- Apply versioned declarative repository policy without granting execution permission.
+- Integrate optional local Stryker mutation testing with independent states and a differential quality gate.
+- Publish and synchronize Open VSX through one OIDC Trusted Publisher workflow.
 
-## 0.3 — Cross-stack review
+Implementation and release acceptance are separate. See [release readiness](PRODUCT_RELEASE_READINESS.md) for
+current verification, including real mutation execution rather than mocks alone.
 
-- **Case A (API ↔ client):** detect renamed response properties in backend DTOs/OpenAPI and stale usages in frontend
-  code, then confirm with the type-check or contract tests.
-- **Case B (multi-tenancy):** flag new data-access code that queries by ID without the tenant predicate used elsewhere
-  in the repository, and link existing isolation tests.
-- **Case C (migrations):** SQL migrations dropping or renaming columns still referenced by queries/ORM models.
-- **Case D (CI green, flow broken):** map changed files to existing integration tests and run them selectively.
+## Next priorities
 
-## 0.4 — More languages and tools
+- Expand an independently sourced, anonymized defect corpus while retaining authored false-positive traps.
+- Extend supported dependency environments and semantic package conditions conservatively.
+- Validate remote-development environments and accessibility with native assistive technology.
+- Add mutation tool adapters only when their evidence and comparability can be defined honestly.
+- Improve integration-test impact mapping without presenting selective execution as full-system assurance.
 
-PHP, Python, Java analyzers with real parsers; PostgreSQL/MySQL migrations; OpenAPI; Docker and Terraform configuration
-checks; SARIF import from existing linters as evidence.
+## Deliberate boundaries
 
-## Later
-
-- Extend the implemented GitHub delivery with additional hosting providers and richer visual conversation views.
-- Isolated, approval-gated generation of regression tests.
-- Incremental re-review on save.
-- Opt-in, disabled-by-default telemetry, only if it is needed and documented.
-- Web (`vscode.dev`) support limited to diff analysis, if the architecture allows it without weakening local
-  verification.
+Core review remains useful offline without accounts, AI or mutation tools. New features must preserve explicit
+approval and explain incomplete coverage. More hosting providers, language parsers or telemetry are not substitutes
+for stronger evidence. Web-only verification remains outside the local process execution contract.

@@ -1,7 +1,11 @@
 import * as vscode from 'vscode';
+import { mutationView } from './mutation-view-model';
+import { explainFinding } from '../core/finding-explanation';
+import type { HistoryEntry } from '../infrastructure/history-store';
+import { comparisonView } from './review-comparison-view-model';
 import { SEVERITIES, VERIFICATION_STATUSES } from '../core/model';
 import type { ReviewSession } from '../extension/review-session';
-import { attributionLabel, checkResultLabel, reviewStatsLabel, reviewSubtitle, riskLabel, severityLabel, verificationHint, verificationLabel } from './presentation';
+import { attributionLabel, checkResultLabel, checkStatusLabel, reviewStatsLabel, reviewSubtitle, riskLabel, severityLabel, verificationHint, verificationLabel } from './presentation';
 import type { SummaryLabels, SummaryState, SummaryStep } from './summary-protocol';
 
 /** The three workflow steps with localized text and their action; shared by the Overview tree and the summary panel. */
@@ -108,14 +112,35 @@ function labels(): SummaryLabels {
     pullRequestStatus: vscode.l10n.t('Pull Request and CI Status'),
     mergePullRequest: vscode.l10n.t('Merge Pull Request'),
     importSarif: vscode.l10n.t('Import SARIF evidence'),
+    findingExplanation: vscode.l10n.t('Finding explanation'),
+    reportedObservation: vscode.l10n.t('Reported observation'),
+    linkedEvidence: vscode.l10n.t('Linked evidence'),
+    linkedChecks: vscode.l10n.t('Explicitly linked checks'),
+    missingProof: vscode.l10n.t('Proof still missing'),
+    noLinkedChecks: vscode.l10n.t('No executed check is explicitly linked to this finding.'),
+    comparison: vscode.l10n.t('Compare reviews'),
+    chooseComparison: vscode.l10n.t('Choose a previous review'),
+    clearComparison: vscode.l10n.t('Clear comparison'),
+    comparisonEligibility: vscode.l10n.t('Only reviews with the same repository, scope, branch and base commit can be compared. Historical evidence is never restored as current.'),
+    newFindings: vscode.l10n.t('Newly observed'),
+    persistingFindings: vscode.l10n.t('Still observed'),
+    noLongerObserved: vscode.l10n.t('No longer observed (resolution unproven)'),
+    analysisDuration: vscode.l10n.t('Measured analysis duration'),
+    reproducibilityLimitations: vscode.l10n.t('Reproducibility limitations'),
+    mutationMetricHelp: vscode.l10n.t('Stryker Mutation Score counts killed and timed-out mutants as detected. The killed-only metric excludes timeouts; incomplete runs do not establish a regression.'), mutationTitle: vscode.l10n.t('Mutation testing and differential gate'), mutationRun: vscode.l10n.t('Run mutation testing (optional)'),
+    mutationOptional: vscode.l10n.t('Mutation testing is optional. You approve the impacted files and execution limits before Stryker runs.'),
+    mutationExecution: vscode.l10n.t('Execution'), mutationVerification: vscode.l10n.t('Verification result'), mutationBaseline: vscode.l10n.t('Baseline comparability'),
+    mutationQuality: vscode.l10n.t('Quality trend'), mutationGate: vscode.l10n.t('Quality gate'), mutationScore: vscode.l10n.t('Stryker Mutation Score'),
+    mutationKilledOnly: vscode.l10n.t('Killed-only score (separate metric)'), mutationDelta: vscode.l10n.t('Change in percentage points'),
+    mutationRawStatus: vscode.l10n.t('Original Stryker status'), mutationAttribution: vscode.l10n.t('Attribution'), mutationMutants: vscode.l10n.t('Mutants'), mutationReportHash: vscode.l10n.t('Report SHA-256'),
   };
 }
 
 /** Everything the summary panel renders. Repository-derived text is passed as data and rendered as text, never markup. */
-export function summaryState(session: ReviewSession, aiProvider: string | undefined): SummaryState {
+export function summaryState(session: ReviewSession, aiProvider: string | undefined, candidates: readonly HistoryEntry[] = []): SummaryState {
   const review = session.current;
   const busy = session.busyLabel;
-  const base = { labels: labels(), ...(busy ? { busy } : {}) };
+  const base = { labels: labels(), ...(busy ? { busy } : {}), comparisonOptions: candidates.map((candidate) => ({ id: candidate.id, label: `${candidate.scope} · ${candidate.createdAt}` })), ...(session.comparison ? { comparison: comparisonView(session.comparison) } : {}) };
   if (!review) {
     return base;
   }
@@ -139,6 +164,7 @@ export function summaryState(session: ReviewSession, aiProvider: string | undefi
       next: session.workflow().next,
       findings: visible.map((f) => {
         const attribution = attributionLabel(f.attribution);
+        const explanation = explainFinding(review, f);
         return {
           id: f.id,
           severity: f.severity,
@@ -153,6 +179,13 @@ export function summaryState(session: ReviewSession, aiProvider: string | undefi
           file: f.location.file,
           line: f.location.startLine,
           ruleId: f.ruleId,
+          explanation: {
+            observation: explanation.observedChange,
+            observationNote: explanation.observationNote,
+            evidence: explanation.evidence.map((reference) => ({ id: reference.id, summary: reference.summary, available: reference.available, locations: reference.locations.map((location) => `${location.file}:${location.startLine}`) })),
+            checks: explanation.checks.map((check) => ({ label: check.label, statusLabel: [checkStatusLabel(check.status), attributionLabel(check.attribution)].filter(Boolean).join(' · '), note: check.attributionNote })),
+            missingProof: explanation.missingProof,
+          },
         };
       }),
       dismissed: session.dismissedCount(),
@@ -163,6 +196,10 @@ export function summaryState(session: ReviewSession, aiProvider: string | undefi
         note: c.attributionNote,
         ...(c.headEvidenceId ? { evidenceId: c.headEvidenceId } : {}),
       })),
+      hasLocalCheckout: Boolean(review.repository.root),
+      ...(review.mutation ? { mutation: mutationView(review.mutation, review.evidence) } : {}),
+      ...(review.performance ? { analysisMs: review.performance.analysisMs } : {}),
+      ...(review.reproducibility ? { reproducibilityLimitations: review.reproducibility.filter((check) => check.status === 'inconclusive').flatMap((check) => check.reasons) } : {}),
       ai: { ...(aiProvider ? { provider: aiProvider } : {}), ...(review.aiSummary ? { summary: review.aiSummary } : {}) },
     },
   };

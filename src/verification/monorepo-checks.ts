@@ -26,7 +26,7 @@ export async function detectProjectChecks(tree: ProjectTree, platform: NodeJS.Pl
   if (roots.length > MAX_PROJECTS) {
     throw new Error(tr('Verification discovery found {0} projects; the limit is {1}. Open a smaller repository.', roots.length, MAX_PROJECTS));
   }
-  const rootDefinition = sha256(JSON.stringify([await executionDefinition(tree), (await tree.readText('package.json'))?.replace(/\r\n/g, '\n')]));
+  const rootDefinition = sha256(JSON.stringify([await executionDefinition(tree), (await tree.readText('package.json'))?.replace(/\r\n/g, '\n'), await tree.readText('.probato.yml')]));
   const checks: PlannedCheck[] = [];
   for (const cwd of roots) {
     const at = (relative: string) => cwd ? `${cwd}/${relative}` : relative;

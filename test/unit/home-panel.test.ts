@@ -39,7 +39,7 @@ function fixture(review?: ReviewResult) {
     saveSetting: vi.fn<HomeDependencies['saveSetting']>().mockResolvedValue(undefined),
     onError: vi.fn(),
   };
-  const session = { current: review, onDidChange: () => ({ dispose: () => undefined }), plan: [], visibleFindings: () => [] } as unknown as ReviewSession;
+  const session = { current: review, comparisonOptions: () => Promise.resolve([]), onDidChange: () => ({ dispose: () => undefined }), plan: [], visibleFindings: () => [] } as unknown as ReviewSession;
   const home = new HomePanel(session, {} as vscode.Uri, deps);
   home.show();
   return { home, panel, deps, context };

@@ -10,6 +10,7 @@ import { GitClient } from '../../src/git/git-client';
 import { LocalChangeCollector } from '../../src/git/local-changes';
 import { NodeProcessRunner } from '../../src/infrastructure/process-runner';
 import { GitWorkspaceIndex } from '../../src/infrastructure/workspace-index';
+import { withIncrementalCache } from '../../src/infrastructure/review-cache';
 import { initRepo, tempDir, writeFiles } from '../unit/helpers';
 
 interface Profile {
@@ -68,4 +69,36 @@ describe('review performance budgets', () => {
       expect(elapsed).toBeLessThan(profile.budgetMs);
     });
   }
+});
+
+
+describe('incremental review measurements', () => {
+  it('measures cold and reused analysis without changing findings or hiding source edits', async () => {
+    const { dir, cleanup } = tempDir('probato-perf-cache-');
+    cleanups.push(cleanup);
+    const files = Object.fromEntries(Array.from({ length: 500 }, (_, index) => [`src/m${index}.ts`, moduleSource(index, false)]));
+    initRepo(dir, files);
+    writeFiles(dir, { 'src/m10.ts': moduleSource(10, true) });
+    const collect = () => new LocalChangeCollector(git).collect(dir, { kind: 'working' }, { maxFiles: 5000, maxDiffBytes: 64_000_000, maxFileBytes: 2_000_000, exclude: [] });
+    const engine = new ReviewEngine(withIncrementalCache(createDefaultAnalyzers(), 'perf-cache'), 'perf-cache');
+    const coldStart = performance.now();
+    const first = await engine.review(await collect(), new GitWorkspaceIndex(git, dir, 2_000_000));
+    const coldMs = performance.now() - coldStart;
+    const reusedStart = performance.now();
+    const second = await engine.review(await collect(), new GitWorkspaceIndex(git, dir, 2_000_000));
+    const reusedMs = performance.now() - reusedStart;
+    expect(second.findings).toEqual(first.findings);
+    expect(first.findings.some((finding) => finding.ruleId === 'contracts/export-removed')).toBe(true);
+    writeFiles(dir, { 'src/m11.ts': moduleSource(11, false).replaceAll('fn10', 'renamedFn10') });
+    const changedStart = performance.now();
+    const changed = await engine.review(await collect(), new GitWorkspaceIndex(git, dir, 2_000_000));
+    const changedMs = performance.now() - changedStart;
+    expect(changed.findings.filter((finding) => finding.ruleId === 'contracts/export-removed')).toHaveLength(0);
+    const measurement = { files: 500, coldMs, reusedMs, changedMs, firstFindings: first.findings.length, reusedFindings: second.findings.length, changedFindings: changed.findings.length };
+    results.push(`incremental ${JSON.stringify(measurement)}`);
+    const report = process.env['PROBATO_PERF_REPORT'];
+    if (report) writeFileSync(report, JSON.stringify(measurement, null, 2) + '\n');
+    // This budget is an upper bound, not an unmeasured promise of a speed-up ratio.
+    expect(Math.max(coldMs, reusedMs, changedMs)).toBeLessThan(15_000);
+  });
 });

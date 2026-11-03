@@ -1,3 +1,7 @@
+import { qualityTrendLabel, gateDecisionLabel } from '../mutation/labels';
+import { explainFinding } from '../core/finding-explanation';
+import type { ReviewComparison } from '../core/review-comparison';
+import { renderMutationMarkdown } from './mutation-markdown';
 import { sanitizeText } from '../core/sanitize';
 import { tr } from '../core/i18n';
 import { attributionLabel, checkStatusLabel, evidenceRevisionLabel, riskLabel, severityLabel, verificationLabel } from '../core/labels';
@@ -46,8 +50,9 @@ function riskLine(result: ReviewResult): string {
   return `**${tr('Review risk: {0}', riskLabel(result.risk.level).toUpperCase())}**`;
 }
 
-export function renderMarkdown(result: ReviewResult): string {
+export function renderMarkdown(result: ReviewResult, comparison?: ReviewComparison): string {
   result = sanitizeText(result);
+  comparison = comparison ? sanitizeText(comparison) : undefined;
   const evidenceById = new Map(result.evidence.map((e) => [e.id, e]));
   const { risk } = result;
   const lines: string[] = [];
@@ -126,6 +131,8 @@ export function renderMarkdown(result: ReviewResult): string {
       lines.push('');
       lines.push(`**${tr('Suggested fix:')}** ${escapeMarkdown(finding.suggestedFix)}`);
     }
+    const explanation = explainFinding(result, finding);
+    lines.push('', `**${tr('What is still unproven')}**`, '', ...explanation.missingProof.map((note) => `- ${escapeMarkdown(note)}`));
     const evidence = finding.evidence.map((ref) => evidenceById.get(ref.evidenceId)).filter((e): e is Evidence => e !== undefined);
     if (evidence.length > 0) {
       lines.push('');
@@ -134,6 +141,19 @@ export function renderMarkdown(result: ReviewResult): string {
       evidence.forEach((e) => lines.push(evidenceBlock(e)));
     }
   }
+
+  if (result.performance) lines.push('', `## ${tr('Analysis measurements')}`, '', tr('Analysis duration: {0} ms. This is a runtime measurement, not verification evidence.', Math.round(result.performance.analysisMs)));
+  if (result.reproducibility?.length) {
+    lines.push('', `## ${tr('Baseline reproducibility')}`, '');
+    for (const item of result.reproducibility) lines.push(`- ${escapeMarkdown(item.checkId)}: ${item.status === 'comparable' ? tr('Comparable') : tr('Inconclusive')} — ${item.reasons.map(escapeMarkdown).join(' ')}`);
+  }
+  if (comparison) {
+    lines.push('', `## ${tr('Comparison with previous review')}`, '', comparison.comparable
+      ? tr('New: {0}; persisting: {1}; no longer observed: {2}. Disappearance alone does not prove resolution.', comparison.counts.new, comparison.counts.persisting, comparison.counts['no-longer-observed'])
+      : escapeMarkdown(comparison.reason ?? tr('The previous review is not comparable.')));
+    for (const item of comparison.entries) lines.push(`- ${escapeMarkdown((item.current ?? item.previous)?.title ?? '')}: ${escapeMarkdown(item.note)}`);
+  }
+  if (result.mutation) lines.push(...renderMutationMarkdown(result.mutation, escapeMarkdown));
 
   if (result.aiSummary) {
     lines.push('');
@@ -198,6 +218,13 @@ export function renderPullRequestDescription(result: ReviewResult): string {
   const { risk } = result;
   const v = risk.counts.byVerification;
   const lines: string[] = [];
+  if (result.mutation) {
+    lines.push('', `## ${tr('Mutation quality gate')}`, '',
+      `- ${tr('Quality trend: {0}', qualityTrendLabel(result.mutation.quality.trend))}`,
+      `- ${tr('Quality gate: {0}', gateDecisionLabel(result.mutation.gate.decision))}`,
+      ...result.mutation.gate.reasons.map((reason) => `- ${escapeMarkdown(reason)}`));
+  }
+
   if (result.aiSummary) {
     lines.push(`## ${tr('Summary')}`, '', ...walkthrough(result.aiSummary), '');
   }

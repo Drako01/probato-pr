@@ -234,6 +234,14 @@ export interface ReviewStats {
 }
 
 export interface ReviewResult {
+  /** Optional mutation verification; execution, verification, quality trend and gate remain independent. */
+  readonly mutation?: import('../mutation/model').MutationResult;
+  /** Policy decisions survive risk recalculation without preserving stale verification limitations. */
+  readonly policyNotes?: readonly string[];
+  /** Measurements of the actual analysis run; never verification evidence. */
+  readonly performance?: { readonly analysisMs: number; readonly analyzers: readonly { readonly analyzerId: string; readonly durationMs: number }[] };
+  /** Whether base/head dependency environments support causal attribution for each executed check. */
+  readonly reproducibility?: readonly { readonly checkId: string; readonly status: 'comparable' | 'inconclusive'; readonly reasons: readonly string[] }[];
   /** Exact local repository content used by the review; missing for remote-only or legacy results. */
   readonly snapshot?: string;
   readonly id: string;

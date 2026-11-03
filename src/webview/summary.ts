@@ -103,6 +103,7 @@ function renderHeader(s: SummaryState, r: SummaryReview): HTMLElement {
       h('div', { class: 'risk-level' }, r.risk.label.toUpperCase()),
       h('div', { class: 'repo' }, h('strong', {}, r.title), r.subtitle ? ` · ${r.subtitle}` : ''),
       h('div', { class: 'muted' }, r.stats),
+      r.analysisMs !== undefined && h('div', { class: 'muted' }, `${s.labels.analysisDuration}: ${r.analysisMs.toFixed(0)} ms`),
     ),
     h(
       'div',
@@ -179,6 +180,52 @@ function renderRisk(s: SummaryState, r: SummaryReview): HTMLElement | undefined 
   );
 }
 
+function renderExplanation(s: SummaryState, f: SummaryFinding): HTMLElement {
+  const explanation = f.explanation;
+  return h('section', { class: 'finding-proof' },
+    h('h3', {}, s.labels.findingExplanation),
+    h('h4', {}, s.labels.reportedObservation), h('p', {}, explanation.observation), h('p', { class: 'muted' }, explanation.observationNote),
+    h('h4', {}, s.labels.linkedEvidence),
+    h('ul', {}, ...explanation.evidence.map((reference) => h('li', {},
+      h('p', {}, reference.summary),
+      reference.locations.length > 0 && h('p', { class: 'muted' }, reference.locations.join(' · ')),
+      reference.available && button(s.labels.evidence, () => { post({ type: 'openEvidence', id: reference.id }); }, 'button secondary'),
+    ))),
+    h('h4', {}, s.labels.linkedChecks),
+    explanation.checks.length > 0
+      ? h('ul', {}, ...explanation.checks.map((check) => h('li', {}, `${check.label} · ${check.statusLabel}`, h('p', { class: 'muted' }, check.note))))
+      : h('p', { class: 'muted' }, s.labels.noLinkedChecks),
+    explanation.missingProof.length > 0 && h('h4', {}, s.labels.missingProof),
+    explanation.missingProof.length > 0 && h('ul', {}, ...explanation.missingProof.map((missing) => h('li', {}, missing))),
+  );
+}
+
+function renderComparison(s: SummaryState): HTMLElement {
+  const choose = h('select', { 'aria-label': s.labels.chooseComparison, 'data-key': 'comparison:select' });
+  choose.append(h('option', { value: '' }, s.labels.chooseComparison));
+  for (const candidate of s.comparisonOptions ?? []) choose.append(h('option', { value: candidate.id }, candidate.label));
+  choose.value = s.comparison?.previousId ?? '';
+  choose.disabled = Boolean(s.busy) || !(s.comparisonOptions?.length);
+  choose.addEventListener('change', () => { if (choose.value) post({ type: 'compareReview', id: choose.value }); });
+  const comparison = s.comparison;
+  const entries = comparison?.comparable ? comparison.entries : [];
+  return h('section', { class: 'panel' },
+    h('h2', {}, s.labels.comparison), h('p', { class: 'muted' }, s.labels.comparisonEligibility),
+    h('div', { class: 'actions' }, choose, comparison && button(s.labels.clearComparison, () => { post({ type: 'clearComparison' }); })),
+    comparison?.reason && h('p', { class: 'note' }, comparison.reason),
+    comparison?.comparable && h('p', {}, `${s.labels.newFindings}: ${comparison.counts.new} · ${s.labels.persistingFindings}: ${comparison.counts.persisting} · ${s.labels.noLongerObserved}: ${comparison.counts['no-longer-observed']}`),
+    h('ul', { class: 'findings' }, ...entries.map((entry) => h('li', { class: 'finding' },
+      h('details', {}, h('summary', {}, `${entry.label} · ${entry.title} · ${entry.file}:${entry.line}`),
+        h('p', { class: 'note' }, entry.note),
+        h('div', { class: 'actions' },
+          entry.currentFindingId && button(s.labels.open, () => { if (entry.currentFindingId) post({ type: 'openFinding', id: entry.currentFindingId }); }),
+          entry.passedCheckEvidenceId && button(s.labels.evidence, () => { if (entry.passedCheckEvidenceId) post({ type: 'openEvidence', id: entry.passedCheckEvidenceId }); }),
+        ),
+      ),
+    ))),
+  );
+}
+
 function renderFinding(s: SummaryState, f: SummaryFinding): HTMLElement {
   const open = view.expanded.includes(f.id);
   const toggle = (): void => {
@@ -201,7 +248,7 @@ function renderFinding(s: SummaryState, f: SummaryFinding): HTMLElement {
       h(
         'div',
         { class: 'finding-body' },
-        h('p', {}, f.description),
+        renderExplanation(s, f),
         h('p', { class: 'note' }, h('strong', {}, `${s.labels.whyStatus}: `), f.note),
         f.fix && h('p', { class: 'fix' }, h('strong', {}, `${s.labels.suggestedFix}: `), f.fix),
         h('div', { class: 'meta' }, [f.severityLabel, f.attribution, f.ruleId].filter(Boolean).join(' · ')),
@@ -273,6 +320,7 @@ function renderChecks(s: SummaryState, r: SummaryReview): HTMLElement {
     'section',
     { class: 'panel' },
     h('h2', {}, s.labels.checks),
+    Boolean(r.reproducibilityLimitations?.length) && h('div', {}, h('h3', {}, s.labels.reproducibilityLimitations), h('ul', {}, ...(r.reproducibilityLimitations ?? []).map((reason) => h('li', {}, reason)))),
     r.checks.length === 0
       ? h('p', { class: 'muted' }, s.labels.noChecks)
       : h(
@@ -295,6 +343,37 @@ function renderChecks(s: SummaryState, r: SummaryReview): HTMLElement {
           ),
         ),
   );
+}
+
+function renderMutation(s: SummaryState, r: SummaryReview): HTMLElement | undefined {
+  const mutation = r.mutation;
+  if (!r.hasLocalCheckout && !mutation) return undefined;
+  const panel = h('section', { class: 'panel mutation-panel' }, h('h2', {}, s.labels.mutationTitle), h('p', { class: 'muted' }, s.labels.mutationOptional));
+  if (r.hasLocalCheckout) panel.append(commandButton(s.labels.mutationRun, 'mutationTesting', 'button secondary'));
+  if (!mutation) return panel;
+  const axes = h('dl', { class: 'mutation-axes' });
+  for (const [label, axis] of [[s.labels.mutationExecution, mutation.execution], [s.labels.mutationVerification, mutation.verification], [s.labels.mutationQuality, mutation.quality], [s.labels.mutationGate, mutation.gate], [s.labels.mutationBaseline, mutation.baseline]] as const) {
+    axes.append(h('dt', {}, label), h('dd', {}, axis.label, ' ', h('code', {}, axis.value)));
+  }
+  panel.append(axes, h('p', { class: 'muted' }, s.labels.mutationMetricHelp));
+  const reasons = [...new Set([...mutation.verification.reasons, ...mutation.baseline.reasons, ...mutation.quality.reasons, ...mutation.gate.reasons])];
+  if (reasons.length) panel.append(h('ul', {}, ...reasons.map((reason) => h('li', {}, reason))));
+  if (mutation.quality.deltaPoints !== undefined) panel.append(h('p', {}, `${s.labels.mutationDelta}: ${mutation.quality.deltaPoints > 0 ? '+' : ''}${mutation.quality.deltaPoints.toLocaleString(document.documentElement.lang, { maximumFractionDigits: 4 })}`));
+  for (const run of mutation.runs) {
+    const section = h('section', {}, h('h3', {}, run.label), h('code', {}, run.command));
+    if (run.score !== undefined) section.append(h('p', {}, `${s.labels.mutationScore}: ${run.score.toLocaleString(document.documentElement.lang, { maximumFractionDigits: 2 })}%`));
+    if (run.killedOnlyScore !== undefined) section.append(h('p', { class: 'muted' }, `${s.labels.mutationKilledOnly}: ${run.killedOnlyScore.toLocaleString(document.documentElement.lang, { maximumFractionDigits: 2 })}%`));
+    section.append(h('ul', {}, ...run.counts.filter((count) => count.count > 0).map((count) => h('li', {}, `${count.label}: ${count.count}`))));
+    const details = h('details', {}, h('summary', {}, s.labels.evidence), h('ul', {}, ...run.context.map((line) => h('li', {}, line))));
+    if (run.reportHash) details.append(h('p', { class: 'mutation-hash' }, `${s.labels.mutationReportHash}: ${run.reportHash}`));
+    if (run.evidenceId) details.append(button(s.labels.evidence, () => { if (run.evidenceId) post({ type: 'openEvidence', id: run.evidenceId }); }, 'link'));
+    section.append(details); panel.append(section);
+  }
+  if (mutation.mutants.length) {
+    const list = h('ul', { class: 'checks' }, ...mutation.mutants.map((mutant) => h('li', {}, h('strong', {}, `${mutant.file}:${mutant.line}`), h('span', {}, mutant.status), h('span', { class: 'muted' }, `${s.labels.mutationRawStatus}: ${mutant.rawStatus}`), h('span', {}, `${s.labels.mutationAttribution}: ${mutant.attribution}`), mutant.detail && h('p', { class: 'muted' }, mutant.detail))));
+    panel.append(h('details', {}, h('summary', {}, s.labels.mutationMutants), h('p', { class: 'muted' }, mutation.displayed), list));
+  }
+  return panel;
 }
 
 function renderMore(s: SummaryState): HTMLElement {
@@ -325,7 +404,7 @@ function render(): void {
   // Re-rendering replaces the DOM; keep keyboard focus on the same control.
   const focused = document.activeElement?.getAttribute('data-key');
   app.replaceChildren(...[busy, ...(r ? [renderHeader(s, r), renderSteps(r),
-    renderDelivery(s), renderRisk(s, r), renderAi(s, r), renderFindings(s, r), renderChecks(s, r), renderMore(s)] : [renderEmpty(s)])].filter((n): n is HTMLElement => Boolean(n)));
+    renderDelivery(s), renderComparison(s), renderRisk(s, r), renderAi(s, r), renderFindings(s, r), renderChecks(s, r), renderMutation(s, r), renderMore(s)] : [renderEmpty(s)])].filter((n): n is HTMLElement => Boolean(n)));
   if (focused) {
     app.querySelector<HTMLElement>(`[data-key="${CSS.escape(focused)}"]`)?.focus();
   }
