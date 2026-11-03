@@ -5,9 +5,10 @@ webview, read-only GitHub access or promoting AI hypotheses from matching lines 
 
 ## Current decision
 
-**Packaged-host and remote acceptance pending.** The combined suite has passed 404 tests, TypeScript checks,
-lint with 1084 complete translation keys, production build and CLI smoke. Release completion still requires
-packaged Extension Host acceptance and the required remote checks.
+**Local acceptance recorded; merging requires the exact-head GitHub checks.** The combined suite passed 404 tests,
+TypeScript, lint with 1084 complete translation keys, production build and CLI smoke. The subsequent POSIX snapshot
+fix passed all 10 affected mutation-engine tests. The extracted VSIX passed 12 real Extension Host tests.
+Remote checks and publication are recorded separately in the pull request and release workflow.
 No skipped or inconclusive check is treated as PASS.
 
 ## Evidence already obtained
@@ -15,22 +16,22 @@ No skipped or inconclusive check is treated as PASS.
 | Area | Evidence | Qualification |
 |---|---|---|
 | Existing product | Baseline 0.4.1 had 269 unit tests and Linux/macOS/Windows CI verification. | Reuse only for unaffected behavior. |
-| Policies and verification | Focused tests and the final combined 404-test suite passed. | Packaged host and remote checks pending. |
+| Policies and verification | Focused tests and the final combined 404-test suite passed. | Exact-head remote checks are required before merge. |
 | Semantic contracts | Alias, reexport, ambiguity and snapshot tests passed; authored corpus expanded. | Not an independent comparative benchmark. |
-| Worker | Five focused tests passed, including real RPC, Spanish labels, heartbeat and cancel/restart. | Final packaged Extension Host acceptance pending. |
-| UI and history | Focused tests and the final combined 404-test suite passed. | Packaged host acceptance pending. |
+| Worker | Five focused tests passed, including real RPC, Spanish labels, heartbeat and cancel/restart. | Extracted VSIX: 8 single-repository and 4 multi-root tests passed. |
+| UI and history | Focused tests and the final combined 404-test suite passed. | Extracted VSIX: 12 tests passed. |
 | Performance | Existing three budgets passed; a 500-file sample measured 513.7 ms cold, 329.1 ms reused and 452.6 ms after correction. | Local sample, not a guarantee for other repositories. |
 | Mutation execution | Final hardened Stryker 10.1.1 fixture passed: base 5 killed/2 survived; changed tests 3 killed/4 survived; atomic terminal emission and Markdown/JSON/SARIF exports checked. | Integrated release gate remains pending. |
 | Open VSX | Installed CLI supports `--trusted-publishing`; focused publication tests passed. | Live publishing is not certified by a local test. |
 
 ## Final acceptance record
 
-Before declaring this release complete, record:
+The local acceptance record is:
 
-1. Final commit and clean packaged-content inventory, including the analysis worker. The integrated production build
-   measured a 1,234,507-byte activation bundle with no TypeScript compiler inputs.
-2. TypeScript, lint/i18n, unit tests and applicable Extension Host results. Production build and CLI smoke passed
-   during integration; final combined acceptance remains pending.
+1. VSIX inventory: 26 files, 3.77 MB, including the analysis worker and optional mutation runtime. The production
+   build measured a 1,234,507-byte activation bundle with no TypeScript compiler inputs.
+2. TypeScript, lint/i18n, 404 integrated unit tests, production build, CLI smoke and 12 packaged Extension Host tests
+   passed. The later POSIX dependency-link fix passed its 10 affected tests; remote runs certify the final total.
 3. The final real mutation E2E passed with source/dependency/configuration identities and exported reports. Command:
    `pnpm run test:mutation:e2e` with the explicit opt-in and prepared fixture variables in the mutation guide. The 58
    mutation unit tests passed.
@@ -48,4 +49,5 @@ Before declaring this release complete, record:
 - Remote SSH, WSL, Dev Containers, screen-reader acceptance and live AI-provider calls are separate validation.
 - Naming, trademark and legal availability were not reassessed in this technical upgrade.
 
-The exact final test counts and artifacts must be updated from actual run results, not inferred from this checklist.
+The PR checks certify the exact merge candidate. A successful local check does not certify Marketplace or Open VSX
+authentication; those results belong to the authorized release workflow.
