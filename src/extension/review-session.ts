@@ -150,6 +150,15 @@ export class ReviewSession implements vscode.Disposable {
     return true;
   }
 
+  /** A Git/content mutation invalidates evidence and results until a new review completes. */
+  invalidate(): void {
+    this.review = undefined;
+    this.outcome = undefined;
+    this.view = undefined;
+    this.planned = undefined;
+    this.changed(false);
+  }
+
   async clear(): Promise<void> {
     this.review = undefined;
     this.outcome = undefined;

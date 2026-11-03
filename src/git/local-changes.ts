@@ -58,16 +58,30 @@ interface Revisions {
 export class LocalChangeCollector {
   constructor(private readonly git: GitClient) {}
 
-  async collect(root: string, request: LocalReviewRequest, limits: ReviewLimits, signal?: AbortSignal): Promise<ChangeSet> {
+  async collect(root: string, request: LocalReviewRequest, limits: ReviewLimits, signal?: AbortSignal, allowEmpty = false): Promise<ChangeSet> {
     const [branch, headSha] = await Promise.all([this.git.currentBranch(root), this.git.resolveCommit(root, 'HEAD')]);
     const revisions = await this.resolveRevisions(root, request, headSha);
     const execOptions = { maxBytes: limits.maxDiffBytes, ...(signal ? { signal } : {}) };
 
     const diffText = await this.git.diff(root, revisions.diffArgs, execOptions);
     const parsed = parseUnifiedDiff(diffText);
+    const budgetSkipped: SkippedFile[] = [];
+    let eligibleCount = parsed.filter((f) => !matchesAnyGlob(f.path, limits.exclude)).length;
+    let bytes = Buffer.byteLength(diffText);
     if (revisions.includeUntracked) {
       for (const untracked of await this.git.untrackedFiles(root)) {
+        if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
+        if (matchesAnyGlob(untracked, limits.exclude) || eligibleCount >= limits.maxFiles) {
+          parsed.push({ path: untracked, status: 'added', binary: false, hunks: [], additions: 0, deletions: 0 });
+          continue;
+        }
         const content = await this.readWorkingFile(root, untracked, limits.maxFileBytes);
+        bytes += content === undefined ? 0 : Buffer.byteLength(content);
+        if (bytes > limits.maxDiffBytes) {
+          budgetSkipped.push({ path: untracked, reason: 'Untracked content exceeds probatoPR.review.maxDiffBytes' });
+          continue;
+        }
+        eligibleCount++;
         parsed.push(
           content === undefined
             ? { path: untracked, status: 'added', binary: false, hunks: [], additions: 0, deletions: 0 }
@@ -75,7 +89,7 @@ export class LocalChangeCollector {
         );
       }
     }
-    if (parsed.length === 0) {
+    if (parsed.length === 0 && !allowEmpty) {
       throw new NoChangesError(revisions.scope.label);
     }
 
@@ -98,7 +112,7 @@ export class LocalChangeCollector {
       scope: revisions.scope,
       repository: { name: path.basename(root), root, branch, headSha },
       files,
-      skipped,
+      skipped: [...skipped, ...budgetSkipped],
       content,
     };
   }

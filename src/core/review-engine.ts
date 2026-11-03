@@ -11,6 +11,7 @@ import {
   type ReviewResult,
 } from './model';
 import { assessRisk } from './risk';
+import { sanitizeText } from './sanitize';
 
 export type ProgressReporter = (message: string) => void;
 
@@ -44,6 +45,7 @@ export function dedupeFindings(findings: readonly ReviewFinding[]): ReviewFindin
 
 /** Recomputes derived data (ordering, risk) after findings, checks or evidence change. */
 export function finalizeResult(result: Omit<ReviewResult, 'risk'>): ReviewResult {
+  result = sanitizeText(result);
   const findings = sortFindings(dedupeFindings(result.findings));
   return {
     ...result,

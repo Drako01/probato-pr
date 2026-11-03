@@ -54,9 +54,9 @@ export function workflowSteps(session: ReviewSession): SummaryStep[] {
     {
       id: 'share',
       state: flow.share,
-      title: vscode.l10n.t('Share'),
-      detail: vscode.l10n.t('Copy a pull request description with the evidence, or export SARIF, Markdown or JSON.'),
-      ...(flow.review === 'done' ? { action: { command: 'copyPullRequestDescription' as const, label: vscode.l10n.t('Copy PR Description') } } : {}),
+      title: vscode.l10n.t('Deliver'),
+      detail: vscode.l10n.t('Create your pull request, share selected findings, follow CI and merge when GitHub permits it.'),
+      ...(flow.review === 'done' ? { action: { command: 'publishPullRequest' as const, label: vscode.l10n.t('Create or Update Pull Request') } } : {}),
     },
   ];
 }
@@ -100,6 +100,14 @@ function labels(): SummaryLabels {
     aiChange: vscode.l10n.t('Change AI'),
     copyDescription: vscode.l10n.t('Copy PR Description'),
     exportReport: vscode.l10n.t('Export Report'),
+    localGit: vscode.l10n.t('Local Git actions'),
+    delivery: vscode.l10n.t('GitHub delivery'),
+    deliveryHint: vscode.l10n.t('Prepare commits, publish your PR, collaborate, follow CI and merge from here.'),
+    publishPullRequest: vscode.l10n.t('Create or Update Pull Request'),
+    publishReview: vscode.l10n.t('Publish Selected Findings'),
+    pullRequestStatus: vscode.l10n.t('Pull Request and CI Status'),
+    mergePullRequest: vscode.l10n.t('Merge Pull Request'),
+    importSarif: vscode.l10n.t('Import SARIF evidence'),
   };
 }
 

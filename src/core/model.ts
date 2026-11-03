@@ -234,6 +234,8 @@ export interface ReviewStats {
 }
 
 export interface ReviewResult {
+  /** Exact local repository content used by the review; missing for remote-only or legacy results. */
+  readonly snapshot?: string;
   readonly id: string;
   readonly createdAt: string;
   readonly toolVersion: string;

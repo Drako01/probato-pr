@@ -2,7 +2,7 @@ import { stableId } from '../core/ids';
 import type { CheckResult, ReviewFinding, ReviewResult } from '../core/model';
 import { tr } from '../core/i18n';
 import { finalizeResult } from '../core/review-engine';
-import { fingerprint, type ToolDiagnostic } from './diagnostics-parser';
+import type { ToolDiagnostic } from './diagnostics-parser';
 import type { VerificationOutcome } from './verification-engine';
 
 const MAX_DIAGNOSTIC_FINDINGS_PER_CHECK = 100;
@@ -16,7 +16,7 @@ function diagnosticFinding(
 ): ReviewFinding {
   const introduced = mode === 'introduced';
   return {
-    id: stableId('verification', check.checkId, diagnostic.file, diagnostic.code, diagnostic.message),
+    id: stableId('verification', check.checkId, diagnostic.file, diagnostic.line, diagnostic.column, diagnostic.code, diagnostic.message),
     ruleId: `verification/${check.kind}`,
     severity: introduced ? 'high' : 'medium',
     verification: introduced ? 'confirmed' : 'evidenced',
@@ -49,49 +49,9 @@ export function applyVerification(review: ReviewResult, outcome: VerificationOut
       continue;
     }
     const headEvidenceId = check.headEvidenceId;
-    const introduced = new Set(diag.introduced.map(fingerprint));
-    const preExisting = new Set(diag.preExisting.map(fingerprint));
-    const matched = new Set<string>();
-
-    findings = findings.map((finding) => {
-      const hits = diag.head.filter((d) => d.file === finding.location.file && d.line >= finding.location.startLine && d.line <= (finding.location.endLine ?? finding.location.startLine));
-      if (hits.length === 0) {
-        return finding;
-      }
-      hits.forEach((h) => matched.add(fingerprint(h)));
-      const codes = [...new Set(hits.map((h) => h.code))].join(', ');
-      const evidence = [...finding.evidence, { evidenceId: headEvidenceId, summary: tr('{0} reports {1} at this line', check.label, codes) }];
-      const newOnes = hits.filter((h) => introduced.has(fingerprint(h)));
-      if (diag.hasBaseline && newOnes.length > 0) {
-        return {
-          ...finding,
-          evidence,
-          verification: 'confirmed',
-          attribution: 'introduced',
-          verificationNote:
-            finding.origin === 'ai'
-              ? tr('AI suspicion confirmed: "{0}" reports {1} at this location with this change, and not on the base revision.', check.label, codes)
-              : tr('Confirmed: "{0}" reports {1} at this location with this change, and not on the base revision.', check.label, codes),
-        };
-      }
-      if (diag.hasBaseline && hits.every((h) => preExisting.has(fingerprint(h)))) {
-        return {
-          ...finding,
-          evidence,
-          verification: finding.verification === 'suspected' ? 'evidenced' : finding.verification,
-          attribution: 'pre-existing',
-          verificationNote: `${finding.verificationNote} ${tr('"{0}" reports {1} here on the base revision too, so this error predates the change.', check.label, codes)}`,
-        };
-      }
-      return {
-        ...finding,
-        evidence,
-        verification: finding.verification === 'suspected' || finding.verification === 'not-verified' ? 'evidenced' : finding.verification,
-        verificationNote: `${finding.verificationNote} ${tr('"{0}" reports {1} at this line (no baseline comparison, so attribution is unknown).', check.label, codes)}`,
-      };
-    });
-
-    const unmatched = (diag.hasBaseline ? diag.introduced : diag.head.filter((d) => changed.has(d.file))).filter((d) => !matched.has(fingerprint(d)));
+    // A compiler diagnostic proves that diagnostic, not any analyzer/AI hypothesis on the same
+    // line. Keep both findings independent; only the executed diagnostic can become confirmed.
+    const unmatched = diag.hasBaseline ? diag.introduced : diag.head.filter((d) => changed.has(d.file));
     for (const d of unmatched.slice(0, MAX_DIAGNOSTIC_FINDINGS_PER_CHECK)) {
       extra.push(diagnosticFinding(check, d, headEvidenceId, diag.hasBaseline ? 'introduced' : 'unattributed'));
     }

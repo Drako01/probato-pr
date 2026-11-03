@@ -1,4 +1,5 @@
 import * as path from 'node:path';
+import { detectMonorepoChecks } from './monorepo-checks';
 import { uniqueId } from '../core/ids';
 import { tr } from '../core/i18n';
 import type { CheckResult, CheckStatus, CommandEvidence, CommandOutcome, PlannedCheck, Revision } from '../core/model';
@@ -13,6 +14,8 @@ const EXCERPT_CHARS = 20_000;
 
 export interface VerificationRequest {
   readonly repoRoot: string;
+  /** Original checkout providing installed dependencies when repoRoot is an isolated reviewed worktree. */
+  readonly dependencyRoot?: string;
   /** Checks the user explicitly approved. Nothing else is executed. */
   readonly approved: readonly PlannedCheck[];
   /** Re-run failing checks on this commit (user-approved) to attribute failures; undefined disables baselines. */
@@ -60,7 +63,8 @@ function statusOf(outcome: CommandOutcome): CheckStatus {
 /** Converts a real process run into evidence. This is the only place command evidence is created. */
 export function toEvidence(check: PlannedCheck, run: RunResult, revision: Revision, commitSha: string | undefined, dirty: boolean, cwd: string): CommandEvidence {
   const outcome = outcomeOf(run);
-  const excerpt = run.output.length > EXCERPT_CHARS ? run.output.slice(-EXCERPT_CHARS) : run.output;
+  const redacted = redactSecrets(run.output);
+  const excerpt = redacted.length > EXCERPT_CHARS ? redacted.slice(-EXCERPT_CHARS) : redacted;
   return {
     kind: 'command-run',
     id: `cmd-${uniqueId()}`,
@@ -75,7 +79,7 @@ export function toEvidence(check: PlannedCheck, run: RunResult, revision: Revisi
     exitCode: run.exitCode,
     signal: run.signal,
     outcome,
-    outputExcerpt: redactSecrets(excerpt),
+    outputExcerpt: excerpt,
     outputTruncated: run.truncated || run.output.length > EXCERPT_CHARS,
     outputSha256: run.outputSha256,
     ...(run.spawnError
@@ -122,10 +126,18 @@ export class VerificationEngine {
       request.progress?.(tr('Preparing base revision worktree'));
       let worktree: BaselineWorktree | undefined;
       try {
-        worktree = await BaselineWorktree.create(this.git, request.repoRoot, request.baselineCommit);
+        worktree = await BaselineWorktree.create(this.git, request.repoRoot, request.baselineCommit, failing.map((check) => check.cwd), request.dependencyRoot ?? request.repoRoot);
+        const [headDefinitions, baseDefinitions] = await Promise.all([
+          detectMonorepoChecks(request.repoRoot, process.platform, undefined, undefined, request.dependencyRoot),
+          detectMonorepoChecks(worktree.directory, process.platform, undefined, undefined, request.dependencyRoot ?? request.repoRoot),
+        ]);
         for (const check of failing) {
           if (request.signal?.aborted) {
             break;
+          }
+          if (!sameExecutionDefinition(headDefinitions, baseDefinitions, check)) {
+            baselineError = tr('Baseline check definitions differ from the approved head definitions; attribution is inconclusive.');
+            continue;
           }
           request.progress?.(tr('Running {0} on base revision', check.label));
           const run = await this.runner.run(check.command, {
@@ -184,9 +196,18 @@ export class VerificationEngine {
         head: head.diagnostics,
         introduced: result.introducedDiagnostics,
         preExisting: result.preExistingDiagnostics,
-        hasBaseline: base !== undefined && (base.evidence.outcome === 'passed' || base.evidence.outcome === 'failed'),
+        hasBaseline: base !== undefined && (result.attribution === 'introduced' || result.attribution === 'pre-existing'),
       });
     }
     return { checks, evidence, diagnostics, ...(baselineError ? { baselineError } : {}) };
   }
+}
+
+/** Definitions use the same inherited package-manager discovery as the approved monorepo plan. */
+function sameExecutionDefinition(headPlan: readonly PlannedCheck[], basePlan: readonly PlannedCheck[], check: PlannedCheck): boolean {
+  const command = JSON.stringify(check.command);
+  const current = headPlan.find((candidate) => candidate.cwd === check.cwd && JSON.stringify(candidate.command) === command);
+  // Explicit custom checks have no detector definition; their exact argv remains unchanged.
+  if (!current) return true;
+  return basePlan.some((candidate) => candidate.cwd === check.cwd && JSON.stringify(candidate.command) === command && candidate.fingerprint === current.fingerprint);
 }

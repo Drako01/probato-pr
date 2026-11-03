@@ -83,6 +83,7 @@ describe('GitHub', () => {
 
   it('builds a change set from the API and fetches contents lazily per side (mocked fetch)', async () => {
     const fetchFn = vi.fn((url: string) => {
+      if (url.includes('/compare/')) return Promise.resolve(Response.json({ merge_base_commit: { sha: 'm'.repeat(40) } }));
       if (url.includes('/files?')) {
         return Promise.resolve(Response.json([{ filename: 'src/a.ts', status: 'modified', additions: 1, deletions: 1, patch: '@@ -1 +1 @@\n-old\n+new' }]));
       }
@@ -93,6 +94,7 @@ describe('GitHub', () => {
     });
     const client = new GitHubClient(fetchFn, () => Promise.resolve(undefined));
     const set = await pullRequestChangeSet(client, { owner: 'o', repo: 'r' }, pull, { maxFiles: 10, maxDiffBytes: 1e6, maxFileBytes: 1e6, exclude: [] }, { name: 'o/r', root: '', branch: 'feat', headSha: pull.head.sha });
+    expect(set.scope.baseSha).toBe('m'.repeat(40));
     expect(set.files[0]?.additions).toBe(1);
     expect(await set.content.read('src/a.ts', 'head')).toBe('new\n');
     expect(await set.content.read('src/a.ts', 'base')).toBe('old\n');

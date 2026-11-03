@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { ReviewResult } from '../core/model';
+import { sanitizeText } from '../core/sanitize';
 
 export interface HistoryEntry {
   readonly id: string;
@@ -40,7 +41,7 @@ export class HistoryStore {
     }
     try {
       const parsed = JSON.parse(await readFile(this.file, 'utf8')) as Partial<StoredState>;
-      return parsed.version === 1 && Array.isArray(parsed.history) ? (parsed as StoredState) : empty;
+      return parsed.version === 1 && Array.isArray(parsed.history) ? sanitizeText(parsed as StoredState) : empty;
     } catch {
       // Missing or corrupt file: history is a convenience, so start fresh rather than fail activation.
       return empty;
@@ -49,7 +50,7 @@ export class HistoryStore {
 
   /** Writes are serialized and atomic (temp file + rename) so an interrupted save never corrupts history. */
   save(review: ReviewResult, verified: ReviewResult | undefined): Promise<void> {
-    this.writing = this.writing.then(async () => {
+    const operation = this.writing.catch(() => undefined).then(async () => {
       const file = this.file;
       if (!file || !this.directory) {
         return;
@@ -70,10 +71,12 @@ export class HistoryStore {
       };
       await mkdir(this.directory, { recursive: true });
       const temp = `${file}.${process.pid}.tmp`;
-      await writeFile(temp, JSON.stringify(next), 'utf8');
+      await writeFile(temp, JSON.stringify(sanitizeText(next)), 'utf8');
       await rename(temp, file);
     });
-    return this.writing;
+    // Keep the queue usable after a transient failure while the caller still receives that failure.
+    this.writing = operation.catch(() => undefined);
+    return operation;
   }
 
   async clear(): Promise<void> {

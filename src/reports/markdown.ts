@@ -1,3 +1,4 @@
+import { sanitizeText } from '../core/sanitize';
 import { tr } from '../core/i18n';
 import { attributionLabel, checkStatusLabel, evidenceRevisionLabel, riskLabel, severityLabel, verificationLabel } from '../core/labels';
 import { SEVERITIES, type AiSummary, type Evidence, type ReviewFinding, type ReviewResult } from '../core/model';
@@ -46,6 +47,7 @@ function riskLine(result: ReviewResult): string {
 }
 
 export function renderMarkdown(result: ReviewResult): string {
+  result = sanitizeText(result);
   const evidenceById = new Map(result.evidence.map((e) => [e.id, e]));
   const { risk } = result;
   const lines: string[] = [];
@@ -192,6 +194,7 @@ function walkthrough(summary: AiSummary): string[] {
  * Probato PR verified. Works without AI. Repository-controlled text is escaped like the full report.
  */
 export function renderPullRequestDescription(result: ReviewResult): string {
+  result = sanitizeText(result);
   const { risk } = result;
   const v = risk.counts.byVerification;
   const lines: string[] = [];

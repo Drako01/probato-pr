@@ -6,9 +6,14 @@
 
 <p align="center"><strong>Code review with proof.</strong><br>Your AI reviews the code. We verify what could break.</p>
 
-Probato PR reviews your Git changes and pull requests inside VS Code and tells you **what is proven, what is only suspected, and why**. It runs deterministic analyzers locally, can execute your project's own checks with your approval, and compares results against the base revision to tell a regression *introduced by your change* from a failure that was already there.
+Probato PR reviews your Git changes and pull requests inside VS Code and tells you **what is proven, what is only
+suspected, and why**. It runs deterministic analyzers locally, can execute your project's own checks with your approval,
+and compares results against the base revision to tell a regression *introduced by your change* from a failure that was
+already there. Version 0.3 adds the complete GitHub delivery flow: prepare commits, publish a PR, collaborate,
+follow CI and merge from the editor.
 
-No account, no AI key, no server, no subscription is needed for the core review. When you want more, **bring your own AI**: GitHub Copilot, Claude, OpenAI or a local model.
+No account, no AI key, no server, no subscription is needed for the core review. When you want more, **bring your own
+AI**: GitHub Copilot, Claude, OpenAI or a local model.
 
 ## Why Probato PR
 
@@ -21,43 +26,78 @@ Most AI review tools return a list of opinions. Probato PR classifies every find
 | **Suspected** | Probable issue from heuristics or AI. Not backed by an executed check. |
 | **Not verified** | The verification this finding needs could not be performed — and the report says why. |
 
-An AI claim on its own is never "confirmed": it becomes confirmed only when one of your executed checks fails at that exact line with this change and not on the base revision. A failing test is never blamed on your change without a passing baseline.
+An AI claim stays suspected. Executed tool diagnostics are reported independently and become confirmed only
+when a comparable baseline establishes the regression. A compiler error at the same location does not prove
+an unrelated AI hypothesis.
 
-## See it in action
+## See version 0.3 in action
 
-A review of a branch that adds loyalty discounts: the **Review Summary** gives the risk and the next step, you choose which of your own checks may run, and the failing type-check turns a static suspicion into a **Confirmed** finding.
+Review, verify and deliver from the same panel. The summary separates static evidence from executed checks and
+shows the GitHub actions available for the reviewed change.
 
-![Review Summary: risk, the three steps (Review, Verify, Share), the reasons for the risk and its limitations](media/screenshots/review-summary.png)
+![Probato PR 0.3: review risk, evidence and the Review, Verify, Deliver workflow](media/screenshots/review-summary.png)
 
-![Findings grouped by severity with their evidence status, and the executed checks with their attribution to the change](media/screenshots/findings.png)
+Prepare a branch, stage selected files, commit and push without leaving the editor. Each write asks for confirmation.
 
-![Approval step: the commands that would run are listed and nothing executes until you accept](media/screenshots/approve-checks.png)
+![Local Git actions: branches, staging, commits, push and synchronization](media/screenshots/local-git.png)
 
-*The screenshots use the Spanish display language; Probato PR follows the language of VS Code (English and Spanish).*
+Create or update a PR, publish selected findings, manage conversations and reviews, follow CI, and merge or enqueue
+when GitHub requirements are satisfied.
+
+![GitHub delivery: pull requests, conversations, reviews, CI and merge](media/screenshots/github-delivery.png)
+
+*Real screenshots of version 0.3.0 in English, using a local demonstration repository with seeded defects.
+Opening the action menus does not publish anything. Probato PR also includes Spanish translations.*
 
 ## Quick start
 
 1. Install **Probato PR** from the Extensions view.
 2. Open a folder that is a Git repository and **trust** the workspace.
-3. Open the **Probato PR** view in the Activity Bar and click **Review Current Changes** (or use the compare button in the **Source Control** view, or run `Probato PR: Review Current Changes` from the Command Palette). In multi-root workspaces you pick the repository.
-4. The **Review Summary** opens with the review risk, the findings and the next step highlighted. Click a finding to open the code beside it. Findings also appear in the **Problems** panel, where the light bulb lets you dismiss a finding, open its evidence or jump to the summary.
-5. **Verify:** run your project's type-check, lint, tests or build. You choose exactly which commands run, and you can choose **Run and remember** so the same checks run without asking next time in that repository, until a command or script changes.
-6. **Share:** click **Copy PR Description** and paste it into your pull request, or export a **Markdown**, **SARIF** or **JSON** report.
+3. Open the **Probato PR** view in the Activity Bar and click **Review Current Changes** (or use the compare button in
+   the **Source Control** view, or run `Probato PR: Review Current Changes` from the Command Palette). In multi-root
+   workspaces you pick the repository.
+4. The **Review Summary** opens with the review risk, the findings and the next step highlighted. Click a finding to
+   open the code beside it. Findings also appear in the **Problems** panel, where the light bulb lets you dismiss a
+   finding, open its evidence or jump to the summary.
+5. **Verify:** run your project's type-check, lint, tests or build. You choose exactly which commands run, and you can
+   choose **Run and remember** so the same checks run without asking next time in that repository, while the repository
+   content and execution definitions remain unchanged.
+6. **Deliver:** use **Local Git Actions** to stage, commit and push. Review the committed branch, then open
+   **GitHub Delivery** to create or update a PR, publish selected findings, follow CI and merge. Sign in to GitHub
+   when requested. You can also copy the PR description or export Markdown, SARIF or JSON.
 7. Optional: **Connect Your AI** to add a second opinion and a written walkthrough of the change (see below).
 
 New to Probato PR? Run `Welcome: Open Walkthrough` and pick **Get started with Probato PR**.
 
+## Complete GitHub delivery
+
+Use **Probato PR: GitHub Delivery** to create or update pull requests, publish selected findings, manage reviews
+and conversations, follow CI, read job logs and merge with an expected commit and destination. **Local Git Actions**
+handles branches, staging, commits, pushes and fast-forward synchronization. Every write presents its destination
+and content before execution. See the [delivery guide](docs/DELIVERY.md) for the full workflow and CLI.
+
 ## Features
 
-- **Review scopes:** current changes (staged + unstaged + untracked), staged changes, a branch against its merge base, a single commit, or a GitHub pull request.
+- **Review scopes:** current changes (staged + unstaged + untracked), staged changes, a branch against its merge base, a
+  single commit, or a GitHub pull request.
 - **Deterministic analyzers (no AI):**
-  - *Contracts* (TypeScript/JavaScript AST): removed or renamed exports still imported elsewhere, new required parameters with stale call sites, removed enum members and interface properties still in use, deleted or moved modules still imported.
-  - *Test integrity:* deleted test files, removed cases, `.only` / `.skip` / `xit`, tests whose assertions were removed (AST), Go `t.Skip` and removed `TestXxx` functions.
-  - *Secrets:* known credential formats on added lines, sensitive files (`.env`, keys, certificates) added to Git. Excerpts are always redacted.
-  - *Error handling:* new empty `catch` blocks, swallowed promise rejections, new `@ts-ignore` / `@ts-nocheck` / `eslint-disable`.
-  - *Dependencies:* new or changed install scripts (`postinstall`…), major upgrades, packages removed but still imported, local `replace` directives in `go.mod`.
-  - *Configuration:* TypeScript strictness disabled, risky GitHub Actions triggers (`pull_request_target` + PR head checkout, `write-all`).
-- **Verification engine:** detects checks already present in your project, shows the exact commands, runs only what you approve, captures evidence (command, revision, exit code, duration, output hash, redacted output), and re-runs failing checks on the base revision in a temporary Git worktree to attribute failures. Compiler and linter errors are linked to the finding at that line, which is how a suspicion becomes **confirmed**.
+  - *Contracts* (TypeScript/JavaScript AST): removed or renamed exports still imported elsewhere, new required
+    parameters with stale call sites, removed enum members and interface properties still in use, deleted or moved
+    modules still imported.
+  - *Test integrity:* deleted test files, removed cases, `.only` / `.skip` / `xit`, tests whose assertions were removed
+    (AST), Go `t.Skip` and removed `TestXxx` functions.
+  - *Secrets:* known credential formats on added lines, sensitive files (`.env`, keys, certificates) added to Git.
+    Excerpts are always redacted.
+  - *Error handling:* new empty `catch` blocks, swallowed promise rejections, new `@ts-ignore` / `@ts-nocheck` /
+    `eslint-disable`.
+  - *Dependencies:* new or changed install scripts (`postinstall`…), major upgrades, packages removed but still
+    imported, local `replace` directives in `go.mod`.
+  - *Configuration:* TypeScript strictness disabled, risky GitHub Actions triggers (`pull_request_target` + PR head
+    checkout, `write-all`).
+- **Verification engine:** detects checks already present in your project, shows the exact commands, runs only what you
+  approve, captures evidence (command, revision, exit code, duration, output hash, redacted output), and re-runs failing
+  checks on the base revision in a temporary Git worktree to attribute failures. Compiler and linter errors are linked
+  as independent findings; a comparable baseline can make that executed diagnostic **confirmed**.
 
   | Ecosystem | Detected from | Checks |
   |---|---|---|
@@ -67,15 +107,29 @@ New to Probato PR? Run `Welcome: Open Walkthrough` and pick **Get started with P
   | Python | `pyproject.toml`, `setup.cfg`, `requirements.txt`… | mypy, ruff and pytest when configured, with the project's virtual environment (`.venv`, `venv`, `env`) |
   | Rust | `Cargo.toml` | `cargo check`, `cargo clippy`, `cargo test` |
   | Java / Kotlin | `pom.xml`, `build.gradle(.kts)` | Maven `compile` / `test`, Gradle `assemble` / `test`, through `mvnw` / `gradlew` when present |
-- **Guided Review → Verify → Share flow:** the Review Summary panel, the Overview view and the status bar always show the same step states and the next action. Findings can be filtered by severity and grouped by severity or by file; the Activity Bar badge shows how many are open.
-- **Explainable review risk:** a label (`LOW` … `CRITICAL`) with the reasons and the limitations behind it. Passing checks never mean "safe".
+
+- **Guided Review → Verify → Deliver flow:** the Review Summary panel, the Overview view and the status bar always show
+  the same step states and the next action. Findings can be filtered by severity and grouped by severity or by file; the
+  Activity Bar badge shows how many are open.
+- **Explainable review risk:** a label (`LOW` … `CRITICAL`) with the reasons and the limitations behind it. Passing
+  checks never mean "safe".
 - **Reports:** Markdown, SARIF 2.1.0 (GitHub code scanning compatible) and full JSON with evidence.
-- **Pull request description:** one click copies a Markdown description with the review risk, the executed checks and the top findings, plus the AI walkthrough when you ran one.
+- **Pull request description:** one click copies a Markdown description with the review risk, the executed checks and
+  the top findings, plus the AI walkthrough when you ran one.
+- **Monorepos:** discover checks in nested project roots; execute staged and historical checks in isolated worktrees.
+- **Cross-stack hints:** OpenAPI JSON/YAML and TypeScript DTO properties, SQL column references and tenant-filter
+  removals. Inferred relationships remain suspected.
+- **External evidence:** import SARIF without accepting external claims of causal confirmation.
+- **Incremental review:** opt-in review on save with a bounded, content-aware in-memory analyzer cache.
+- **CLI for CI:** the same review engine with severity exit codes and explicitly authorized checks.
 - **Bring your own AI (optional):** see the next section.
 
 ## Bring your own AI
 
-Probato PR works without AI. Connecting one adds a second opinion on the change and a written walkthrough for the pull request description. Run **Probato PR: Connect Your AI** (or click *Connect Your AI* in the Review Summary): pick a provider, enter your key, and choose a model from the provider's own list. Listing the models also checks the connection, without spending tokens.
+Probato PR works without AI. Connecting one adds a second opinion on the change and a written walkthrough for the pull
+request description. Run **Probato PR: Connect Your AI** (or click *Connect Your AI* in the Review Summary): pick a
+provider, enter your key, and choose a model from the provider's own list. Listing the models also checks the
+connection, without spending tokens.
 
 | Provider | What you need |
 |---|---|
@@ -86,17 +140,26 @@ Probato PR works without AI. Connecting one adds a second opinion on the change 
 
 What the AI receives, and the guarantees around it:
 
-- **You confirm every time.** Before each AI review, a dialog lists the files whose diff is sent, the files whose full content is added for context, and the files left out with the reason.
-- **Context:** the diffs first, then the full current content of changed files while `probatoPR.ai.maxContextChars` allows (turn it off with `probatoPR.ai.includeFileContent`), plus what Probato PR already found so the model does not repeat it.
-- **Never sent:** sensitive files (`.env*`, keys, certificates, credentials) and your `probatoPR.ai.exclude` globs. Detected secrets are redacted.
-- **Keys** live in your OS keychain (VS Code SecretStorage), each one bound to the server it was entered for. The base URL is a user-level setting, so a repository's workspace settings cannot redirect your key. HTTPS is required except for servers on your own machine.
-- **AI output is untrusted.** It is parsed against a schema; findings and walkthrough entries pointing at files or lines outside the shared diff are rejected; nothing in a response is ever executed. AI findings stay *suspected*, and become *confirmed* only when your own checks prove them.
+- **You confirm every time.** Before each AI review, a dialog lists the files whose diff is sent, the files whose full
+  content is added for context, and the files left out with the reason.
+- **Context:** the diffs first, then the full current content of changed files while `probatoPR.ai.maxContextChars`
+  allows (turn it off with `probatoPR.ai.includeFileContent`), plus what Probato PR already found so the model does not
+  repeat it.
+- **Never sent:** sensitive files (`.env*`, keys, certificates, credentials) and your `probatoPR.ai.exclude` globs.
+  Detected secrets are redacted.
+- **Keys** live in your OS keychain (VS Code SecretStorage), each one bound to the server it was entered for. The base
+  URL is a user-level setting, so a repository's workspace settings cannot redirect your key. HTTPS is required except
+  for servers on your own machine.
+- **AI output is untrusted.** It is parsed against a schema; findings and walkthrough entries pointing at files or lines
+  outside the shared diff are rejected; nothing in a response is ever executed. AI findings stay *suspected*. Executed
+  diagnostics are reported separately with their own evidence and attribution.
 
 ## Requirements
 
 - VS Code 1.99 or newer, desktop (local, WSL or remote hosts with a local file system).
 - Git on `PATH`.
-- For verification: your project's own tools already installed (e.g. `node_modules`, Go toolchain). Probato PR **never installs** anything.
+- For verification: your project's tools already installed. Probato PR never runs an install command; build tools
+  may download dependencies as part of an explicitly approved check.
 
 ## Supported languages
 
@@ -105,14 +168,23 @@ What the AI receives, and the guarantees around it:
 | Diff review, secrets, configuration | Any text file |
 | AST analysis (contracts, tests, error handling) | TypeScript, JavaScript (incl. TSX/JSX, ESM/CJS) |
 | Line-level test checks, `go.mod` checks | Go |
-| Verification (executes your tools) | Node.js projects (npm, pnpm, yarn scripts; local `tsc`), Go modules |
+| Verification (executes your tools) | Node.js, Go, PHP, Python, Rust, Java and Kotlin; nested projects in monorepos |
 
-Python, PHP, Java, SQL migrations, OpenAPI, Docker and Terraform are on the roadmap (`ROADMAP.md`). Probato PR does not claim support for a language it only reads as text.
+OpenAPI JSON/YAML, TypeScript DTOs, SQL migrations and tenant-filter removals also have conservative cross-stack
+checks. Their inferred relationships remain suspected. Parser-based PHP/Python/Java semantic analysis and
+Docker/Terraform checks remain future work; executing a language tool is separate from analyzing its semantics.
 
 ## Commands
 
 | Command | Description |
 |---|---|
+| `Probato PR: Local Git Actions` | Create/switch branches, stage, commit, push, synchronize or delete a merged local branch. |
+| `Probato PR: GitHub Delivery` | Open the complete PR workflow, including conversations, reviews and merge queue. |
+| `Probato PR: Create or Update Pull Request` | Preview and publish a draft PR or update its description. |
+| `Probato PR: Publish Selected Findings` | Preview and publish selected observations on valid PR diff locations. |
+| `Probato PR: Pull Request and CI Status` | Inspect CI results, blockers and GitHub Actions logs. |
+| `Probato PR: Merge Pull Request` | Refresh requirements and merge the expected commit after confirmation. |
+| `Probato PR: Import SARIF Evidence` | Add external diagnostics without claiming a verified execution. |
 | `Probato PR: Review Current Changes` | Staged, unstaged and untracked changes vs `HEAD`. |
 | `Probato PR: Review Staged Changes` | Index vs `HEAD`. |
 | `Probato PR: Review Branch` | `HEAD` vs merge base with the base branch. |
@@ -135,6 +207,7 @@ Python, PHP, Java, SQL migrations, OpenAPI, Docker and Terraform are on the road
 | Setting | Default | Description |
 |---|---|---|
 | `probatoPR.review.baseBranch` | `""` | Base for branch reviews; empty = `origin/HEAD`, then `main`/`master`. |
+| `probatoPR.review.onSave` | `false` | Re-review current changes on save; never auto-run checks or send data to AI. |
 | `probatoPR.review.maxFiles` | `300` | Files analyzed per review; extra files are listed as skipped. |
 | `probatoPR.review.maxDiffBytes` | `4000000` | Maximum diff size read from Git. |
 | `probatoPR.review.exclude` | lockfiles, `dist`, `node_modules`… | Globs not analyzed. |
@@ -150,28 +223,58 @@ Python, PHP, Java, SQL migrations, OpenAPI, Docker and Terraform are on the road
 | `probatoPR.ai.maxContextChars` | `120000` | Characters of repository data (diffs + file content) sent per AI review. |
 | `probatoPR.ai.exclude` | `[]` | Extra globs never sent to AI (sensitive files are always excluded). |
 
+## Command line
+
+Build with `pnpm run build:prod`, then use the same engine outside the editor:
+
+```bash
+node dist/cli.cjs --scope branch --base origin/main --format sarif --output /tmp/probato.sarif
+node dist/cli.cjs --list-checks
+node dist/cli.cjs --verify script:typecheck --baseline --format json
+```
+
+Choose a suitable temporary output path on Windows. Checks execute only when explicitly selected with `--verify`;
+`--baseline` also authorizes the base comparison. Exit codes are 0 below the finding threshold, 1 when the threshold
+is reached and 2 for execution/configuration errors. See the [delivery guide](docs/DELIVERY.md) for all options.
+
 ## Offline mode
 
-Everything except pull request review and AI review works fully offline. If GitHub or the AI provider is unreachable, local review is unaffected.
+Local review and reports work offline. GitHub delivery, remote Git operations and AI review need their respective
+services. Approved project checks may use the network themselves. Service failures do not prevent local review.
 
 ## Security and privacy
 
 - Works only in **trusted workspaces**; Restricted Mode disables it, as VS Code requires for tools that run processes.
-- Read-only by default: reviews never modify your files. Verification commands run **only after explicit approval** and run with your normal user permissions — **they are not sandboxed**. A remembered approval is stored outside the repository and bound to a hash of the command and the script body: if a script changes (for example in a branch someone else wrote), Probato PR asks again.
-- Git is invoked with repository-config execution paths disabled (fsmonitor, external diff, textconv, hooks for the baseline worktree).
-- Secrets are redacted from stored evidence, reports and AI context. API keys live in VS Code SecretStorage, bound to the server they were entered for.
-- No telemetry. Nothing leaves your machine unless you use PR review (GitHub API) or AI review (after a confirmation that lists the files).
+- Read-only by default: reviews never modify your files. Verification commands run **only after explicit approval** and
+  run with your normal user permissions — **they are not sandboxed**. A remembered approval is stored outside the
+  repository and bound to its content snapshot, command, scripts and configuration. Repository changes require approval
+  again.
+- Git is invoked with repository-config execution paths disabled (fsmonitor, external diff, textconv, hooks for the
+  baseline worktree).
+- Secrets are redacted from stored evidence, reports and AI context. API keys live in VS Code SecretStorage, bound to
+  the server they were entered for.
+- No telemetry. GitHub delivery uses the GitHub API; push and synchronization use Git remotes. AI review requires a
+  confirmation listing the shared files. Approved project checks can make their own network requests.
 
 Details: `SECURITY.md` · `PRIVACY.md`.
 
 ## Known limitations
 
-- Cross-file contract analysis resolves relative imports and the root `tsconfig.json` `baseUrl`/`paths` aliases; `extends` chains and package-name self-imports are not followed yet (a passing type-check automatically downgrades such findings to *suspected*).
-- Baseline runs link `node_modules` from your checkout; monorepos with per-package `node_modules` may produce inconclusive baselines.
-- For PHP and Python, `vendor/` and virtual environments are deliberately **not** linked into the baseline: a Composer autoloader or an editable install would load the changed code instead of the base revision and produce a false attribution. Failures are reported as inconclusive instead. Rust and Java builds run from scratch in the baseline worktree, which is correct but slower.
-- Checks are detected at the repository root only.
-- Pull requests are reviewed from the GitHub API; verification and cross-file analysis require the PR head to be checked out locally.
-- Verified on Windows 11 with VS Code 1.144. Linux, macOS, WSL, Dev Containers and Remote SSH have not been verified yet — see `PRODUCT_RELEASE_READINESS.md`.
+- Cross-file contract analysis resolves relative imports and the root `tsconfig.json` `baseUrl`/`paths` aliases;
+  `extends` chains and package-name self-imports are not followed yet (a passing type-check automatically downgrades
+  such findings to *suspected*).
+- Baseline runs link `node_modules` from your checkout; monorepos with per-package `node_modules` may produce
+  inconclusive baselines.
+- For PHP and Python, `vendor/` and virtual environments are deliberately **not** linked into the baseline: a Composer
+  autoloader or an editable install would load the changed code instead of the base revision and produce a false
+  attribution. Failures are reported as inconclusive instead. Rust and Java builds run from scratch in the baseline
+  worktree, which is correct but slower.
+- Checks are detected at repository and nested project roots, with a bounded project count. Baselines refuse
+  workspace dependency links that would accidentally load head sources.
+- Pull requests are reviewed from the GitHub API; verification and cross-file analysis require the PR head to be checked
+  out locally.
+- Verified on Windows 11 with VS Code 1.144. Linux, macOS, WSL, Dev Containers and Remote SSH have not been verified yet
+  — see `PRODUCT_RELEASE_READINESS.md`.
 
 ## Troubleshooting
 
@@ -189,7 +292,7 @@ Logs: **Output → Probato PR**.
 
 ```bash
 pnpm install
-pnpm run verify          # typecheck + lint + unit tests
+pnpm run verify:delivery # typecheck + lint + unit tests + production build + CLI smoke
 pnpm run test:integration  # real VS Code Extension Development Host
 pnpm run perf            # performance budgets on generated repositories
 pnpm run package         # verify + production build + VSIX
@@ -203,7 +306,8 @@ Bug reports and feature requests: see `SUPPORT.md`.
 
 ## License
 
-[MIT](LICENSE) © 2026 Alejandro Daniel Di Stefano. Bundled third-party components keep their own licenses (`THIRD_PARTY_NOTICES.md`).
+[MIT](LICENSE) © 2026 Alejandro Daniel Di Stefano. Bundled third-party components keep their own licenses
+(`THIRD_PARTY_NOTICES.md`).
 
 ---
 

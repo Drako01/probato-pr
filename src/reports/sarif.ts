@@ -1,3 +1,4 @@
+import { sanitizeText } from '../core/sanitize';
 import { pathToFileURL } from 'node:url';
 import type { ReviewFinding, ReviewResult, Severity } from '../core/model';
 
@@ -21,6 +22,7 @@ function ruleName(ruleId: string): string {
 }
 
 export function renderSarif(result: ReviewResult): string {
+  result = sanitizeText(result);
   const rules = new Map<string, { index: number; sample: ReviewFinding }>();
   for (const finding of result.findings) {
     if (!rules.has(finding.ruleId)) {
@@ -66,13 +68,13 @@ export function renderSarif(result: ReviewResult): string {
             },
           ],
           partialFingerprints: { 'probatoFindingId/v1': f.id },
-          ...(f.suggestedFix ? { fixes: [{ description: { text: f.suggestedFix } }] } : {}),
           properties: {
             severity: f.severity,
             verification: f.verification,
             attribution: f.attribution ?? 'unknown',
             origin: f.origin,
             evidenceCount: f.evidence.length,
+            ...(f.suggestedFix ? { suggestedFix: f.suggestedFix } : {}),
           },
         })),
         properties: {

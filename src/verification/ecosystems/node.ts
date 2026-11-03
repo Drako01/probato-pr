@@ -1,4 +1,5 @@
 import { tr } from '../../core/i18n';
+import { nodeScriptDefinition } from '../execution-definition';
 import type { CheckKind, CommandSpec } from '../../core/model';
 import { firstScript, infraNeeds, scriptsOf, toolCheck, type CheckDraft, type Ecosystem } from './shared';
 
@@ -70,7 +71,7 @@ export const nodeChecks: Ecosystem = async ({ probe }) => {
         requires,
         outputFormat: /\btsc\b/.test(body) ? 'tsc' : /\bgo (?:build|vet)\b/.test(body) ? 'go' : 'plain',
         runsRepositoryCode: true,
-        scriptBody: body,
+        scriptBody: await nodeScriptDefinition(probe, scripts, name),
       }),
     );
   }

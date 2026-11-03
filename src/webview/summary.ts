@@ -79,7 +79,17 @@ function renderEmpty(s: SummaryState): HTMLElement {
       commandButton(s.labels.reviewCurrent, 'reviewCurrentChanges', 'button'),
       commandButton(s.labels.reviewBranch, 'reviewBranch'),
     ),
+    renderDelivery(s),
   );
+}
+
+function renderDelivery(s: SummaryState): HTMLElement {
+  return h('section', { class: 'panel' }, h('h2', {}, s.labels.delivery), h('p', { class: 'muted' }, s.labels.deliveryHint),
+    h('div', { class: 'actions' },
+      commandButton(s.labels.localGit, 'localGit'),
+      commandButton(s.labels.delivery, 'delivery', 'button'),
+      ...(s.review ? [commandButton(s.labels.publishPullRequest, 'publishPullRequest'), commandButton(s.labels.publishReview, 'publishReview'), commandButton(s.labels.importSarif, 'importSarif')] : []),
+      commandButton(s.labels.pullRequestStatus, 'pullRequestStatus'), commandButton(s.labels.mergePullRequest, 'mergePullRequest')));
 }
 
 function renderHeader(s: SummaryState, r: SummaryReview): HTMLElement {
@@ -314,7 +324,8 @@ function render(): void {
   const r = s.review;
   // Re-rendering replaces the DOM; keep keyboard focus on the same control.
   const focused = document.activeElement?.getAttribute('data-key');
-  app.replaceChildren(...[busy, ...(r ? [renderHeader(s, r), renderSteps(r), renderRisk(s, r), renderAi(s, r), renderFindings(s, r), renderChecks(s, r), renderMore(s)] : [renderEmpty(s)])].filter((n): n is HTMLElement => Boolean(n)));
+  app.replaceChildren(...[busy, ...(r ? [renderHeader(s, r), renderSteps(r),
+    renderDelivery(s), renderRisk(s, r), renderAi(s, r), renderFindings(s, r), renderChecks(s, r), renderMore(s)] : [renderEmpty(s)])].filter((n): n is HTMLElement => Boolean(n)));
   if (focused) {
     app.querySelector<HTMLElement>(`[data-key="${CSS.escape(focused)}"]`)?.focus();
   }

@@ -19,6 +19,13 @@ export const SUMMARY_COMMANDS = [
   'openMarkdownReport',
   'copyPullRequestDescription',
   'connectAi',
+  'localGit',
+  'delivery',
+  'publishPullRequest',
+  'publishReview',
+  'pullRequestStatus',
+  'mergePullRequest',
+  'importSarif',
 ] as const;
 export type SummaryCommand = (typeof SUMMARY_COMMANDS)[number];
 
@@ -37,6 +44,13 @@ export const SUMMARY_COMMAND_IDS: Readonly<Record<SummaryCommand, string>> = {
   openMarkdownReport: 'probatoPR.openMarkdownReport',
   copyPullRequestDescription: 'probatoPR.copyPullRequestDescription',
   connectAi: 'probatoPR.connectAi',
+  localGit: 'probatoPR.localGit',
+  delivery: 'probatoPR.delivery',
+  publishPullRequest: 'probatoPR.publishPullRequest',
+  publishReview: 'probatoPR.publishReview',
+  pullRequestStatus: 'probatoPR.pullRequestStatus',
+  mergePullRequest: 'probatoPR.mergePullRequest',
+  importSarif: 'probatoPR.importSarif',
 };
 
 const id = z.string().min(1).max(200);
@@ -141,6 +155,14 @@ export type SummaryLabels = Readonly<Record<
   | 'aiWhereToLook'
   | 'aiChange'
   | 'copyDescription'
+  | 'localGit'
+  | 'delivery'
+  | 'deliveryHint'
+  | 'publishPullRequest'
+  | 'publishReview'
+  | 'pullRequestStatus'
+  | 'mergePullRequest'
+  | 'importSarif'
   | 'exportReport',
   string
 >>;

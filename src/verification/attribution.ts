@@ -39,6 +39,9 @@ export function attribute(
       ...none,
     };
   }
+  if (head.outputTruncated || base.outputTruncated) {
+    return { attribution: 'inconclusive', note: tr('The failures could not be compared completely; attribution is inconclusive.'), ...none };
+  }
   if (base.outcome === 'passed') {
     return {
       attribution: 'introduced',
@@ -50,11 +53,30 @@ export function attribute(
   if (base.outcome !== 'failed') {
     return { attribution: 'inconclusive', note: tr('The baseline run did not complete ({0}); the failure cannot be attributed.', base.outcome), ...none };
   }
-  // Both failed: diagnostics (if parseable) tell new errors apart from old ones.
-  if (headDiagnostics.length > 0 || baseDiagnostics.length > 0) {
-    const baseSet = new Set(baseDiagnostics.map(fingerprint));
-    const introduced = headDiagnostics.filter((d) => !baseSet.has(fingerprint(d)));
-    const preExisting = headDiagnostics.filter((d) => baseSet.has(fingerprint(d)));
+  // A failed baseline with no parseable errors may be a tool/configuration failure. Its empty
+  // diagnostic set does not prove that head errors are new. Truncated logs are also incomparable.
+  if (headDiagnostics.length === 0 || baseDiagnostics.length === 0) {
+    return { attribution: 'inconclusive', note: tr('The failures could not be compared completely; attribution is inconclusive.'), ...none };
+  }
+  // Compare occurrence counts as well as identities: one old error cannot account for two errors.
+  {
+    const remaining = new Map<string, number>();
+    for (const diagnostic of baseDiagnostics) {
+      const key = fingerprint(diagnostic);
+      remaining.set(key, (remaining.get(key) ?? 0) + 1);
+    }
+    const introduced: ToolDiagnostic[] = [];
+    const preExisting: ToolDiagnostic[] = [];
+    for (const diagnostic of headDiagnostics) {
+      const key = fingerprint(diagnostic);
+      const available = remaining.get(key) ?? 0;
+      if (available > 0) {
+        preExisting.push(diagnostic);
+        remaining.set(key, available - 1);
+      } else {
+        introduced.push(diagnostic);
+      }
+    }
     if (introduced.length > 0) {
       return {
         attribution: 'introduced',
@@ -70,11 +92,4 @@ export function attribute(
       preExistingDiagnostics: preExisting,
     };
   }
-  return {
-    attribution: 'pre-existing',
-    note: tr(
-      'Fails on both the base revision and with this change, so the failure is not attributed to it. Individual failures could not be compared; additional failures caused by this change cannot be ruled out.',
-    ),
-    ...none,
-  };
 }

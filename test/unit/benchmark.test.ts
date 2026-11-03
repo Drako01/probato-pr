@@ -92,6 +92,22 @@ const CASES: readonly Case[] = [
     },
     expected: ['contracts/export-removed'],
   },
+  {
+    name: 'OpenAPI property removed with a stale consumer',
+    files: [{ path: 'openapi.json',
+      base: '{"components":{"schemas":{"User":{"properties":{"name":{"type":"string"}}}}}}',
+      head: '{"components":{"schemas":{"User":{"properties":{"displayName":{"type":"string"}}}}}}' }],
+    workspace: { 'src/client.ts': 'export const label = response.name;\n' },
+    expected: ['cross-stack/api-property-removed'],
+  },
+  {
+    name: 'TRAP: OpenAPI consumer updated together with the property',
+    files: [{ path: 'openapi.json',
+      base: '{"components":{"schemas":{"User":{"properties":{"name":{"type":"string"}}}}}}',
+      head: '{"components":{"schemas":{"User":{"properties":{"displayName":{"type":"string"}}}}}}' }],
+    workspace: { 'src/client.ts': 'export const label = response.displayName;\n' },
+    expected: [],
+  },
   // ---------------------------------------------------------------- traps
   {
     name: 'TRAP: same symbol name imported from an npm package, not the alias',

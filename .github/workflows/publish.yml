@@ -65,7 +65,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run verify
+      - run: pnpm run verify:delivery
       - name: Audit production dependencies
         if: runner.os == 'Linux'
         run: pnpm audit --prod
