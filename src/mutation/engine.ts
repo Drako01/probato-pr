@@ -69,7 +69,13 @@ async function copyReviewedFiles(git: GitClient, from: string, to: string, deadl
   const files = (await git.exec(from, ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], { maxBytes: 8_000_000 })).split('\0').filter(Boolean);
   const visible = new Set(files);
   const targetFiles = (await git.exec(to, ['ls-files', '--cached', '--others', '--exclude-standard', '-z'])).split('\0').filter(Boolean);
-  for (const file of targetFiles) { assertBudget(deadline, signal); if (!visible.has(file)) await rm(await resolveInside(to, file), { force: true }); }
+  for (const file of targetFiles) {
+    assertBudget(deadline, signal);
+    // Git can report a directory symlink as an untracked file on POSIX even when node_modules/ is ignored.
+    // Dependency links belong to BaselineWorktree and must never be reconciled as reviewed source.
+    if (file.split(/[\\/]/).some((part) => part === '.git' || part === 'node_modules')) continue;
+    if (!visible.has(file)) await rm(await resolveInside(to, file), { force: true });
+  }
   if (files.length > 25_000) throw new Error(tr('The mutation snapshot exceeds the 25000-file limit.'));
   let bytes = 0;
   for (const file of files) {

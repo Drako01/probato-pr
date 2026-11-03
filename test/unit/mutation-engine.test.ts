@@ -37,6 +37,25 @@ function terminal(updates: readonly MutationResult[]) {
 }
 
 describe('mutation engine execution boundaries', () => {
+  it('preserves approved dependency links when Git lists the POSIX symlink as untracked source', async () => {
+    const { root, git } = await fixture();
+    const execute = git.exec.bind(git);
+    vi.spyOn(git, 'exec').mockImplementation(async (cwd, args, options) => {
+      const output = await execute(cwd, args, options);
+      return cwd !== root && args[0] === 'ls-files' && args.includes('--others') ? output + 'node_modules\0' : output;
+    });
+    const run = vi.fn<ProcessRunner['run']>(async (_command, options) => {
+      await access(path.join(options.cwd, 'node_modules/@stryker-mutator/core/package.json'));
+      await writeFile(path.join(options.cwd, 'probato-mutation-report.json'), JSON.stringify(report(await readFile(path.join(options.cwd, 'src/a.ts'), 'utf8'))));
+      return outcome();
+    });
+    const result = await new MutationEngine({ run }, git).run({ root, authorized: true, impactedFiles: ['src/a.ts'] });
+    expect(run).toHaveBeenCalledOnce();
+    expect(result.head?.report?.mutants).toHaveLength(1);
+    expect(result.verification.status).not.toBe('ERROR');
+    await access(path.join(root, 'node_modules/@stryker-mutator/core/package.json'));
+  });
+
   it('does not execute without authorization and skips a missing local Stryker without fake evidence', async () => {
     const { root, git } = await fixture(false); const run = vi.fn<ProcessRunner['run']>();
     const engine = new MutationEngine({ run }, git);
