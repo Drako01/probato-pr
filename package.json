@@ -2,7 +2,7 @@
   "name": "probato-pr",
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "publisher": "armotusitio",
   "author": {
     "name": "Alejandro Daniel Di Stefano",
@@ -226,6 +226,12 @@
         "command": "probatoPR.importSarif",
         "title": "%command.importSarif%",
         "category": "Probato PR"
+      },
+      {
+        "command": "probatoPR.mutationTesting",
+        "title": "%command.mutationTesting%",
+        "category": "Probato PR",
+        "icon": "$(beaker)"
       }
     ],
     "menus": {
@@ -541,6 +547,58 @@
           "type": "boolean",
           "default": true,
           "description": "%config.home.openOnStartup%"
+        },
+        "probatoPR.mutation.timeoutSeconds": {
+          "type": "integer",
+          "default": 600,
+          "description": "%config.mutation.timeoutSeconds%",
+          "minimum": 5,
+          "maximum": 7200
+        },
+        "probatoPR.mutation.concurrency": {
+          "type": "integer",
+          "default": 1,
+          "description": "%config.mutation.concurrency%",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "probatoPR.mutation.memoryMb": {
+          "type": "integer",
+          "default": 1024,
+          "description": "%config.mutation.memoryMb%",
+          "minimum": 256,
+          "maximum": 8192
+        },
+        "probatoPR.mutation.maxFiles": {
+          "type": "integer",
+          "default": 30,
+          "description": "%config.mutation.maxFiles%",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "probatoPR.mutation.gateEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "%config.mutation.gateEnabled%"
+        },
+        "probatoPR.mutation.failOnDegradation": {
+          "type": "boolean",
+          "default": false,
+          "description": "%config.mutation.failOnDegradation%"
+        },
+        "probatoPR.mutation.minimumScore": {
+          "type": "number",
+          "default": 0,
+          "description": "%config.mutation.minimumScore%",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "probatoPR.mutation.tolerancePoints": {
+          "type": "number",
+          "default": 0,
+          "description": "%config.mutation.tolerancePoints%",
+          "minimum": 0,
+          "maximum": 100
         }
       }
     },
@@ -624,7 +682,8 @@
     "cli": "node dist/cli.cjs",
     "test:cli": "node scripts/test-cli.mjs",
     "verify:delivery": "pnpm run verify && pnpm run build:prod && pnpm run test:cli",
-    "lint:i18n": "node scripts/l10n-keys.mjs l10n/bundle.l10n.es.json"
+    "lint:i18n": "node scripts/l10n-keys.mjs l10n/bundle.l10n.es.json",
+    "test:mutation:e2e": "node scripts/test-mutation-e2e.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.3.0",

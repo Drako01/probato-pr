@@ -7,6 +7,7 @@ import { redactSecrets } from '../core/secrets';
 import { formatCommandLine, type ProcessRunner, type RunResult } from '../infrastructure/process-runner';
 import type { GitClient } from '../git/git-client';
 import { attribute } from './attribution';
+import { compareDependencyInputs, dependencyProbe, type DependencyComparability } from './dependency-comparability';
 import { BaselineWorktree } from './baseline-worktree';
 import { parseDiagnostics, type ToolDiagnostic } from './diagnostics-parser';
 
@@ -41,6 +42,7 @@ export interface VerificationOutcome {
   readonly evidence: readonly CommandEvidence[];
   readonly diagnostics: readonly CheckDiagnostics[];
   readonly baselineError?: string;
+  readonly reproducibility?: readonly { readonly checkId: string; readonly status: 'comparable' | 'inconclusive'; readonly reasons: readonly string[] }[];
 }
 
 function outcomeOf(run: RunResult): CommandOutcome {
@@ -122,6 +124,8 @@ export class VerificationEngine {
     const failing = request.approved.filter((c) => heads.get(c.id)?.evidence.outcome === 'failed');
     const bases = new Map<string, { evidence: CommandEvidence; diagnostics: ToolDiagnostic[] }>();
     let baselineError: string | undefined;
+    const reproducibility = new Map<string, { checkId: string; status: 'comparable' | 'inconclusive'; reasons: readonly string[] }>();
+    const checkErrors = new Map<string, string>();
     if (request.baselineCommit && failing.length > 0 && !request.signal?.aborted) {
       request.progress?.(tr('Preparing base revision worktree'));
       let worktree: BaselineWorktree | undefined;
@@ -131,12 +135,27 @@ export class VerificationEngine {
           detectMonorepoChecks(request.repoRoot, process.platform, undefined, undefined, request.dependencyRoot),
           detectMonorepoChecks(worktree.directory, process.platform, undefined, undefined, request.dependencyRoot ?? request.repoRoot),
         ]);
+        const headProbe = dependencyProbe(request.repoRoot);
+        const baseProbe = dependencyProbe(worktree.directory);
+        const installedProbe = dependencyProbe(request.dependencyRoot ?? request.repoRoot);
+        const dependencyResults = new Map<string, DependencyComparability>();
         for (const check of failing) {
           if (request.signal?.aborted) {
             break;
           }
+          let dependencies = dependencyResults.get(check.cwd);
+          if (!dependencies) { dependencies = await compareDependencyInputs(headProbe, baseProbe, installedProbe, check.cwd); dependencyResults.set(check.cwd, dependencies); }
+          reproducibility.set(check.id, { checkId: check.id, status: dependencies.status, reasons: dependencies.reasons });
+          if (dependencies.status !== 'comparable') {
+            const reason = dependencies.reasons.join(' ');
+            checkErrors.set(check.id, reason);
+            baselineError = reason;
+            continue;
+          }
           if (!sameExecutionDefinition(headDefinitions, baseDefinitions, check)) {
             baselineError = tr('Baseline check definitions differ from the approved head definitions; attribution is inconclusive.');
+            checkErrors.set(check.id, baselineError);
+            reproducibility.set(check.id, { checkId: check.id, status: 'inconclusive', reasons: [baselineError] });
             continue;
           }
           request.progress?.(tr('Running {0} on base revision', check.label));
@@ -178,8 +197,9 @@ export class VerificationEngine {
       }
       const base = bases.get(check.id);
       const result = attribute(head.evidence, base?.evidence, head.diagnostics, base?.diagnostics ?? []);
+      const error = checkErrors.get(check.id) ?? baselineError;
       const note =
-        head.evidence.outcome === 'failed' && !base && baselineError ? `${result.note} ${baselineError}` : head.evidence.errorMessage ?? result.note;
+        head.evidence.outcome === 'failed' && !base && error ? `${result.note} ${error}` : head.evidence.errorMessage ?? result.note;
       checks.push({
         checkId: check.id,
         kind: check.kind,
@@ -199,7 +219,7 @@ export class VerificationEngine {
         hasBaseline: base !== undefined && (result.attribution === 'introduced' || result.attribution === 'pre-existing'),
       });
     }
-    return { checks, evidence, diagnostics, ...(baselineError ? { baselineError } : {}) };
+    return { checks, evidence, diagnostics, reproducibility: request.approved.map((check) => reproducibility.get(check.id) ?? { checkId: check.id, status: 'inconclusive' as const, reasons: [baselineError ?? tr('A comparable baseline environment was not evaluated for this check.')] }), ...(baselineError ? { baselineError } : {}) };
   }
 }
 

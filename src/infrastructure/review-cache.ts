@@ -1,4 +1,6 @@
 import type { Analyzer, AnalyzerContext, AnalyzerOutput } from '../core/analyzer';
+import { createHash } from 'node:crypto';
+import { mapLimit } from '../core/concurrency';
 import { sha256 } from '../core/ids';
 
 const MAX_FILES = 25_000;
@@ -55,18 +57,34 @@ export class ReviewCache {
     const head = new Map<string, string | undefined>();
     const base = new Map<string, string | undefined>();
     let size = 0;
-    for (const file of files) {
-      if (context.signal?.aborted) { return undefined; }
-      const text = await context.workspace.read(file); head.set(file, text); size += text?.length ?? 0;
-      if (size > MAX_INPUT_CHARS) { return undefined; }
+    const changed = new Set(context.changes.files.map((file) => file.path));
+    const budget = { exceeded: false };
+    const inputBudgetExceeded = (): boolean => budget.exceeded;
+    await mapLimit(files.filter((file) => !changed.has(file)), 16, async (file) => {
+      if (budget.exceeded || context.signal?.aborted) return;
+      const text = await context.workspace.read(file);
+      size += text?.length ?? 0;
+      if (size > MAX_INPUT_CHARS) { budget.exceeded = true; return; }
+      head.set(file, text);
+    }, context.signal);
+    if (inputBudgetExceeded() || context.signal?.aborted) return undefined;
+    await mapLimit(context.changes.files, 16, async (file) => {
+      if (budget.exceeded || context.signal?.aborted) return;
+      const [before, after] = await Promise.all([context.changes.content.read(file.path, 'base'), context.changes.content.read(file.path, 'head')]);
+      size += (before?.length ?? 0) + (after?.length ?? 0);
+      if (size > MAX_INPUT_CHARS) { budget.exceeded = true; return; }
+      base.set(file.path, before); head.set(file.path, after);
+    }, context.signal);
+    if (inputBudgetExceeded() || context.signal?.aborted) return undefined;
+    // Stable incremental framing avoids one additional workspace-sized JSON allocation.
+    const hash = createHash('sha256');
+    hash.update(JSON.stringify([context.changes.scope, context.changes.repository, context.changes.files, context.changes.skipped]));
+    for (const map of [base, head]) {
+      hash.update('[');
+      for (const file of [...map.keys()].sort()) hash.update(JSON.stringify([file, map.get(file)]));
+      hash.update(']');
     }
-    for (const file of context.changes.files) {
-      const before = await context.changes.content.read(file.path, 'base');
-      const after = await context.changes.content.read(file.path, 'head');
-      base.set(file.path, before); head.set(file.path, after); size += (before?.length ?? 0) + (after?.length ?? 0);
-      if (size > MAX_INPUT_CHARS) { return undefined; }
-    }
-    const key = sha256(JSON.stringify([context.changes.scope, context.changes.repository, context.changes.files, context.changes.skipped, [...base], [...head]]));
+    const key = hash.digest('hex');
     return {
       key,
       context: {

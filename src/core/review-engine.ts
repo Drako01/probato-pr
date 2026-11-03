@@ -47,11 +47,8 @@ export function dedupeFindings(findings: readonly ReviewFinding[]): ReviewFindin
 export function finalizeResult(result: Omit<ReviewResult, 'risk'>): ReviewResult {
   result = sanitizeText(result);
   const findings = sortFindings(dedupeFindings(result.findings));
-  return {
-    ...result,
-    findings,
-    risk: assessRisk({ findings, checks: result.checks, analyzerRuns: result.analyzerRuns, skipped: result.skipped, scope: result.scope }),
-  };
+  const risk = assessRisk({ findings, checks: result.checks, analyzerRuns: result.analyzerRuns, skipped: result.skipped, scope: result.scope });
+  return { ...result, findings, risk: { ...risk, limitations: [...new Set([...risk.limitations, ...(result.policyNotes ?? [])])] } };
 }
 
 /** Runs the deterministic analyzers over a change set. Read-only: never modifies files. */
@@ -62,6 +59,8 @@ export class ReviewEngine {
   ) {}
 
   async review(changes: ChangeSet, workspace: WorkspaceIndex, options: { signal?: AbortSignal; progress?: ProgressReporter } = {}): Promise<ReviewResult> {
+    const started = performance.now();
+    const timings: { analyzerId: string; durationMs: number }[] = [];
     const findings: ReviewFinding[] = [];
     const evidence: Evidence[] = [];
     const runs: AnalyzerRun[] = [];
@@ -76,6 +75,7 @@ export class ReviewEngine {
         continue;
       }
       options.progress?.(analyzer.description);
+      const analyzerStarted = performance.now();
       try {
         const output = await analyzer.analyze({ changes, workspace, ...(options.signal ? { signal: options.signal } : {}) });
         findings.push(...output.findings);
@@ -85,7 +85,7 @@ export class ReviewEngine {
       } catch (error) {
         // Recorded and surfaced as a limitation; one analyzer failing must not hide the others' results.
         runs.push({ analyzerId: analyzer.id, status: 'failed', detail: error instanceof Error ? error.message : String(error) });
-      }
+      } finally { timings.push({ analyzerId: analyzer.id, durationMs: Math.max(0, performance.now() - analyzerStarted) }); }
     }
 
     const stats = changes.files.reduce(
@@ -97,6 +97,7 @@ export class ReviewEngine {
       id: uniqueId(),
       createdAt: new Date().toISOString(),
       toolVersion: this.toolVersion,
+      performance: { analysisMs: Math.max(0, performance.now() - started), analyzers: timings },
       scope: changes.scope,
       repository: changes.repository,
       stats,

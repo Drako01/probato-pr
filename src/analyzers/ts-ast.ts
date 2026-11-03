@@ -95,7 +95,7 @@ export function resolveRelativeImport(importer: string, specifier: string, exist
 }
 
 /** Joins and normalizes repository-relative POSIX segments; undefined when ".." escapes the repository. */
-function joinRepoPath(...segments: string[]): string | undefined {
+export function joinRepoPath(...segments: string[]): string | undefined {
   const normalized: string[] = [];
   for (const part of segments.join('/').split('/')) {
     if (part === '' || part === '.') {
@@ -114,7 +114,7 @@ function joinRepoPath(...segments: string[]): string | undefined {
 }
 
 /** Applies TypeScript's module lookup (extensions, index files, ".js" → ".ts") to a repository path. */
-function firstExistingModule(target: string, existing: ReadonlySet<string>): string | undefined {
+export function firstExistingModule(target: string, existing: ReadonlySet<string>): string | undefined {
   const withoutJsExt = target.replace(/\.(?:[cm]?js|jsx)$/, '');
   const candidates = [
     target,

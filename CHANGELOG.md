@@ -2,6 +2,24 @@
 
 All notable changes to Probato PR are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] — 2026-11-03
+
+### Added
+
+- Finding explanations with explicit evidence links and missing-proof notes; bounded, compatible review comparison.
+- Snapshot-only TypeScript semantic dependency analysis, including supported aliases and reexports.
+- Lazy analysis worker with cancellation, progress, content limits and actual duration measurements.
+- Check recommendations by impact, dependency comparability and declarative `.probato.yml` policies.
+- Optional Stryker mutation testing with independent execution, verification, baseline, quality and gate states.
+- Differential mutation gate, structured reports, bounded execution and explicit approval without mandatory Stryker.
+- English and Spanish labels, CLI report comparison and optional mutation controls.
+
+### Changed
+
+- Open VSX publication and daily synchronization share `publish.yml` and its single Trusted Publisher registration.
+- Open VSX CI uses OIDC and removes PAT precedence from trusted publication subprocesses.
+- Architecture, readiness and roadmap documentation describe current guarantees and validation limits.
+
 ## [0.4.1] — 2026-11-03
 
 ### Fixed

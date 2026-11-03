@@ -108,6 +108,27 @@ const CASES: readonly Case[] = [
     workspace: { 'src/client.ts': 'export const label = response.displayName;\n' },
     expected: [],
   },
+  {
+    name: 'semantic: removed API export consumed through renamed barrel',
+    files: [{ path: 'src/api.ts', base: 'export function load() {}\n', head: 'export function replacement() {}\n' }],
+    workspace: {
+      'src/barrel.ts': "export { load as getUser } from './api';\n",
+      'src/page.ts': "import { getUser } from './barrel'; getUser();\n",
+    },
+    expected: ['contracts/export-removed'],
+  },
+  {
+    name: 'TRAP: barrel switches to a compatible replacement implementation',
+    files: [
+      { path: 'src/api.ts', base: 'export function load() {}\n', head: 'export function replacement() {}\n' },
+      { path: 'src/barrel.ts', base: "export { load } from './api';\n", head: "export { load } from './replacement';\n" },
+    ],
+    workspace: {
+      'src/replacement.ts': 'export function load() {}\n',
+      'src/page.ts': "import { load } from './barrel'; load();\n",
+    },
+    expected: [],
+  },
   // ---------------------------------------------------------------- traps
   {
     name: 'TRAP: same symbol name imported from an npm package, not the alias',

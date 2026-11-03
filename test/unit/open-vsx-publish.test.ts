@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classify, isActive, parseArgs, publishWithRetry, waitUntilActive } from '../../scripts/open-vsx-publish.mjs';
+import { classify, isActive, parseArgs, publishInvocation, publishWithRetry, waitUntilActive } from '../../scripts/open-vsx-publish.mjs';
 
 const INACTIVE_OUTPUT = "Extension armotusitio.probato-pr 0.1.2 is already published, but currently isn't active and therefore not visible.";
 
@@ -103,5 +103,23 @@ describe('waitUntilActive', () => {
   it('returns false when the version never becomes active before the deadline', async () => {
     const fetchImpl = () => Promise.resolve({ json: () => Promise.resolve({ error: 'Extension not found' }) });
     await expect(waitUntilActive({ ...base, ...clock(), fetchImpl, timeoutMs: 5_000, intervalMs: 1_000 })).resolves.toBe(false);
+  });
+});
+
+
+describe('Open VSX trusted publisher boundary', () => {
+  it('requires OIDC in trusted mode and removes PAT precedence without touching the parent environment', () => {
+    const environment = { OVSX_PAT: 'test-only', OVSX_TOKEN: 'test-only', ACTIONS_ID_TOKEN_REQUEST_URL: 'https://oidc.example.invalid' };
+    const invocation = publishInvocation('extension.vsix', true, environment);
+    expect(invocation.args).toContain('--trusted-publishing');
+    expect(invocation.env.OVSX_PAT).toBeUndefined();
+    expect(invocation.env.OVSX_TOKEN).toBeUndefined();
+    expect(invocation.env.ACTIONS_ID_TOKEN_REQUEST_URL).toBe(environment.ACTIONS_ID_TOKEN_REQUEST_URL);
+    expect(environment.OVSX_PAT).toBe('test-only');
+  });
+  it('parses trusted publishing with an explicit release version and fails invalid options', () => {
+    expect(parseArgs(['a.vsix', '--version', '0.5.0', '--trusted-publishing'])).toEqual({ mode: 'publish', vsix: 'a.vsix', version: '0.5.0', trustedPublishing: true });
+    expect(() => parseArgs(['a.vsix', '--trusted-publishing', '--trusted-publishing'])).toThrow(/duplicate/);
+    expect(classify('No matching trusted publisher', 1)).toBe('fatal');
   });
 });

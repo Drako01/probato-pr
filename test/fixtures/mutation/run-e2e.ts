@@ -1,0 +1,63 @@
+import { mkdir, readFile, writeFile, access } from 'node:fs/promises';
+import * as path from 'node:path';
+import assert from 'node:assert/strict';
+import { finalizeResult } from '../../../src/core/review-engine';
+import { renderJson } from '../../../src/reports/json';
+import { renderMarkdown } from '../../../src/reports/markdown';
+import { renderSarif } from '../../../src/reports/sarif';
+import { MutationEngine, mutationCommandEvidence } from '../../../src/mutation/engine';
+import { GitClient } from '../../../src/git/git-client';
+import { NodeProcessRunner } from '../../../src/infrastructure/process-runner';
+
+async function main() {
+  const root = process.env.PROBATO_MUTATION_FIXTURE_ROOT;
+  if (!root) throw new Error('PROBATO_MUTATION_FIXTURE_ROOT must identify an isolated temporary fixture.');
+  const runner = new NodeProcessRunner();
+  if (process.env.PROBATO_MUTATION_E2E_INSTALL === '1') {
+    const installation = await runner.run({ executable: 'npm', args: ['install', '--ignore-scripts', '--no-audit', '--no-fund'] }, { cwd: root, timeoutMs: 120_000, maxOutputBytes: 1_000_000, capture: 'tail' });
+    if (installation.exitCode !== 0 || installation.timedOut) throw new Error(`Temporary fixture installation failed: ${installation.output}`);
+  }
+  await access(path.join(root, 'node_modules', '@stryker-mutator', 'core', 'package.json'));
+  const tool = JSON.parse(await readFile(path.join(root, 'node_modules', '@stryker-mutator', 'core', 'package.json'), 'utf8')) as { version: string };
+  assert.equal(tool.version, '10.1.1', 'fixture tool version is pinned');
+  const git = new GitClient(runner, { timeoutMs: 60_000, maxBytes: 8_000_000 });
+  await mkdir(path.join(root, 'src'), { recursive: true });
+  await mkdir(path.join(root, 'test'), { recursive: true });
+  await writeFile(path.join(root, '.gitignore'), 'node_modules/\n.stryker-tmp/\nreports/\nprobato-*\n.probato-*\n');
+  await writeFile(path.join(root, 'src', 'age.ts'), 'export function adult(age: number): boolean { return age >= 18; }\nexport function discount(price: number): number { return price * 0.9; }\n');
+  const strong = "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { adult } from '../src/age.ts';\ntest('boundaries', () => { assert.equal(adult(17), false); assert.equal(adult(18), true); assert.equal(adult(30), true); });\n";
+  await writeFile(path.join(root, 'test', 'age.test.ts'), strong);
+  await writeFile(path.join(root, 'stryker.config.json'), JSON.stringify({ testRunner: 'command', commandRunner: { command: 'node --experimental-strip-types --test test/age.test.ts' }, coverageAnalysis: 'off', plugins: [] }));
+  await git.exec(root, ['init', '-q', '-b', 'main']);
+  await git.exec(root, ['add', '.']);
+  await git.exec(root, ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'baseline tests']);
+  const base = await git.resolveCommit(root, 'HEAD'); assert.ok(base);
+  await writeFile(path.join(root, 'test', 'age.test.ts'), strong.replace("assert.equal(adult(17), false); assert.equal(adult(18), true); ", ''));
+  const terminalUpdates: string[] = [];
+  const result = await new MutationEngine(runner, git).run({ root, baseCommit: base, impactedFiles: ['src/age.ts'], authorized: true, limits: { timeoutMs: 180_000, concurrency: 1, memoryMb: 512 }, gatePolicy: { enabled: true, failOnDegradation: true }, progress: (message) => console.log(message), onUpdate: (update) => { if (update.execution.status === 'COMPLETED' || update.execution.status === 'CANCELLED') { assert.ok(update.finishedAt); terminalUpdates.push(update.execution.status); } } });
+  const artifact = path.join(root, 'probato-mutation-e2e-result.json');
+  await writeFile(artifact, JSON.stringify(result, null, 2));
+  const review = finalizeResult({ id: 'mutation-e2e-review', createdAt: new Date().toISOString(), toolVersion: 'fixture', scope: { kind: 'working', label: 'mutation fixture', headIsWorkingTree: true, baseSha: base }, repository: { name: 'mutation-fixture', root, branch: 'main', headSha: base }, stats: { filesChanged: 1, filesSkipped: 0, additions: 1, deletions: 1 }, changedFiles: ['test/age.test.ts'], skipped: [], findings: [], evidence: mutationCommandEvidence(result), checks: [], analyzerRuns: [], aiRuns: [], mutation: result });
+  const jsonReport = renderJson(review), markdown = renderMarkdown(review), sarif = renderSarif(review);
+  await writeFile(path.join(root, 'probato-review.json'), jsonReport);
+  await writeFile(path.join(root, 'probato-review.md'), markdown);
+  await writeFile(path.join(root, 'probato-review.sarif'), sarif);
+  const json = JSON.parse(jsonReport) as { mutation: { gate: { decision: string } } };
+  const parsedSarif = JSON.parse(sarif) as { runs: { properties: { mutationTesting: { gate: { decision: string } } } }[] };
+  assert.equal(json.mutation.gate.decision, 'FAIL');
+  assert.equal(parsedSarif.runs[0]?.properties.mutationTesting.gate.decision, 'FAIL');
+  assert.match(markdown, /Mutation Score variation: -28\.57 percentage points/);
+  assert.ok(markdown.includes(result.head?.id ?? 'missing-head'));
+  assert.deepEqual(terminalUpdates, ['COMPLETED']);
+  console.log(JSON.stringify({ artifact, execution: result.execution.status, verification: result.verification.status, baseline: result.baseline, quality: result.quality, gate: result.gate, head: result.head?.report?.metrics, base: result.base?.report?.metrics, headError: result.head?.error }));
+  assert.equal(result.execution.status, 'COMPLETED');
+  assert.equal(result.baseline.status, 'COMPARABLE');
+  assert.equal(result.quality.trend, 'DEGRADED');
+  assert.equal(result.gate.decision, 'FAIL');
+  assert.ok((result.head?.report?.metrics.counts.KILLED ?? 0) > 0);
+  assert.ok((result.head?.report?.metrics.counts.SURVIVED ?? 0) > 0);
+  assert.ok(result.head?.report?.mutants.some((mutant) => mutant.attribution === 'INTRODUCED'));
+  assert.ok(result.head?.report?.mutants.some((mutant) => mutant.attribution === 'PERSISTENT'));
+  assert.equal(await readFile(path.join(root, 'src', 'age.ts'), 'utf8'), 'export function adult(age: number): boolean { return age >= 18; }\nexport function discount(price: number): number { return price * 0.9; }\n');
+}
+void main().catch((error: unknown) => { console.error(error); process.exitCode = 1; });

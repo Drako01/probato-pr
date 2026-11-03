@@ -1,4 +1,5 @@
 import * as ts from 'typescript';
+import { SemanticContracts } from './ts-semantic';
 import type { Analyzer, AnalyzerContext, AnalyzerOutput } from '../core/analyzer';
 import { mapLimit } from '../core/concurrency';
 import { OutputCollector, staticFinding } from '../core/finding-factory';
@@ -192,6 +193,9 @@ export class TsContractsAnalyzer implements Analyzer {
       return out;
     }
 
+    const semantic = await SemanticContracts.create({ changes, workspace, ...(signal ? { signal } : {}) });
+    out.limitations.push(...semantic.limitations);
+    const graph = semantic.graph;
     const changedByPath = new Map(changes.files.map((f) => [f.path, f]));
     const allFiles = await workspace.listFiles(isScriptFile);
     const files = allFiles.slice(0, MAX_IMPORTER_SCAN);
@@ -213,9 +217,9 @@ export class TsContractsAnalyzer implements Analyzer {
         if (changed?.status === 'deleted') {
           return undefined;
         }
-        const text = changed ? await changes.content.read(importerPath, 'head') : await workspace.read(importerPath);
+        const text = graph?.sources.get(importerPath) ?? (changed ? await changes.content.read(importerPath, 'head') : await workspace.read(importerPath));
         // Cheap prefilter before parsing; alias specifiers (e.g. "~api") may not contain the module name.
-        return text !== undefined && (stems.some((stem) => text.includes(stem)) || aliasPrefixes.some((prefix) => text.includes(prefix))) ? text : undefined;
+        return text !== undefined && (graph !== undefined || stems.some((stem) => text.includes(stem)) || aliasPrefixes.some((prefix) => text.includes(prefix))) ? text : undefined;
       },
       signal,
     );
@@ -229,13 +233,50 @@ export class TsContractsAnalyzer implements Analyzer {
       for (const moduleImport of collectImports(sf)) {
         const target = resolveImport(importerPath, moduleImport.specifier, existing, aliases);
         const change = contractChanges.find((c) => c.module.path === target);
-        if (!change || target === importerPath) {
-          continue;
+        if (change && target !== importerPath) {
+          this.reportImporter(out, change, importerPath, sf, moduleImport, graph);
+        } else if (graph) {
+          this.reportIndirect(out, contractChanges, importerPath, sf, moduleImport, graph);
         }
-        this.reportImporter(out, change, importerPath, sf, moduleImport);
       }
     }
     return out;
+  }
+
+  private reportIndirect(out: OutputCollector, changes: readonly ContractChange[], importer: string, sf: ts.SourceFile, imported: ReturnType<typeof collectImports>[number], graph: SemanticContracts): void {
+    for (const binding of imported.bindings) {
+      const usages = binding.imported === '*' ? namespaceUsages(sf, binding.local) : [{ name: binding.imported, line: binding.line, local: binding.local }];
+      for (const usage of usages) {
+        const origin = graph.origin(importer, imported.specifier, usage.name);
+        if (!origin || origin.module === importer) continue;
+        const change = changes.find((candidate) => candidate.module.path === origin.module);
+        if (!change) continue;
+        const removed = change.removed.get(origin.name);
+        if (removed || change.moduleGone) {
+          out.add(staticFinding({
+            analyzerId: ID, ruleId: 'contracts/export-removed', severity: 'high', verification: 'evidenced',
+            title: msg('Indirect reference to removed export "{0}"', origin.name),
+            description: msg('{0} imports "{1}" through "{2}"; the base TypeScript symbol resolves to {3}, whose export changed.', importer, usage.name, imported.specifier, origin.module),
+            verificationNote: msg('Snapshot-only TypeScript symbol resolution established the dependency. This is static evidence; run comparable checks to attribute a failure.'),
+            location: { file: importer, startLine: usage.line },
+            evidenceDescription: msg('Base symbol "{0}" in {1}:{2} is referenced through "{3}" at {4}:{5}.', origin.name, origin.module, removed?.line ?? 1, imported.specifier, importer, usage.line),
+            evidenceLocations: [{ file: origin.module, startLine: removed?.line ?? 1 }, { file: importer, startLine: usage.line }],
+          }));
+        }
+        const arity = change.arity.get(origin.name);
+        if (arity) for (const call of callsWithFewerArgs(sf, usage.local, binding.imported === '*' ? binding.local : undefined, usage.name, arity.after, (node) => graph.references(importer, node.getStart(sf), origin))) {
+          out.add(staticFinding({
+            analyzerId: ID, ruleId: 'contracts/arity-increased', severity: 'high', verification: 'evidenced',
+            title: msg('Call to "{0}" is missing required arguments', usage.name),
+            description: msg('{0} changed the signature of "{1}" to require {2} argument(s), but this call site was not updated.', origin.module, origin.name, arity.after),
+            verificationNote: msg('Snapshot-only TypeScript symbol resolution established the dependency. This is static evidence; run comparable checks to attribute a failure.'),
+            location: { file: importer, startLine: call.line },
+            evidenceDescription: msg('{0}:{1} passes {2} argument(s); {3}:{4} requires {5}.', importer, call.line, call.args, origin.module, arity.line, arity.after),
+            evidenceLocations: [{ file: origin.module, startLine: arity.line }, { file: importer, startLine: call.line }],
+          }));
+        }
+      }
+    }
   }
 
   private reportImporter(
@@ -244,6 +285,7 @@ export class TsContractsAnalyzer implements Analyzer {
     importerPath: string,
     sf: ts.SourceFile,
     moduleImport: ReturnType<typeof collectImports>[number],
+    graph?: SemanticContracts,
   ): void {
     const modulePath = change.module.path;
     if (change.moduleGone) {
@@ -316,7 +358,7 @@ export class TsContractsAnalyzer implements Analyzer {
         }
         const arity = change.arity.get(usage.name);
         if (arity) {
-          for (const call of callsWithFewerArgs(sf, usage.local, binding.imported === '*' ? binding.local : undefined, usage.name, arity.after)) {
+          for (const call of callsWithFewerArgs(sf, usage.local, binding.imported === '*' ? binding.local : undefined, usage.name, arity.after, graph ? (node) => graph.references(importerPath, node.getStart(sf), { module: modulePath, name: usage.name }) : undefined)) {
             out.add(
               staticFinding({
                 analyzerId: ID,
@@ -412,7 +454,7 @@ function namespaceUsages(sf: ts.SourceFile, namespace: string): { name: string; 
   return usages;
 }
 
-function callsWithFewerArgs(sf: ts.SourceFile, local: string, namespace: string | undefined, name: string, required: number): { line: number; args: number }[] {
+function callsWithFewerArgs(sf: ts.SourceFile, local: string, namespace: string | undefined, name: string, required: number, resolves?: (node: ts.Expression) => boolean): { line: number; args: number }[] {
   const calls: { line: number; args: number }[] = [];
   visit(sf, (node) => {
     if (!ts.isCallExpression(node) || node.arguments.some((a) => ts.isSpreadElement(a))) {
@@ -422,7 +464,7 @@ function callsWithFewerArgs(sf: ts.SourceFile, local: string, namespace: string 
     const matches = namespace
       ? ts.isPropertyAccessExpression(callee) && ts.isIdentifier(callee.expression) && callee.expression.text === namespace && callee.name.text === name
       : ts.isIdentifier(callee) && callee.text === local;
-    if (matches && node.arguments.length < required) {
+    if (matches && (!resolves || resolves(callee)) && node.arguments.length < required) {
       calls.push({ line: lineOf(sf, node), args: node.arguments.length });
     }
   });

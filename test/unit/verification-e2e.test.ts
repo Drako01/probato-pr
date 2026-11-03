@@ -175,15 +175,31 @@ describe('end-to-end: review + verification with baseline attribution', () => {
     expect(outcome.evidence.map((e) => e.revision)).toEqual(['head']);
   });
 
+  it('does not attribute a failure across a lockfile-only dependency change', async () => {
+    const root = repo({
+      'package.json': JSON.stringify({ scripts: { test: 'node -e "process.exit(1)"' } }),
+      'pnpm-lock.yaml': 'lockfileVersion: "9.0"\nimporters: {}\n',
+    });
+    writeFiles(root, { 'pnpm-lock.yaml': 'lockfileVersion: "9.0"\nimporters: {.: {dependencies: {dep: {version: 2}}}}\n' });
+    const headSha = git(root, 'rev-parse', 'HEAD').trim();
+    const plan = await detectChecks(probeOf(root));
+    const outcome = await engine.run({ repoRoot: root, approved: plan, baselineCommit: headSha, headSha, headDirty: true, timeoutMs: 60_000, maxOutputBytes: 10_000 });
+    expect(outcome.evidence.map((item) => item.revision)).toEqual(['head']);
+    expect(outcome.checks[0]?.attribution).toBe('inconclusive');
+    expect(outcome.reproducibility?.[0]?.status).toBe('inconclusive');
+    expect(outcome.reproducibility?.[0]?.reasons.join(' ')).toMatch(/head and base: pnpm-lock.yaml/);
+  }, 120_000);
+
   it('never deletes the real node_modules when cleaning the baseline worktree', async () => {
     const root = repo({
       '.gitignore': 'node_modules/\n',
-      'package.json': JSON.stringify({ name: 'fx', scripts: { test: 'node -e "process.exit(require(\'fs\').existsSync(\'node_modules/dep/index.js\') ? 1 : 0)"' } }),
+      'package-lock.json': JSON.stringify({ lockfileVersion: 3, packages: { '': { dependencies: { dep: '1.0.0' } }, 'node_modules/dep': { version: '1.0.0' } } }),
+      'package.json': JSON.stringify({ name: 'fx', dependencies: { dep: '1.0.0' }, scripts: { test: 'node -e "process.exit(require(\'fs\').existsSync(\'node_modules/dep/index.js\') ? 1 : 0)"' } }),
     });
-    writeFiles(root, { 'node_modules/dep/index.js': 'module.exports = 1;\n', 'new.txt': 'x\n' });
+    writeFiles(root, { 'node_modules/.package-lock.json': JSON.stringify({ lockfileVersion: 3, packages: { 'node_modules/dep': { version: '1.0.0' } } }), 'node_modules/dep/package.json': JSON.stringify({ name: 'dep', version: '1.0.0' }), 'node_modules/dep/index.js': 'module.exports = 1;\n', 'new.txt': 'x\n' });
     const headSha = git(root, 'rev-parse', 'HEAD').trim();
     const plan = await detectChecks(probeOf(root));
-    // Head fails (dep exists) → baseline runs in a worktree whose node_modules links to the real one.
+    // Head fails (dep exists) â†’ baseline runs in a worktree whose node_modules links to the real one.
     const outcome = await engine.run({ repoRoot: root, approved: plan, baselineCommit: headSha, headSha, headDirty: true, timeoutMs: 120_000, maxOutputBytes: 10_000 });
     expect(outcome.evidence.map((e) => e.revision)).toEqual(['head', 'base']);
     expect(outcome.baselineError).toBeUndefined();
@@ -198,16 +214,16 @@ describe('local change collection', () => {
   });
 
   it('collects staged vs unstaged changes separately, including unicode and spaced paths', async () => {
-    const root = repo({ 'dir with space/café.ts': 'export const a = 1;\n', 'b.ts': 'export const b = 1;\n' });
-    writeFiles(root, { 'dir with space/café.ts': 'export const a = 2;\n', 'b.ts': 'export const b = 2;\n', 'untracked.ts': 'x\n' });
-    git(root, 'add', 'dir with space/café.ts');
+    const root = repo({ 'dir with space/cafÃ©.ts': 'export const a = 1;\n', 'b.ts': 'export const b = 1;\n' });
+    writeFiles(root, { 'dir with space/cafÃ©.ts': 'export const a = 2;\n', 'b.ts': 'export const b = 2;\n', 'untracked.ts': 'x\n' });
+    git(root, 'add', 'dir with space/cafÃ©.ts');
     const collector = new LocalChangeCollector(gitClient);
     const staged = await collector.collect(root, { kind: 'staged' }, limits);
-    expect(staged.files.map((f) => f.path)).toEqual(['dir with space/café.ts']);
-    expect(await staged.content.read('dir with space/café.ts', 'head')).toBe('export const a = 2;\n');
-    expect(await staged.content.read('dir with space/café.ts', 'base')).toBe('export const a = 1;\n');
+    expect(staged.files.map((f) => f.path)).toEqual(['dir with space/cafÃ©.ts']);
+    expect(await staged.content.read('dir with space/cafÃ©.ts', 'head')).toBe('export const a = 2;\n');
+    expect(await staged.content.read('dir with space/cafÃ©.ts', 'base')).toBe('export const a = 1;\n');
     const working = await collector.collect(root, { kind: 'working' }, limits);
-    expect(working.files.map((f) => f.path).sort()).toEqual(['b.ts', 'dir with space/café.ts', 'untracked.ts']);
+    expect(working.files.map((f) => f.path).sort()).toEqual(['b.ts', 'dir with space/cafÃ©.ts', 'untracked.ts']);
   });
 
   it('reviews a branch against its merge base and a single commit', async () => {

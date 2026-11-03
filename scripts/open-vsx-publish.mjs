@@ -1,6 +1,6 @@
 // Publishes the VSIX to Open VSX without blocking the release when the registry is slow or holds the version back.
 // Usage:
-//   OVSX_PAT=<token> node scripts/open-vsx-publish.mjs probato-pr.vsix [--version 0.1.2]
+//   node scripts/open-vsx-publish.mjs probato-pr.vsix --trusted-publishing [--version 0.1.2]
 //   node scripts/open-vsx-publish.mjs --check <version>     (prints "true" or "false": is it active on open-vsx.org?)
 //
 //  - Transient failures are retried with a growing delay; an invalid token fails at once.
@@ -14,7 +14,7 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 const INACTIVE = /already published, but currently isn't active/;
-const INVALID_TOKEN = /Invalid access token/;
+const INVALID_TOKEN = /Invalid access token|trusted publisher|OIDC|ID token|id.token|unauthori[sz]ed|forbidden/i;
 
 /** @returns {'published' | 'inactive' | 'fatal' | 'retry'} */
 export function classify(output, exitCode) {
@@ -27,7 +27,7 @@ export function classify(output, exitCode) {
   return INVALID_TOKEN.test(output) ? 'fatal' : 'retry';
 }
 
-/** @returns {{ mode: 'publish', vsix: string, version?: string } | { mode: 'check', version: string }} */
+/** @returns {{ mode: 'publish', vsix: string, version?: string, trustedPublishing?: boolean } | { mode: 'check', version: string }} */
 export function parseArgs(argv) {
   if (argv[0] === '--check') {
     if (!argv[1]) {
@@ -35,14 +35,23 @@ export function parseArgs(argv) {
     }
     return { mode: 'check', version: argv[1] };
   }
-  const [vsix, flag, version] = argv;
+  const [vsix, ...flags] = argv;
   if (!vsix || vsix.startsWith('--')) {
-    throw new Error('Usage: node scripts/open-vsx-publish.mjs <file.vsix> [--version <x.y.z>] | --check <version>');
+    throw new Error('Usage: node scripts/open-vsx-publish.mjs <file.vsix> [--trusted-publishing] [--version <x.y.z>] | --check <version>');
   }
-  if (flag === '--version' && !version) {
-    throw new Error('--version needs a value');
+  let version;
+  let trustedPublishing = false;
+  for (let index = 0; index < flags.length; index++) {
+    const flag = flags[index];
+    if (flag === '--trusted-publishing' && !trustedPublishing) { trustedPublishing = true; continue; }
+    if (flag === '--version' && version === undefined) {
+      version = flags[++index];
+      if (!version || version.startsWith('--')) throw new Error('--version needs a value');
+      continue;
+    }
+    throw new Error(`Unknown or duplicate option: ${flag}`);
   }
-  return flag === '--version' ? { mode: 'publish', vsix, version } : { mode: 'publish', vsix };
+  return { mode: 'publish', vsix, ...(version ? { version } : {}), ...(trustedPublishing ? { trustedPublishing: true } : {}) };
 }
 
 /** Runs the publish command until it succeeds, reports the inactive state, or runs out of attempts. */
@@ -85,9 +94,17 @@ export async function waitUntilActive({ url, version, fetchImpl, sleep, now = Da
   }
 }
 
-function runOvsx(vsix) {
+/** Explicit trusted publishing strips PAT precedence; no stored long-lived token is passed to the child. */
+export function publishInvocation(vsix, trustedPublishing, environment = process.env) {
+  const env = { ...environment };
+  if (trustedPublishing) { delete env.OVSX_PAT; delete env.OVSX_TOKEN; }
+  return { args: ['exec', 'ovsx', 'publish', vsix, '--skip-duplicate', ...(trustedPublishing ? ['--trusted-publishing'] : [])], env };
+}
+
+function runOvsx(vsix, trustedPublishing) {
   return new Promise((resolve) => {
-    const child = spawn('pnpm', ['exec', 'ovsx', 'publish', vsix, '--skip-duplicate'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const invocation = publishInvocation(vsix, trustedPublishing);
+    const child = spawn('pnpm', invocation.args, { env: invocation.env, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '';
     const collect = (chunk) => {
       output += chunk;
@@ -118,7 +135,7 @@ async function main() {
     console.log(String(await isActive({ url, version, fetchImpl: fetch })));
     return;
   }
-  const kind = await publishWithRetry({ run: () => runOvsx(args.vsix), sleep, log: console.log });
+  const kind = await publishWithRetry({ run: () => runOvsx(args.vsix, args.trustedPublishing === true), sleep, log: console.log });
   const active = kind === 'published' && (await waitUntilActive({ url, version, fetchImpl: fetch, sleep }));
   if (active) {
     report('notice', `${publisher}.${name} ${version} is live.`);

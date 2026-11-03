@@ -12,6 +12,7 @@ export const SUMMARY_VIEW_TYPE = 'probatoPR.summary';
  */
 export class SummaryPanel implements vscode.WebviewPanelSerializer, vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined;
+  private postGeneration = 0;
   private panelSubscriptions: vscode.Disposable[] = [];
   private readonly subscription: vscode.Disposable;
 
@@ -105,15 +106,27 @@ export class SummaryPanel implements vscode.WebviewPanelSerializer, vscode.Dispo
           await this.session.dismiss(message.id);
         }
         return;
+      case 'compareReview':
+        await this.session.compareWith(message.id);
+        return;
+      case 'clearComparison':
+        this.session.clearComparison();
+        return;
       case 'openEvidence':
         await vscode.commands.executeCommand('probatoPR.openEvidence', message.id);
     }
   }
 
   private post(): void {
-    if (this.panel) {
-      void this.panel.webview.postMessage({ type: 'state', state: summaryState(this.session, this.aiLabel()) } satisfies HostMessage);
-    }
+    const panel = this.panel;
+    if (!panel) return;
+    const generation = ++this.postGeneration;
+    void this.session.comparisonOptions().then((candidates) => {
+      if (this.panel === panel && generation === this.postGeneration) void panel.webview.postMessage({ type: 'state', state: summaryState(this.session, this.aiLabel(), candidates) } satisfies HostMessage);
+    }).catch((error: unknown) => {
+      this.log.warn(`Comparison history could not be loaded: ${String(error)}`);
+      if (this.panel === panel && generation === this.postGeneration) void panel.webview.postMessage({ type: 'state', state: summaryState(this.session, this.aiLabel()) } satisfies HostMessage);
+    });
   }
 
   private html(webview: vscode.Webview): string {

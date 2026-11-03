@@ -7,6 +7,9 @@ import { InvalidBaseUrlError } from '../ai/openai-compatible-provider';
 import { parseAiReview } from '../ai/ai-response';
 import { EMPTY_WORKSPACE, type WorkspaceIndex } from '../core/analyzer';
 import type { ChangeSet, PlannedCheck, ReviewResult } from '../core/model';
+import { loadRepositoryPolicy } from '../infrastructure/repository-policy';
+import { applyReviewPolicy, type RepositoryPolicy } from '../core/repository-policy';
+import { recommendChecks } from '../verification/check-impact';
 import { checkKindLabel } from '../core/labels';
 import { isWithin, PathOutsideWorkspaceError, resolveInside } from '../core/paths';
 import { finalizeResult, type ProgressReporter, type ReviewEngine } from '../core/review-engine';
@@ -28,12 +31,14 @@ import { ReviewedWorktree } from '../verification/review-worktree';
 import type { VerificationEngine } from '../verification/verification-engine';
 import { BusyError, type ReviewSession } from './review-session';
 import { ensureSavedRepository } from './review-state';
-import type { Settings } from './settings';
+import { DEFAULT_MUTATION_SETTINGS, type Settings } from './settings';
+import type { MutationRequest } from '../mutation/engine';
+import type { MutationResult } from '../mutation/model';
 
 export interface ControllerDeps {
   readonly session: ReviewSession;
   readonly git: GitClient;
-  readonly engine: ReviewEngine;
+  readonly engine: Pick<ReviewEngine, 'review'>;
   readonly verification: VerificationEngine;
   /** Checks the user chose to run without being asked again, per repository. */
   readonly approvals: ApprovedChecks;
@@ -46,6 +51,7 @@ export interface ControllerDeps {
   readonly showSummary: (preserveFocus?: boolean) => void;
   /** Runs the "Connect your AI" setup. */
   readonly connectAi: () => Promise<void>;
+  readonly runMutation?: (request: MutationRequest) => Promise<MutationResult>;
 }
 
 /** Orchestrates user commands. All operations are read-only unless the user approves otherwise. */
@@ -151,7 +157,10 @@ export class ReviewController {
   }
 
   private async analyze(changes: ChangeSet, workspace: WorkspaceIndex, signal: AbortSignal, report: ProgressReporter, snapshot?: string): Promise<void> {
-    const review = await this.deps.engine.review(changes, workspace, { signal, progress: report });
+    const loadedPolicy = await loadRepositoryPolicy(changes.repository.root, workspace);
+    const analyzed = await this.deps.engine.review(changes, workspace, { signal, progress: report });
+    let review = loadedPolicy.policy ? applyReviewPolicy(analyzed, loadedPolicy.policy) : analyzed;
+    if (loadedPolicy.warnings.length) review = { ...review, policyNotes: [...(review.policyNotes ?? []), ...loadedPolicy.warnings], risk: { ...review.risk, limitations: [...review.risk.limitations, ...loadedPolicy.warnings] } };
     if (signal.aborted) {
       throw new CancelledError();
     }
@@ -203,7 +212,9 @@ export class ReviewController {
             void vscode.window.showInformationMessage(vscode.l10n.t('No verification tools detected in the reviewed project.'));
             return;
           }
-          const approved = await this.approveChecks(root, plan);
+          const policy = await loadRepositoryPolicy(executionRoot);
+          for (const warning of policy.warnings) void vscode.window.showWarningMessage(warning);
+          const approved = await this.approveChecks(root, plan, review.changedFiles, policy.policy);
           if (!approved) return;
           const baselineCommit = await this.chooseBaseline(review);
           ensureSavedRepository(root);
@@ -230,11 +241,67 @@ export class ReviewController {
     });
   }
 
+  /** Mutation testing is a separate, explicitly authorized verifier and never runs from ordinary Verify. */
+  mutationTesting(): Promise<void> {
+    return this.guarded(async () => {
+      const review = this.deps.session.current;
+      if (!review) { void vscode.window.showInformationMessage(vscode.l10n.t('Run a review first.')); return; }
+      if (!review.repository.root) { void vscode.window.showWarningMessage(vscode.l10n.t('Mutation testing requires the reviewed repository checked out locally.')); return; }
+      const runMutation = this.deps.runMutation;
+      if (!runMutation) throw new Error(vscode.l10n.t('Mutation testing is unavailable in this extension host.'));
+      await this.ensureCurrentResult(review);
+      await this.exclusiveWithProgress(vscode.l10n.t('Mutation testing'), vscode.ProgressLocation.Notification, 'Probato PR', async (signal, progress) => {
+        const { discoverImpactedMutationFiles, mutationCommandEvidence, createMutationResult, cancelPendingMutation, transitionMutationExecution } = await import('../mutation-runtime.js');
+        let isolated: ReviewedWorktree | undefined;
+        try {
+          const root = review.repository.root;
+          if (!review.scope.headIsWorkingTree) isolated = await ReviewedWorktree.create(this.deps.git, root, review.scope);
+          const executionRoot = isolated?.directory ?? root;
+          const workspace = new GitWorkspaceIndex(this.deps.git, executionRoot, this.deps.settings().maxFileBytes);
+          const impactedFiles = await discoverImpactedMutationFiles(review.changedFiles, workspace);
+          const loaded = await loadRepositoryPolicy(executionRoot, workspace);
+          for (const warning of loaded.warnings) void vscode.window.showWarningMessage(warning);
+          const settings = this.deps.settings().mutation ?? DEFAULT_MUTATION_SETTINGS;
+          const policy = loaded.policy?.mutation;
+          const headCommit = review.scope.headSha ?? review.repository.headSha;
+          const request: MutationRequest = {
+            root: executionRoot, dependencyRoot: root, impactedFiles, authorized: false,
+            ...(headCommit ? { headCommit } : {}),
+            limits: { timeoutMs: settings.timeoutSeconds * 1000, concurrency: settings.concurrency, memoryMb: settings.memoryMb, maxFiles: settings.maxFiles },
+            gatePolicy: { enabled: policy?.enabled ?? settings.gateEnabled, failOnDegradation: policy?.failOnDegradation ?? settings.failOnDegradation, minimumScore: policy?.minimumScore ?? settings.minimumScore, tolerancePoints: policy?.tolerancePoints ?? settings.tolerancePoints },
+            signal, progress,
+            onUpdate: (result) => { if (this.currentReviewId() === review.id) this.deps.session.setMutation(result, mutationCommandEvidence(result)); },
+          };
+          const initial = createMutationResult(request);
+          const pending = { ...initial, execution: transitionMutationExecution(initial.execution, 'AWAITING_APPROVAL', vscode.l10n.t('Mutation testing requires explicit authorization.')) };
+          this.deps.session.setMutation(pending, []);
+          const headOnly = vscode.l10n.t('Run reviewed revision only');
+          const compare = vscode.l10n.t('Run reviewed revision and base');
+          const answer = await vscode.window.showWarningMessage(vscode.l10n.t('Run optional Stryker mutation testing on {0} impacted file(s)?', impactedFiles.length), {
+            modal: true,
+            detail: [vscode.l10n.t('This executes repository code with your user permissions. Stryker must already be installed; nothing is installed automatically.'),
+              vscode.l10n.t('Total mutation budget: {0} seconds, {1} worker(s), {2} MB Node heap per process. These are not operating-system sandbox limits.', settings.timeoutSeconds, settings.concurrency, settings.memoryMb),
+              vscode.l10n.t('Reviewed commit: {0}; base commit: {1}', headCommit ?? vscode.l10n.t('Unknown'), review.scope.baseSha ?? vscode.l10n.t('Unknown')),
+              ...impactedFiles,
+              vscode.l10n.t('The mutation gate is separate from ordinary checks and does not alter their thresholds.'),
+            ].join('\n\n'),
+          }, headOnly, ...(review.scope.baseSha ? [compare] : []));
+          if (!answer || signal.aborted) { this.deps.session.setMutation(cancelPendingMutation(pending), []); return; }
+          await this.ensureCurrentResult(review, signal);
+          const result = await runMutation({ ...request, authorized: true, ...(answer === compare && review.scope.baseSha ? { baseCommit: review.scope.baseSha } : {}) });
+          await this.ensureCurrentResult(review);
+          this.deps.session.setMutation(result, mutationCommandEvidence(result));
+        } finally { await isolated?.dispose(); }
+      });
+      this.deps.showSummary(true);
+    });
+  }
+
   /**
    * Checks remembered for this repository run without asking while their command and script are unchanged.
    * Otherwise the user picks and confirms, and may choose to be remembered.
    */
-  private async approveChecks(root: string, plan: readonly PlannedCheck[]): Promise<readonly PlannedCheck[] | undefined> {
+  private async approveChecks(root: string, plan: readonly PlannedCheck[], changedFiles: readonly string[] = [], policy?: RepositoryPolicy): Promise<readonly PlannedCheck[] | undefined> {
     const { approved, changed } = this.deps.approvals.match(root, plan);
     if (changed.length > 0) {
       await this.deps.approvals.forget(root);
@@ -252,10 +319,14 @@ export class ReviewController {
         });
       return approved;
     }
-    const items = plan.map((check) => ({
+    const impact = recommendChecks(plan, changedFiles, policy);
+    const recommendations = new Map(impact.recommendations.map((item) => [item.checkId, item]));
+    const rank = { high: 0, medium: 1, low: 2 };
+    const ordered = [...plan].sort((a, b) => rank[recommendations.get(a.id)?.confidence ?? 'low'] - rank[recommendations.get(b.id)?.confidence ?? 'low']);
+    const items = ordered.map((check) => ({
       label: check.label,
       description: checkKindLabel(check.kind),
-      detail: [...check.warnings, ...check.requires.map((r) => vscode.l10n.t('May require: {0}', r))].join(' · '),
+      detail: [recommendations.get(check.id)?.reason ?? check.rationale, ...check.warnings, ...check.requires.map((r) => vscode.l10n.t('May require: {0}', r))].join(' · '),
       // Pre-select only checks that do not run repository code; everything else is an explicit opt-in.
       picked: !check.runsRepositoryCode,
       check,

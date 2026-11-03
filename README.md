@@ -26,6 +26,27 @@ level. AI credentials remain in the existing secure connection flow. Reviewing, 
 continue to use their existing approval steps. In a multi-root workspace, choose the repository for local reviews;
 Git and GitHub delivery retain their own repository selection.
 
+## Proof-driven review in 0.5
+
+Each finding now explains its reported observation, linked evidence, relevant executed checks and what still
+needs to be proved. Compare compatible reviews from History to distinguish newly observed, persisting and
+no-longer-observed findings. Disappearance alone never means a defect is resolved.
+
+TypeScript contract analysis follows supported symbols through aliases and reexports using an in-memory,
+snapshot-only compiler. The analysis worker keeps compiler work outside the extension host. Unsupported or
+incomplete graphs fall back conservatively and disclose their limits.
+
+Verification recommendations explain which existing checks relate to changed projects. The full plan remains
+available and recommendations never approve execution. Repository policies in `.probato.yml` can adjust supported
+rule severities and recommend existing checks; they cannot define commands, grant approval or lower protected
+critical or secret findings. See the [upgrade guide](docs/UPGRADE-0.5.md).
+
+**Optional mutation testing** uses a locally installed Stryker on impacted JavaScript/TypeScript source.
+Execution, verification, quality trend and gate decision are independent. A decrease from 85% to 78% is a
+**7 percentage point regression**, even when both scores exceed 75%, only when the measurements are comparable.
+Stryker is not installed or run by ordinary reviews. See [Mutation Testing](docs/MUTATION_TESTING.md) for setup,
+score definitions, approval and resource limits, baseline requirements and reproducible validation.
+
 ## Why Probato PR
 
 Most AI review tools return a list of opinions. Probato PR classifies every finding by the strength of its evidence:

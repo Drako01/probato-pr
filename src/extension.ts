@@ -1,9 +1,8 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { createDefaultAnalyzers } from './analyzers';
 import type { ReviewResult } from './core/model';
 import { setTranslator } from './core/i18n';
-import { ReviewEngine } from './core/review-engine';
+import { AnalyzerWorkerHost } from './infrastructure/analyzer-worker-host';
 import { aiProviderLabel, createAiProvider } from './extension/ai-providers';
 import { AiSetup } from './extension/ai-setup';
 import { DeliveryController } from './extension/delivery-controller';
@@ -11,7 +10,6 @@ import { LocalDeliveryController } from './extension/local-delivery-controller';
 import { ensureSavedRepository } from './extension/review-state';
 import { assertReviewCurrent, repositorySnapshot } from './git/repository-snapshot';
 import { isWithin } from './core/paths';
-import { withIncrementalCache } from './infrastructure/review-cache';
 import { ReviewController } from './extension/review-controller';
 import { ReviewSession } from './extension/review-session';
 import { readSettings } from './extension/settings';
@@ -69,10 +67,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
 
   const aiSetup = new AiSetup(context.secrets, context.globalState, settings, log);
   const summary = new SummaryPanel(session, context.extensionUri, log, () => aiProviderLabel(settings().ai));
+  const analyzerWorker = new AnalyzerWorkerHost({ workerPath: vscode.Uri.joinPath(context.extensionUri, 'dist', 'analyzer-worker.js').fsPath, version, locale: vscode.env.language });
+  context.subscriptions.push(analyzerWorker);
   const controller = new ReviewController({
     session,
     git,
-    engine: new ReviewEngine(withIncrementalCache(createDefaultAnalyzers(), version), version),
+    engine: analyzerWorker,
     verification: new VerificationEngine(runner, git),
     approvals: new ApprovedChecks(context.workspaceState),
     github,
@@ -88,6 +88,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
       summary.show(preserveFocus);
     },
     connectAi: () => aiSetup.run(),
+    runMutation: async (request) => { const { MutationEngine } = await import('./mutation-runtime.js'); return new MutationEngine(runner, git).run(request); },
   });
 
   const localDelivery = new LocalDeliveryController(session, git);
@@ -131,7 +132,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
       }
       const auth = await Promise.resolve(vscode.authentication.getSession('github', GITHUB_SCOPES, { silent: true })).catch((error: unknown) => { log.warn(`Home account status unavailable: ${String(error)}`); return undefined; });
       const config = vscode.workspace.getConfiguration('probatoPR');
-      const keys = ['home.openOnStartup', 'review.onSave', 'review.baseBranch', 'review.maxFiles', 'verification.baseline', 'verification.timeoutSeconds', 'ai.provider', 'ai.includeFileContent'];
+      const keys = ['home.openOnStartup', 'review.onSave', 'review.baseBranch', 'review.maxFiles', 'verification.baseline', 'verification.timeoutSeconds', 'ai.provider', 'ai.includeFileContent', 'mutation.timeoutSeconds', 'mutation.concurrency', 'mutation.memoryMb', 'mutation.maxFiles', 'mutation.gateEnabled', 'mutation.failOnDegradation', 'mutation.minimumScore', 'mutation.tolerancePoints'];
       const storedHistory = (await history.load()).history;
       const latest = session.current;
       // Persistence is asynchronous; include the current review before its disk write completes.
@@ -219,6 +220,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
     vscode.commands.registerCommand('probatoPR.mergePullRequest', () => delivery.merge()),
     vscode.commands.registerCommand('probatoPR.importSarif', () => controller.importExternalReport()),
     vscode.commands.registerCommand('probatoPR.verify', () => controller.verify()),
+    vscode.commands.registerCommand('probatoPR.mutationTesting', () => controller.mutationTesting()),
     vscode.commands.registerCommand('probatoPR.aiReview', () => controller.aiReview()),
     vscode.commands.registerCommand('probatoPR.showResults', () => {
       controller.showResults();

@@ -1,3 +1,5 @@
+import { tr } from '../core/i18n';
+import { verificationLabel } from '../core/labels';
 import { sanitizeText } from '../core/sanitize';
 import { pathToFileURL } from 'node:url';
 import type { ReviewFinding, ReviewResult, Severity } from '../core/model';
@@ -58,7 +60,7 @@ export function renderSarif(result: ReviewResult): string {
           ruleId: f.ruleId,
           ruleIndex: rules.get(f.ruleId)?.index ?? 0,
           level: LEVEL[f.severity],
-          message: { text: `${f.title}\n\n${f.description}\n\nVerification: ${f.verification} — ${f.verificationNote}` },
+          message: { text: `${f.title}\n\n${f.description}\n\n${tr('Verification: {0}', verificationLabel(f.verification))} — ${f.verificationNote}` },
           locations: [
             {
               physicalLocation: {
@@ -79,6 +81,9 @@ export function renderSarif(result: ReviewResult): string {
         })),
         properties: {
           reviewRisk: result.risk.level,
+          ...(result.mutation ? { mutationTesting: result.mutation } : {}),
+          ...(result.reproducibility ? { reproducibility: result.reproducibility } : {}),
+          ...(result.performance ? { analysisPerformance: result.performance } : {}),
           scope: result.scope.label,
           checks: result.checks.map((c) => ({ command: c.commandLine, status: c.status, attribution: c.attribution })),
         },

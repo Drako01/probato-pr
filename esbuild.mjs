@@ -15,8 +15,20 @@ const extension = await esbuild.context({
   target: 'node20',
   outfile: 'dist/extension.js',
   external: ['vscode'],
+  plugins: [{ name: 'optional-mutation-runtime', setup(build) { build.onResolve({ filter: /mutation-runtime\.js$/ }, () => ({ path: './mutation-runtime.js', external: true })); } }],
   legalComments: 'linked',
   metafile: true,
+});
+
+// Separate CommonJS bundle is loaded on the first review, not at extension activation.
+const analyzers = await esbuild.context({
+  ...shared, entryPoints: ['src/analyzer-worker.ts'], format: 'cjs', platform: 'node', target: 'node20',
+  outfile: 'dist/analyzer-worker.js', legalComments: 'linked', metafile: true,
+});
+
+const mutation = await esbuild.context({
+  ...shared, entryPoints: ['src/mutation-runtime.ts'], format: 'cjs', platform: 'node', target: 'node20',
+  outfile: 'dist/mutation-runtime.js', legalComments: 'linked', metafile: true,
 });
 
 // The webview imports protocol types only, so it bundles no third-party code.
@@ -40,10 +52,10 @@ const cli = await esbuild.context({
 });
 
 if (watch) {
-  await Promise.all([extension.watch(), webview.watch(), cli.watch()]);
+  await Promise.all([extension.watch(), analyzers.watch(), mutation.watch(), webview.watch(), cli.watch()]);
 } else {
-  const [result] = await Promise.all([extension.rebuild(), webview.rebuild(), cli.rebuild()]);
+  const [result, analyzerResult, mutationResult] = await Promise.all([extension.rebuild(), analyzers.rebuild(), mutation.rebuild(), webview.rebuild(), cli.rebuild()]);
   // The metafile lists every bundled input; scripts/third-party-notices.mjs derives license notices from it.
-  writeFileSync('dist/metafile.json', JSON.stringify(result.metafile));
-  await Promise.all([extension.dispose(), webview.dispose(), cli.dispose()]);
+  writeFileSync('dist/metafile.json', JSON.stringify({ ...result.metafile, inputs: { ...result.metafile.inputs, ...analyzerResult.metafile.inputs, ...mutationResult.metafile.inputs }, outputs: { ...result.metafile.outputs, ...analyzerResult.metafile.outputs, ...mutationResult.metafile.outputs } }));
+  await Promise.all([extension.dispose(), analyzers.dispose(), mutation.dispose(), webview.dispose(), cli.dispose()]);
 }

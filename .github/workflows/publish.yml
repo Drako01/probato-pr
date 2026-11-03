@@ -1,7 +1,7 @@
 # Verifies every pull request and, when a merge to main changes the version in package.json, publishes that
 # version to the Visual Studio Marketplace (Trusted Publishing, no stored token) and to Open VSX, then creates
 # the GitHub release. The Marketplace is the primary channel: the release depends on it, not on Open VSX, whose
-# slower or held-back publishes are retried here and by open-vsx-sync.yml. Publishing is idempotent: a version
+# slower or held-back publishes are retried by the scheduled sync job in this same workflow. Publishing is idempotent: a version
 # that already exists in a store is skipped.
 # Run it by hand (Actions → publish → Run workflow) to publish the version currently on main.
 # Setup and rotation: docs/RELEASE.md.
@@ -13,6 +13,13 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      open_vsx_sync:
+        description: Synchronize the latest release to Open VSX only
+        type: boolean
+        default: false
+  schedule:
+    - cron: '17 6 * * *'
 
 permissions:
   contents: read
@@ -24,6 +31,7 @@ concurrency:
 jobs:
   plan:
     name: Plan
+    if: github.event_name != 'schedule' && !(github.event_name == 'workflow_dispatch' && inputs.open_vsx_sync)
     runs-on: ubuntu-latest
     outputs:
       publish: ${{ steps.plan.outputs.publish }}
@@ -50,6 +58,7 @@ jobs:
 
   verify:
     name: Verify (${{ matrix.os }})
+    if: github.event_name != 'schedule' && !(github.event_name == 'workflow_dispatch' && inputs.open_vsx_sync)
     strategy:
       fail-fast: false
       matrix:
@@ -144,6 +153,9 @@ jobs:
     needs: package
     runs-on: ubuntu-latest
     environment: open-vsx
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -158,9 +170,7 @@ jobs:
         with:
           name: vsix
       - name: Publish with retries and wait for it to become active
-        env:
-          OVSX_PAT: ${{ secrets.OVSX_PAT }}
-        run: node scripts/open-vsx-publish.mjs probato-pr.vsix
+        run: node scripts/open-vsx-publish.mjs probato-pr.vsix --trusted-publishing
 
   release:
     name: GitHub release
@@ -189,3 +199,67 @@ jobs:
           awk -v v="$VERSION" 'index($0, "## [" v "]") == 1 { found = 1; next } /^## \[/ { found = 0 } found' CHANGELOG.md > notes.md
           test -s notes.md || echo "Probato PR $VERSION" > notes.md
           gh release create "$tag" probato-pr.vsix probato-pr.vsix.sha256 --target "$GITHUB_SHA" --title "Probato PR $VERSION" --notes-file notes.md
+
+  sync-open-vsx:
+    name: Synchronize the latest release to Open VSX
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.open_vsx_sync))
+    runs-on: ubuntu-latest
+    environment: open-vsx
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Latest release
+        id: release
+        run: |
+          tag=$(gh release view --json tagName --jq .tagName)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "published=$(gh release view "$tag" --json publishedAt --jq .publishedAt)" >> "$GITHUB_OUTPUT"
+      - name: Is it active on Open VSX?
+        id: before
+        run: echo "active=$(node scripts/open-vsx-publish.mjs --check '${{ steps.release.outputs.version }}')" >> "$GITHUB_OUTPUT"
+      - name: Publish the release asset again
+        if: steps.before.outputs.active != 'true'
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          gh release download "$TAG" --pattern probato-pr.vsix --dir "$RUNNER_TEMP"
+          node scripts/open-vsx-publish.mjs "$RUNNER_TEMP/probato-pr.vsix" --version "$VERSION" --trusted-publishing
+      - name: Is it active now?
+        id: after
+        run: echo "active=$(node scripts/open-vsx-publish.mjs --check '${{ steps.release.outputs.version }}')" >> "$GITHUB_OUTPUT"
+      - name: Open or close the tracking issue
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          PUBLISHED: ${{ steps.release.outputs.published }}
+          ACTIVE: ${{ steps.after.outputs.active }}
+        run: |
+          title="Open VSX is out of sync with the latest release"
+          existing=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [ "$ACTIVE" = true ]; then
+            echo "Version $VERSION is active on Open VSX."
+            if [ -n "$existing" ]; then
+              gh issue close "$existing" --comment "Version $VERSION is now active on Open VSX."
+            fi
+            exit 0
+          fi
+          age_days=$(( ( $(date +%s) - $(date -d "$PUBLISHED" +%s) ) / 86400 ))
+          echo "::warning title=Open VSX::Version $VERSION is still not active ($age_days day(s) after the release)."
+          if [ "$age_days" -ge 3 ] && [ -z "$existing" ]; then
+            gh issue create --title "$title" --body "Version $VERSION was released $age_days days ago and is still not active on Open VSX. The daily sync keeps retrying. Check the status at https://open-vsx.org/user-settings/extensions and the namespace claim (https://github.com/EclipseFdn/open-vsx.org/issues/15149)."
+          fi

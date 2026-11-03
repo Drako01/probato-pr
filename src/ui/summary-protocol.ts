@@ -3,6 +3,8 @@
 import { z } from 'zod';
 import type { AiSummary, CheckStatus, RiskLevel, Severity, VerificationStatus } from '../core/model';
 import type { NextAction, StepState } from './workflow';
+import type { MutationView } from './mutation-view-model';
+import type { ComparisonView } from './review-comparison-view-model';
 
 /** Host commands the webview may trigger. Anything else is rejected. */
 export const SUMMARY_COMMANDS = [
@@ -12,6 +14,7 @@ export const SUMMARY_COMMANDS = [
   'reviewCommit',
   'reviewPullRequest',
   'verify',
+  'mutationTesting',
   'exportReport',
   'aiReview',
   'cancel',
@@ -37,6 +40,7 @@ export const SUMMARY_COMMAND_IDS: Readonly<Record<SummaryCommand, string>> = {
   reviewCommit: 'probatoPR.reviewCommit',
   reviewPullRequest: 'probatoPR.reviewPullRequest',
   verify: 'probatoPR.verify',
+  mutationTesting: 'probatoPR.mutationTesting',
   exportReport: 'probatoPR.exportReport',
   aiReview: 'probatoPR.aiReview',
   cancel: 'probatoPR.cancel',
@@ -61,6 +65,8 @@ export const webviewMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('openFinding'), id }),
   z.object({ type: z.literal('dismissFinding'), id }),
   z.object({ type: z.literal('openEvidence'), id }),
+  z.object({ type: z.literal('compareReview'), id }),
+  z.object({ type: z.literal('clearComparison') }),
 ]);
 export type WebviewMessage = z.infer<typeof webviewMessageSchema>;
 
@@ -86,6 +92,13 @@ export interface SummaryFinding {
   readonly file: string;
   readonly line: number;
   readonly ruleId: string;
+  readonly explanation: {
+    readonly observation: string;
+    readonly observationNote: string;
+    readonly evidence: readonly { readonly id: string; readonly summary: string; readonly available: boolean; readonly locations: readonly string[] }[];
+    readonly checks: readonly { readonly label: string; readonly statusLabel: string; readonly note: string }[];
+    readonly missingProof: readonly string[];
+  };
 }
 
 export interface SummaryCheck {
@@ -115,6 +128,10 @@ export interface SummaryReview {
   readonly dismissed: number;
   readonly checks: readonly SummaryCheck[];
   readonly ai: SummaryAi;
+  readonly mutation?: MutationView;
+  readonly hasLocalCheckout: boolean;
+  readonly analysisMs?: number;
+  readonly reproducibilityLimitations?: readonly string[];
 }
 
 /** Localized UI strings, resolved in the host (the webview has no l10n API). */
@@ -163,7 +180,23 @@ export type SummaryLabels = Readonly<Record<
   | 'pullRequestStatus'
   | 'mergePullRequest'
   | 'importSarif'
-  | 'exportReport',
+  | 'exportReport'
+  | 'findingExplanation'
+  | 'reportedObservation'
+  | 'linkedEvidence'
+  | 'linkedChecks'
+  | 'missingProof'
+  | 'noLinkedChecks'
+  | 'comparison'
+  | 'chooseComparison'
+  | 'clearComparison'
+  | 'comparisonEligibility'
+  | 'newFindings'
+  | 'persistingFindings'
+  | 'noLongerObserved'
+  | 'analysisDuration'
+  | 'reproducibilityLimitations'
+  | 'mutationMetricHelp' | 'mutationTitle' | 'mutationRun' | 'mutationOptional' | 'mutationExecution' | 'mutationVerification' | 'mutationBaseline' | 'mutationQuality' | 'mutationGate' | 'mutationScore' | 'mutationKilledOnly' | 'mutationDelta' | 'mutationRawStatus' | 'mutationAttribution' | 'mutationMutants' | 'mutationReportHash',
   string
 >>;
 
@@ -171,6 +204,8 @@ export interface SummaryState {
   readonly labels: SummaryLabels;
   readonly busy?: string;
   readonly review?: SummaryReview;
+  readonly comparison?: ComparisonView;
+  readonly comparisonOptions?: readonly { readonly id: string; readonly label: string }[];
 }
 
 export type HostMessage = { readonly type: 'state'; readonly state: SummaryState };

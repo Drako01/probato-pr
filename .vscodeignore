@@ -1,6 +1,10 @@
 **
 !dist/extension.js
 !dist/extension.js.LEGAL.txt
+!dist/analyzer-worker.js
+!dist/analyzer-worker.js.LEGAL.txt
+!dist/mutation-runtime.js
+!dist/mutation-runtime.js.LEGAL.txt
 !dist/webview/summary.js
 # Only what the extension uses; README images (readme-logo.png, screenshots/) are served from the repository.
 !media/logo.png

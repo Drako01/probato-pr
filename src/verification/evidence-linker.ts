@@ -76,5 +76,6 @@ export function applyVerification(review: ReviewResult, outcome: VerificationOut
     findings: [...findings, ...extra],
     evidence: [...review.evidence, ...outcome.evidence],
     checks: outcome.checks,
+    ...(outcome.reproducibility ? { reproducibility: outcome.reproducibility } : {}),
   });
 }

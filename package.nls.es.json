@@ -75,5 +75,14 @@
   "command.importSarif": "Importar evidencia SARIF",
   "config.review.onSave": "Volver a revisar los cambios locales al guardar un archivo. No ejecuta checks ni envía contenido a una IA.",
   "command.openHome": "Abrir Inicio de Probato",
-  "config.home.openOnStartup": "Abrir el panel de control de Probato cuando su barra lateral se muestre por primera vez en esta ventana."
+  "config.home.openOnStartup": "Abrir el panel de control de Probato cuando su barra lateral se muestre por primera vez en esta ventana.",
+  "command.mutationTesting": "Ejecutar pruebas de mutación (opcional)",
+  "config.mutation.timeoutSeconds": "Presupuesto total de tiempo de pruebas de mutación, en segundos, compartido entre ambas revisiones. Una operación Git ya iniciada puede finalizar dentro de su propio timeout antes de cancelarse.",
+  "config.mutation.concurrency": "Cantidad máxima de workers de Stryker. Las pruebas de mutación siempre requieren autorización explícita.",
+  "config.mutation.memoryMb": "Presupuesto de memoria heap de Node en MB por proceso. No es un límite de memoria ni un aislamiento del sistema operativo.",
+  "config.mutation.maxFiles": "Cantidad máxima de archivos fuente impactados permitidos en una solicitud de mutación.",
+  "config.mutation.gateEnabled": "Habilitar el gate de calidad de mutaciones por separado. Esto no autoriza la ejecución ni modifica los umbrales de verificación habituales.",
+  "config.mutation.failOnDegradation": "Rechazar el gate de mutación habilitado cuando mediciones comparables demuestren una caída superior a la tolerancia permitida.",
+  "config.mutation.minimumScore": "Mutation Score mínimo absoluto de Stryker. Cero deshabilita este umbral absoluto; una degradación diferencial todavía puede rechazar el gate.",
+  "config.mutation.tolerancePoints": "Caída permitida del Mutation Score en puntos porcentuales, solo para mediciones técnicamente comparables."
 }
