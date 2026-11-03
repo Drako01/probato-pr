@@ -7,6 +7,7 @@ import { InvalidBaseUrlError } from '../ai/openai-compatible-provider';
 import { parseAiReview } from '../ai/ai-response';
 import { EMPTY_WORKSPACE, type WorkspaceIndex } from '../core/analyzer';
 import type { ChangeSet, PlannedCheck, ReviewResult } from '../core/model';
+import { checkKindLabel } from '../core/labels';
 import { isWithin, PathOutsideWorkspaceError, resolveInside } from '../core/paths';
 import { finalizeResult, type ProgressReporter, type ReviewEngine } from '../core/review-engine';
 import { CancelledError, GitError, GitNotFoundError, OutputTooLargeError, type GitClient } from '../git/git-client';
@@ -253,7 +254,7 @@ export class ReviewController {
     }
     const items = plan.map((check) => ({
       label: check.label,
-      description: check.kind,
+      description: checkKindLabel(check.kind),
       detail: [...check.warnings, ...check.requires.map((r) => vscode.l10n.t('May require: {0}', r))].join(' · '),
       // Pre-select only checks that do not run repository code; everything else is an explicit opt-in.
       picked: !check.runsRepositoryCode,

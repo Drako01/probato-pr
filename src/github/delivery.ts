@@ -1,4 +1,5 @@
 import { tr } from '../core/i18n';
+import { severityLabel, verificationLabel } from '../core/labels';
 import { z } from 'zod';
 import { stableId } from '../core/ids';
 import type { ReviewFinding } from '../core/model';
@@ -51,7 +52,7 @@ export function buildReviewDraft(findings: readonly ReviewFinding[], files: read
     const occurrence = occurrences.get(semantic) ?? 0;
     occurrences.set(semantic, occurrence + 1);
     const key = stableId(semantic, occurrence);
-    const text = [`**${escapeMarkdown(redactSecrets(f.severity))} · ${escapeMarkdown(redactSecrets(f.title))}**`, escapeMarkdown(redactSecrets(f.description)), tr('Evidence: {0}. {1}', escapeMarkdown(redactSecrets(f.verification)), escapeMarkdown(redactSecrets(f.verificationNote))), ...(f.suggestedFix ? [tr('Suggested correction: {0}', escapeMarkdown(redactSecrets(f.suggestedFix)))] : [])].join('\n\n');
+    const text = [`**${escapeMarkdown(redactSecrets(severityLabel(f.severity)))} · ${escapeMarkdown(redactSecrets(f.title))}**`, escapeMarkdown(redactSecrets(f.description)), tr('Evidence: {0}. {1}', escapeMarkdown(redactSecrets(verificationLabel(f.verification))), escapeMarkdown(redactSecrets(f.verificationNote))), ...(f.suggestedFix ? [tr('Suggested correction: {0}', escapeMarkdown(redactSecrets(f.suggestedFix)))] : [])].join('\n\n');
     comments.push({ key, path: file.path, line: f.location.startLine, side, body: `${commentMarker(key)}\n${redactSecrets(text)}` });
   }
   const groups = new Map<string, { readonly first: InlineDraft; readonly keys: string[]; readonly parts: string[] }>();
@@ -163,7 +164,7 @@ export class GitHubDelivery {
   async merge(ref: GitHubRepoRef, number: number, expectedSha: string, method: MergeMethod, expectedBase: { readonly ref: string; readonly sha: string }, signal?: AbortSignal): Promise<string> {
     const status = await this.status(ref, number, signal);
     if (status.pull.head.sha !== expectedSha || status.pull.base.ref !== expectedBase.ref || status.pull.base.sha !== expectedBase.sha) throw new GitHubError(tr('The head commit changed. Refresh before merging.'), undefined, 'http');
-    if (status.blockers.length || !status.methods.includes(method)) throw new GitHubError(status.blockers.join(' ') || 'This merge method is disabled.', undefined, 'http');
+    if (status.blockers.length || !status.methods.includes(method)) throw new GitHubError(status.blockers.join(' ') || tr('This merge method is disabled.'), undefined, 'http');
     // Query review requirements explicitly: an administrator's ability to bypass protections is not permission to do so.
     const policy = await this.client.graphql('query($owner:String!,$repo:String!,$number:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$number){headRefOid reviewDecision mergeStateStatus}}}', { owner: ref.owner, repo: ref.repo, number }, z.object({ repository: z.object({ pullRequest: z.object({ headRefOid: z.string(), reviewDecision: z.string().nullable(), mergeStateStatus: z.string() }).nullable() }).nullable() }), signal);
     const latest = policy.repository?.pullRequest;

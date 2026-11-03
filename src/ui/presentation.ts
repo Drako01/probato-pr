@@ -6,6 +6,7 @@ import type { StepState } from './workflow';
 
 export {
   attributionLabel,
+  checkKindLabel,
   checkResultLabel,
   checkStatusLabel,
   evidenceRevisionLabel,

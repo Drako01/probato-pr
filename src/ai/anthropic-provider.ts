@@ -1,3 +1,4 @@
+import { tr } from '../core/i18n';
 import Anthropic from '@anthropic-ai/sdk';
 import { AiProviderError, type AIReviewProvider, type AiPrompt, type AiRawResponse } from './ai-provider';
 
@@ -5,7 +6,7 @@ import { AiProviderError, type AIReviewProvider, type AiPrompt, type AiRawRespon
 export class AnthropicProvider implements AIReviewProvider {
   readonly id = 'anthropic';
   readonly name = 'Anthropic Claude';
-  readonly destination = 'Anthropic API (api.anthropic.com), using your API key';
+  readonly destination = tr('Anthropic API (api.anthropic.com), using your API key');
 
   constructor(
     private readonly apiKey: () => Promise<string | undefined>,
@@ -32,7 +33,7 @@ export class AnthropicProvider implements AIReviewProvider {
   private async client(): Promise<Anthropic> {
     const apiKey = await this.apiKey();
     if (!apiKey) {
-      throw new AiProviderError('No Anthropic API key configured. Run "Probato PR: Connect Your AI".', 'unavailable');
+      throw new AiProviderError(tr('No Anthropic API key configured. Run "Probato PR: Connect Your AI".'), 'unavailable');
     }
     return new Anthropic({ apiKey, maxRetries: 2 });
   }
@@ -53,7 +54,7 @@ export class AnthropicProvider implements AIReviewProvider {
         { signal },
       );
       if (response.stop_reason === 'refusal') {
-        throw new AiProviderError('The model declined to review this content.', 'refused');
+        throw new AiProviderError(tr('The model declined to review this content.'), 'refused');
       }
       const text = response.content.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('\n');
       return { model: response.model, text };
@@ -68,16 +69,16 @@ export class AnthropicProvider implements AIReviewProvider {
       return error;
     }
     if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
-      return new AiProviderError('Anthropic rejected the API key. Run "Probato PR: Connect Your AI" to set it again.', 'auth');
+      return new AiProviderError(tr('Anthropic rejected the API key. Run "Probato PR: Connect Your AI" to set it again.'), 'auth');
     }
     if (error instanceof Anthropic.RateLimitError) {
-      return new AiProviderError('Anthropic rate limit reached. Try again later.', 'rate-limited');
+      return new AiProviderError(tr('Anthropic rate limit reached. Try again later.'), 'rate-limited');
     }
     if (error instanceof Anthropic.APIConnectionError) {
-      return new AiProviderError('Could not reach the Anthropic API. Local review results are unaffected.', 'network');
+      return new AiProviderError(tr('Could not reach the Anthropic API. Local review results are unaffected.'), 'network');
     }
     if (error instanceof Anthropic.APIError) {
-      return new AiProviderError(`Anthropic API error ${String(error.status)}: ${error.message}`, 'other');
+      return new AiProviderError(tr('Anthropic API error {0}: {1}', String(error.status), error.message), 'other');
     }
     return error;
   }

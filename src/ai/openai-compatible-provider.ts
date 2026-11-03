@@ -1,3 +1,4 @@
+import { tr } from '../core/i18n';
 import { z } from 'zod';
 import { AiProviderError, type AIReviewProvider, type AiPrompt, type AiRawResponse } from './ai-provider';
 
@@ -21,17 +22,17 @@ export function parseAiBaseUrl(raw: string): URL {
   try {
     url = new URL(raw.trim());
   } catch {
-    throw new InvalidBaseUrlError('Enter a full URL, for example https://api.openai.com/v1 or http://localhost:11434/v1.');
+    throw new InvalidBaseUrlError(tr('Enter a full URL, for example https://api.openai.com/v1 or http://localhost:11434/v1.'));
   }
   if (url.username || url.password) {
-    throw new InvalidBaseUrlError('Do not put credentials in the URL; the API key is asked for separately.');
+    throw new InvalidBaseUrlError(tr('Do not put credentials in the URL; the API key is asked for separately.'));
   }
   const loopback = LOOPBACK_HOSTS.has(url.hostname);
   if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) {
-    throw new InvalidBaseUrlError('Use https:// (plain http:// is only allowed for servers on this machine).');
+    throw new InvalidBaseUrlError(tr('Use https:// (plain http:// is only allowed for servers on this machine).'));
   }
   if (url.search || url.hash) {
-    throw new InvalidBaseUrlError('The base URL cannot contain a query string or fragment.');
+    throw new InvalidBaseUrlError(tr('The base URL cannot contain a query string or fragment.'));
   }
   url.pathname = url.pathname.replace(/\/+$/, '');
   return url;
@@ -70,8 +71,8 @@ export class OpenAiCompatibleProvider implements AIReviewProvider {
     private readonly fetchImpl: typeof fetch = (input, init) => fetch(input, init),
   ) {
     const openAi = isOpenAi(baseUrl);
-    this.name = openAi ? 'OpenAI' : `OpenAI-compatible API (${baseUrl.host})`;
-    this.destination = `${baseUrl.origin}${openAi ? ' (OpenAI)' : ''}, using your API key if one is set`;
+    this.name = openAi ? 'OpenAI' : tr('OpenAI-compatible API ({0})', baseUrl.host);
+    this.destination = tr('{0}, using your API key if one is set', `${baseUrl.origin}${openAi ? ' (OpenAI)' : ''}`);
   }
 
   isAvailable(): Promise<boolean> {
@@ -82,14 +83,14 @@ export class OpenAiCompatibleProvider implements AIReviewProvider {
     const body = await this.request('models', { method: 'GET', signal });
     const parsed = ModelListSchema.safeParse(body);
     if (!parsed.success) {
-      throw new AiProviderError(`${this.baseUrl.host} did not return a model list.`, 'other');
+      throw new AiProviderError(tr('{0} did not return a model list.', this.baseUrl.host), 'other');
     }
     return parsed.data.data.map((m) => m.id).sort((a, b) => a.localeCompare(b));
   }
 
   async complete(prompt: AiPrompt, signal: AbortSignal): Promise<AiRawResponse> {
     if (!this.model) {
-      throw new AiProviderError('No model selected. Run "Probato PR: Connect Your AI".', 'unavailable');
+      throw new AiProviderError(tr('No model selected. Run "Probato PR: Connect Your AI".'), 'unavailable');
     }
     const body = await this.request('chat/completions', {
       method: 'POST',
@@ -104,11 +105,11 @@ export class OpenAiCompatibleProvider implements AIReviewProvider {
     });
     const parsed = ChatResponseSchema.safeParse(body);
     if (!parsed.success) {
-      throw new AiProviderError(`${this.baseUrl.host} returned an unexpected response.`, 'other');
+      throw new AiProviderError(tr('{0} returned an unexpected response.', this.baseUrl.host), 'other');
     }
     const message = parsed.data.choices[0]?.message;
     if (message?.refusal) {
-      throw new AiProviderError('The model declined to review this content.', 'refused');
+      throw new AiProviderError(tr('The model declined to review this content.'), 'refused');
     }
     return { model: parsed.data.model ?? this.model, text: message?.content ?? '' };
   }
@@ -127,22 +128,22 @@ export class OpenAiCompatibleProvider implements AIReviewProvider {
       if (init.signal.aborted) {
         throw error;
       }
-      throw new AiProviderError(`Could not reach ${this.baseUrl.host}. Local review results are unaffected.`, 'network');
+      throw new AiProviderError(tr('Could not reach {0}. Local review results are unaffected.', this.baseUrl.host), 'network');
     }
     if (response.status === 401 || response.status === 403) {
-      throw new AiProviderError(`${this.baseUrl.host} rejected the API key. Run "Probato PR: Connect Your AI" to set it again.`, 'auth');
+      throw new AiProviderError(tr('{0} rejected the API key. Run "Probato PR: Connect Your AI" to set it again.', this.baseUrl.host), 'auth');
     }
     if (response.status === 429) {
-      throw new AiProviderError(`${this.baseUrl.host} rate limit reached. Try again later.`, 'rate-limited');
+      throw new AiProviderError(tr('{0} rate limit reached. Try again later.', this.baseUrl.host), 'rate-limited');
     }
     if (!response.ok) {
-      throw new AiProviderError(`${this.baseUrl.host} returned HTTP ${response.status}.`, 'other');
+      throw new AiProviderError(tr('{0} returned HTTP {1}.', this.baseUrl.host, response.status), 'other');
     }
     try {
       const json: unknown = await response.json();
       return json;
     } catch {
-      throw new AiProviderError(`${this.baseUrl.host} returned a response that is not JSON.`, 'other');
+      throw new AiProviderError(tr('{0} returned a response that is not JSON.', this.baseUrl.host), 'other');
     }
   }
 }

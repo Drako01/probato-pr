@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { severityLabel, verificationLabel } from '../core/labels';
 import type { ReviewResult } from '../core/model';
 import { redactSecrets } from '../core/secrets';
 import type { GitClient } from '../git/git-client';
@@ -95,7 +96,7 @@ export class DeliveryController {
       const pull = await this.pickPull(target, signal);
       if (!pull) return;
       if (review.scope.headIsWorkingTree || review.scope.kind === 'staged' || (review.scope.headSha ?? review.repository.headSha) !== pull.head.sha) throw new Error(vscode.l10n.t('Review the committed pull request head before publishing findings.'));
-      const chosen = await vscode.window.showQuickPick(this.deps.session.visibleFindings().map((finding) => ({ label: `${finding.severity}: ${finding.title}`, description: `${finding.location.file}:${finding.location.startLine} - ${finding.verification}`, finding })), { canPickMany: true, title: vscode.l10n.t('Choose findings to publish (maximum 20 comment locations)') });
+      const chosen = await vscode.window.showQuickPick(this.deps.session.visibleFindings().map((finding) => ({ label: `${severityLabel(finding.severity)}: ${finding.title}`, description: `${finding.location.file}:${finding.location.startLine} - ${verificationLabel(finding.verification)}`, finding })), { canPickMany: true, title: vscode.l10n.t('Choose findings to publish (maximum 20 comment locations)') });
       if (!chosen?.length) return;
       const draft = buildReviewDraft(chosen.map((c) => c.finding), await this.deps.github.listPullFiles(target.ref, pull.number, signal));
       const text = [`${target.ref.owner}/${target.ref.repo} #${pull.number}`, `Commit: ${pull.head.sha}`, ...draft.comments.map((c) => `${c.path}:${c.line} (${c.side})\n\n${c.body}`), ...(draft.skipped.length ? [vscode.l10n.t('Not published (outside the diff or over the limit): {0}', draft.skipped.join('\n'))] : [])].join('\n\n---\n\n');
@@ -113,8 +114,8 @@ export class DeliveryController {
       const pull = await this.pickPull(target, signal);
       if (!pull) return;
       const status = await this.delivery.status(target.ref, pull.number, signal);
-      await this.preview([`${target.ref.owner}/${target.ref.repo} #${pull.number}: ${pull.title}`, pull.html_url, `Head: ${status.pull.head.sha}`, `GitHub: ${status.pull.mergeable_state}`, ...status.checks.map((c) => `${c.state}: ${c.name}${c.url ? `\n${c.url}` : ''}`), ...status.blockers].join('\n\n'));
-      const selected = await vscode.window.showQuickPick(status.checks.filter((c) => c.url).map((c) => ({ label: c.name, description: c.state, url: c.url ?? '' })), { title: vscode.l10n.t('Choose a CI job to read its logs') });
+      await this.preview([`${target.ref.owner}/${target.ref.repo} #${pull.number}: ${pull.title}`, pull.html_url, vscode.l10n.t('Head commit: {0}', status.pull.head.sha), vscode.l10n.t('GitHub state: {0}', githubStateLabel(status.pull.mergeable_state)), ...status.checks.map((c) => `${githubStateLabel(c.state)}: ${c.name}${c.url ? `\n${c.url}` : ''}`), ...status.blockers].join('\n\n'));
+      const selected = await vscode.window.showQuickPick(status.checks.filter((c) => c.url).map((c) => ({ label: c.name, description: githubStateLabel(c.state), url: c.url ?? '' })), { title: vscode.l10n.t('Choose a CI job to read its logs') });
       if (!selected) return;
       const url = new URL(selected.url);
       const job = /\/actions\/runs\/\d+\/job\/(\d+)/.exec(url.pathname)?.[1];
@@ -157,8 +158,8 @@ export class DeliveryController {
       if (!pull) return;
       const status = await this.delivery.status(target.ref, pull.number, signal);
       if (status.blockers.length) throw new Error(status.blockers.join('\n'));
-      const method = await vscode.window.showQuickPick(status.methods.map((value) => ({ label: value, value })), { title: vscode.l10n.t('Merge method') });
-      if (!method || !await this.confirm(vscode.l10n.t('Merge pull request #{0}?', pull.number), `${target.ref.owner}/${target.ref.repo}\n${status.pull.head.ref} -> ${status.pull.base.ref}\n${status.pull.base.sha}\n${status.pull.head.sha}\n${method.value}`)) return;
+      const method = await vscode.window.showQuickPick(status.methods.map((value) => ({ label: mergeMethodLabel(value), value })), { title: vscode.l10n.t('Merge method') });
+      if (!method || !await this.confirm(vscode.l10n.t('Merge pull request #{0}?', pull.number), `${target.ref.owner}/${target.ref.repo}\n${status.pull.head.ref} -> ${status.pull.base.ref}\n${status.pull.base.sha}\n${status.pull.head.sha}\n${method.label}`)) return;
       const sha = await this.delivery.merge(target.ref, pull.number, status.pull.head.sha, method.value, status.pull.base, signal);
       await this.deps.state.update(STATE_PREFIX + target.root, undefined);
       void vscode.window.showInformationMessage(vscode.l10n.t('Pull request merged at {0}. Use Sync after merge to update the local checkout.', sha.slice(0, 12)));
@@ -202,7 +203,7 @@ export class DeliveryController {
       const pull = await this.pickPull(target, signal);
       if (!pull) return;
       const threads = await this.delivery.threads(target.ref, pull.number, signal);
-      const thread = await vscode.window.showQuickPick(threads.map((value) => ({ label: `${value.isResolved ? '[resolved]' : '[open]'} ${value.comments[0]?.body.slice(0, 120) ?? value.id}`, description: value.comments[0]?.author?.login ?? '', value })), { title: vscode.l10n.t('Pull request conversations') });
+      const thread = await vscode.window.showQuickPick(threads.map((value) => ({ label: `${value.isResolved ? vscode.l10n.t('[resolved]') : vscode.l10n.t('[open]')} ${value.comments[0]?.body.slice(0, 120) ?? value.id}`, description: value.comments[0]?.author?.login ?? '', value })), { title: vscode.l10n.t('Pull request conversations') });
       if (!thread) return;
       await this.showText(redactSecrets(thread.value.comments.map((c) => `${c.author?.login ?? ''}\n${c.body}\n${c.url}`).join('\n\n---\n\n')), 'plaintext');
       const action = await vscode.window.showQuickPick([
@@ -279,5 +280,44 @@ export class DeliveryController {
       const message = redactSecrets(error instanceof Error ? error.message : String(error));
       this.deps.log.warn(message); void vscode.window.showErrorMessage(message);
     }
+  }
+}
+
+function mergeMethodLabel(method: 'merge' | 'squash' | 'rebase'): string {
+  switch (method) {
+    case 'merge': return vscode.l10n.t('Merge commit');
+    case 'squash': return vscode.l10n.t('Squash and merge');
+    case 'rebase': return vscode.l10n.t('Rebase and merge');
+  }
+}
+
+/** Unknown API states remain intact so new provider values are never misrepresented. */
+function githubStateLabel(state: string): string {
+  switch (state) {
+    case 'success': return vscode.l10n.t('Passed');
+    case 'failure': return vscode.l10n.t('Failed');
+    case 'error': return vscode.l10n.t('Error');
+    case 'pending': return vscode.l10n.t('Pending');
+    case 'queued': return vscode.l10n.t('Queued');
+    case 'in_progress': return vscode.l10n.t('In progress');
+    case 'waiting': return vscode.l10n.t('Waiting');
+    case 'requested': return vscode.l10n.t('Requested');
+    case 'completed': return vscode.l10n.t('Completed');
+    case 'neutral': return vscode.l10n.t('Neutral');
+    case 'cancelled': return vscode.l10n.t('Cancelled');
+    case 'skipped': return vscode.l10n.t('Skipped');
+    case 'timed_out': return vscode.l10n.t('Timed out');
+    case 'action_required': return vscode.l10n.t('Action required');
+    case 'stale': return vscode.l10n.t('Outdated');
+    case 'startup_failure': return vscode.l10n.t('Could not start');
+    case 'clean': return vscode.l10n.t('Ready to merge');
+    case 'dirty': return vscode.l10n.t('Merge conflicts');
+    case 'unknown': return vscode.l10n.t('Unknown');
+    case 'unstable': return vscode.l10n.t('Checks have not passed');
+    case 'blocked': return vscode.l10n.t('Blocked by branch requirements');
+    case 'behind': return vscode.l10n.t('Behind the base branch');
+    case 'has_hooks': return vscode.l10n.t('Ready to merge with hooks');
+    case 'draft': return vscode.l10n.t('Draft');
+    default: return state;
   }
 }

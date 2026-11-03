@@ -1,3 +1,4 @@
+import { tr } from '../core/i18n';
 import { mkdtemp, rmdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
@@ -49,21 +50,21 @@ export class GitError extends Error {
 
 export class GitNotFoundError extends Error {
   constructor(detail: string) {
-    super(`Git executable not available: ${detail}`);
+    super(tr('Git executable not available: {0}', detail));
     this.name = 'GitNotFoundError';
   }
 }
 
 export class OutputTooLargeError extends Error {
   constructor(readonly limitBytes: number) {
-    super(`Git output exceeded the configured limit of ${limitBytes} bytes.`);
+    super(tr('Git output exceeded the configured limit of {0} bytes.', limitBytes));
     this.name = 'OutputTooLargeError';
   }
 }
 
 export class CancelledError extends Error {
   constructor() {
-    super('Operation cancelled.');
+    super(tr('Operation cancelled.'));
     this.name = 'CancelledError';
   }
 }
@@ -71,7 +72,7 @@ export class CancelledError extends Error {
 /** Rejects refs that could be parsed as options or contain shell/rev-parse surprises. */
 export function assertSafeRef(ref: string): string {
   if (!REF_PATTERN.test(ref)) {
-    throw new GitError(`Unsafe git reference "${ref}".`, [], '', null);
+    throw new GitError(tr('Unsafe git reference "{0}".', ref), [], '', null);
   }
   return ref;
 }
@@ -110,12 +111,12 @@ export class GitClient {
       throw new OutputTooLargeError(maxBytes);
     }
     if (result.timedOut) {
-      throw new GitError(`git ${args[0] ?? ''} timed out.`, args, result.stderr, null);
+      throw new GitError(tr('git {0} timed out.', args[0] ?? ''), args, result.stderr, null);
     }
     const allowed = options.allowExitCodes ?? [0];
     if (result.exitCode === null || !allowed.includes(result.exitCode)) {
       throw new GitError(
-        `git ${args[0] ?? ''} failed (exit ${String(result.exitCode)}): ${result.stderr.trim().split('\n')[0] ?? ''}`,
+        tr('git {0} failed (exit {1}): {2}', args[0] ?? '', String(result.exitCode), result.stderr.trim().split('\n')[0] ?? ''),
         args,
         result.stderr,
         result.exitCode,
@@ -204,7 +205,7 @@ export class GitClient {
     const configured = await this.exec(root, ['config', '--null', '--name-only', '--get-regexp', '^filter\\..*\\.(clean|smudge|process|required)$'], { allowExitCodes: [0, 1] });
     const overrides: string[] = [];
     for (const key of configured.split('\0').filter(Boolean)) {
-      if (!/^filter\.[\w.-]+\.(clean|smudge|process|required)$/i.test(key)) throw new GitError('Invalid checkout filter configuration.', [], '', null);
+      if (!/^filter\.[\w.-]+\.(clean|smudge|process|required)$/i.test(key)) throw new GitError(tr('Invalid checkout filter configuration.'), [], '', null);
       overrides.push('-c', `${key}=${key.endsWith('.required') ? 'false' : ''}`);
     }
     const hooks = await mkdtemp(path.join(tmpdir(), 'probato-empty-hooks-'));

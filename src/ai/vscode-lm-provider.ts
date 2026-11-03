@@ -1,3 +1,4 @@
+import { tr } from '../core/i18n';
 import * as vscode from 'vscode';
 import { AiProviderError, type AIReviewProvider, type AiPrompt, type AiRawResponse } from './ai-provider';
 
@@ -9,8 +10,8 @@ const modelKey = (model: vscode.LanguageModelChat): string => `${model.vendor}/$
  */
 export class VsCodeLanguageModelProvider implements AIReviewProvider {
   readonly id = 'vscode-lm';
-  readonly name = 'VS Code language model';
-  readonly destination = 'the provider of the chat model selected in VS Code (for example GitHub Copilot)';
+  readonly name = tr('VS Code language model');
+  readonly destination = tr('the provider of the chat model selected in VS Code (for example GitHub Copilot)');
 
   /** @param modelId the chosen model ("vendor/id"); empty uses the first available model. */
   constructor(private readonly modelId: string) {}
@@ -31,7 +32,7 @@ export class VsCodeLanguageModelProvider implements AIReviewProvider {
   async complete(prompt: AiPrompt, signal: AbortSignal): Promise<AiRawResponse> {
     const model = await this.model();
     if (!model) {
-      throw new AiProviderError('No VS Code language model is available. Install or sign in to a chat model provider.', 'unavailable');
+      throw new AiProviderError(tr('No VS Code language model is available. Install or sign in to a chat model provider.'), 'unavailable');
     }
     const source = new vscode.CancellationTokenSource();
     const onAbort = (): void => {
@@ -52,7 +53,7 @@ export class VsCodeLanguageModelProvider implements AIReviewProvider {
       return { model: modelKey(model), text };
     } catch (error) {
       if (error instanceof vscode.LanguageModelError) {
-        throw new AiProviderError(`Language model request failed: ${error.message}`, error.code === vscode.LanguageModelError.NoPermissions.name ? 'auth' : 'other');
+        throw new AiProviderError(tr('Language model request failed: {0}', error.message), error.code === vscode.LanguageModelError.NoPermissions.name ? 'auth' : 'other');
       }
       throw error;
     } finally {
