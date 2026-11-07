@@ -23,7 +23,7 @@ async function fixture(tool = true) {
     await writeFile(path.join(root, 'node_modules/@stryker-mutator/core/package.json'), JSON.stringify({ name: '@stryker-mutator/core', version: '10.1.1', bin: { stryker: 'bin/stryker.js' } }));
     await writeFile(path.join(root, 'node_modules/@stryker-mutator/core/bin/stryker.js'), '// fixture runner never executes');
   }
-  await git.exec(root, ['init', '-q', '-b', 'main']); await git.exec(root, ['add', '.']);
+  await git.exec(root, ['init', '-q', '-b', 'main']); await git.exec(root, ['config', 'core.autocrlf', 'false']); await git.exec(root, ['add', '.']);
   await git.execWithoutCheckoutCode(root, ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'base']);
   return { root, git };
 }

@@ -82,7 +82,7 @@ export function writeFiles(root: string, files: Readonly<Record<string, string>>
 }
 
 export function git(cwd: string, ...args: string[]): string {
-  return execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', '-c', 'commit.gpgsign=false', ...args], {
+  return execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', '-c', 'commit.gpgsign=false', '-c', 'core.autocrlf=false', ...args], {
     cwd,
     encoding: 'utf8',
   });
