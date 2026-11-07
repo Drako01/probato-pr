@@ -20,8 +20,8 @@ permanentes**. Revisá [`PRODUCT_RELEASE_READINESS.md`](../PRODUCT_RELEASE_READI
 | **Plan de pruebas manual** (`docs/MANUAL_TEST_PLAN.md`) | Lo que los tests automáticos no cubren: Restricted Mode, el panel con teclado y la IA con un proveedor real. |
 | **Email de contacto** público | Aparece en `SECURITY.md`, `SUPPORT.md` y `PRIVACY.md`. |
 
-La versión `0.1.0` ya está marcada como **Preview** (`"preview": true` en `package.json`): el Marketplace muestra la
-etiqueta *Preview*, que baja las expectativas mientras juntás opiniones de usuarios.
+Desde la `0.6.0` la extensión ya no está marcada como **Preview**. Hasta la `0.5.0` el manifiesto tenía
+`"preview": true`, que muestra la etiqueta *Preview* en el Marketplace.
 
 ## 1. Decisiones permanentes (leelas antes de crear nada)
 
@@ -160,7 +160,8 @@ visible del publisher, se pierde la verificación.
 - **Canal pre-release** (opcional): `vsce publish --pre-release` publica una versión que solo reciben quienes la
   eligen. Convención habitual: versiones *minor* impares para pre-release (`0.3.x`) y pares para estables (`0.2.x`).
   No se admiten sufijos semver como `-beta`.
-- **Quitar la etiqueta Preview**: cuando la extensión esté estable, poné `"preview": false` y publicá una versión nueva.
+- **Etiqueta Preview**: se quitó en la `0.6.0` eliminando `"preview": true` del `package.json`. Para volver a
+  mostrarla, agregá `"preview": true` y publicá una versión nueva.
 
 ## Enlaces oficiales
 

@@ -2,6 +2,18 @@
 
 All notable changes to Probato PR are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] — 2026-11-07
+
+### Added
+
+- Code of Conduct (Contributor Covenant 2.1), linked from the contributing guide and README.
+
+### Changed
+
+- Removed the Preview badge from the Marketplace manifest.
+- Updated `@anthropic-ai/sdk` to 1.6.0 and `vitest` to 5.1.0.
+- Test repositories no longer inherit the global `core.autocrlf` setting, which removes line-ending warnings on Windows.
+
 ## [0.5.0] — 2026-11-03
 
 ### Added

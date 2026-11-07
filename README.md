@@ -333,7 +333,7 @@ pnpm run perf            # performance budgets on generated repositories
 pnpm run package         # verify + production build + VSIX
 ```
 
-Press `F5` in VS Code to launch an Extension Development Host. See `CONTRIBUTING.md` and `ARCHITECTURE.md`.
+Press `F5` in VS Code to launch an Extension Development Host. See `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` and `ARCHITECTURE.md`.
 
 ## Support
 

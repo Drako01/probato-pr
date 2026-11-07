@@ -1,5 +1,7 @@
 # Contributing
 
+By participating you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Setup
 
 - Node.js 22.12+ and pnpm 12 (`corepack enable`).
