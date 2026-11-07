@@ -4,6 +4,10 @@ All notable changes to Probato PR are documented here. The project follows [Sema
 
 ## [0.6.0] — 2026-11-07
 
+### Added
+
+- Code of Conduct (Contributor Covenant 2.1), linked from the contributing guide and README.
+
 ### Changed
 
 - Removed the Preview badge from the Marketplace manifest.
