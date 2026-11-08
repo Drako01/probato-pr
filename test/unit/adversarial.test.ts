@@ -61,15 +61,25 @@ describe('exfiltration through an AI endpoint redirect', () => {
 });
 
 describe('path traversal and symlinked parents', () => {
-  it.each(['..\\..\\outside.txt', '\\\\server\\share\\x', 'a/b/../../../outside.txt', 'C:outside.txt'])('never resolves %s outside the root', async (relative) => {
+  it.each(['C:outside.txt', 'z:outside.txt', '\\outside.txt', 'C:\\outside.txt', '/etc/passwd'])(
+    'refuses the rooted or drive-prefixed path %s on every platform',
+    async (relative) => {
+      const { dir, cleanup } = tempDir();
+      cleanups.push(cleanup);
+      await expect(resolveInside(dir, relative)).rejects.toBeInstanceOf(PathOutsideWorkspaceError);
+    },
+  );
+
+  it.each(['..\\..\\outside.txt', '\\\\server\\share\\x', 'a/b/../../../outside.txt'])('never resolves %s outside the root', async (relative) => {
     const { dir, cleanup } = tempDir();
     cleanups.push(cleanup);
     const resolved = await resolveInside(dir, relative).catch((e: unknown) => e);
     if (resolved instanceof PathOutsideWorkspaceError) return;
-    // A backslash is a file-name character on POSIX, and a same-drive relative path stays below the root on
-    // Windows: either way the answer must be inside the root.
+    // A backslash is a file-name character on POSIX: the answer must then be inside the root.
     expect(typeof resolved).toBe('string');
-    const rel = path.relative(realpathSync(dir), resolved as string);
+    // `.native` matches the implementation's realpath: the JS fallback keeps 8.3 short names (C:\Users\RUNNER~1)
+    // on Windows, which would make an inside path look outside.
+    const rel = path.relative(realpathSync.native(dir), resolved as string);
     expect(rel.startsWith('..') || path.isAbsolute(rel)).toBe(false);
   });
 

@@ -20,12 +20,21 @@ export function isWithin(root: string, candidate: string): boolean {
 }
 
 /**
+ * True for any path carrying a root on either platform: POSIX absolute, Windows absolute, UNC, rooted (`\x`) and
+ * drive-relative (`C:x`). A drive-relative path resolves against that drive's current directory, not the root, so
+ * it is never a valid repository-relative path, whatever the host OS.
+ */
+function hasRoot(p: string): boolean {
+  return path.isAbsolute(p) || path.win32.parse(p).root !== '';
+}
+
+/**
  * Resolves a repository-relative path and guarantees the result stays inside root, following
- * symlinks for paths that exist. Rejects absolute paths and traversal from untrusted input
- * (diffs, PR file lists, AI responses).
+ * symlinks for paths that exist. Rejects rooted or drive-prefixed paths and traversal from untrusted
+ * input (diffs, PR file lists, AI responses).
  */
 export async function resolveInside(root: string, relative: string): Promise<string> {
-  if (relative.includes('\0') || path.isAbsolute(relative) || path.win32.isAbsolute(relative)) {
+  if (relative.includes('\0') || hasRoot(relative)) {
     throw new PathOutsideWorkspaceError(relative, root);
   }
   const realRoot = await realpath(root);
