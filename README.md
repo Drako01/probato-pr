@@ -280,7 +280,9 @@ is reached and 2 for execution/configuration errors. See the [delivery guide](do
 | `regression-only` | Checks that fail only on your change (`introduced`), mutation gate failure, and `confirmed`/`evidenced` findings attributed as `introduced` | Pre-existing failures; findings that are `suspected`, `not-verified` or not attributed | Execution error; failed checks without a comparable baseline (`--on-inconclusive warn` turns these into WARN) |
 | `hybrid` | Like `regression-only` for checks; `confirmed`/`evidenced` findings at `--fail-on` unless attributed as `pre-existing`/`fixed` | Pre-existing failures; `suspected`/`not-verified` findings | Same as `regression-only` |
 
-In the differential modes the decision and its reasons are printed to stderr; a WARN is never reported as PASS.
+In the differential modes the decision and its reasons are printed to stderr and recorded in the report
+(`qualityGate` in JSON, `runs[0].properties.qualityGate` in SARIF); a WARN is never reported as PASS. The `absolute`
+mode leaves the report shape of 0.6.0 unchanged.
 
 ## Offline mode
 

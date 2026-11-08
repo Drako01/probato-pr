@@ -1,9 +1,36 @@
-# Product release readiness — Probato PR 0.5.0
+# Product release readiness — Probato PR
 
-Assessment date: 2026-11-03. This document replaces the historical 0.1.0 release snapshot; old statements about one
-webview, read-only GitHub access or promoting AI hypotheses from matching lines do not describe the current product.
+Published version: **0.6.0**. Candidate under preparation: **0.7.0** (not versioned, tagged or published; the
+manifest stays at 0.6.0 so no publication is triggered). Assessment date: 2026-11-08, branch
+`feat/enterprise-aaaaa-upgrade` (PR #16). Detailed evidence lives in
+[docs/ENTERPRISE_AAAAA_TEST_EVIDENCE.md](docs/ENTERPRISE_AAAAA_TEST_EVIDENCE.md), task status in
+[docs/ENTERPRISE_AAAAA_UPGRADE_CHECKLIST.md](docs/ENTERPRISE_AAAAA_UPGRADE_CHECKLIST.md) and the scored re-audit in
+[docs/ENTERPRISE_AAAAA_FINAL_AUDIT.md](docs/ENTERPRISE_AAAAA_FINAL_AUDIT.md); this page only keeps the decision.
 
-## Current decision
+## Current decision — 0.7.0 candidate: **NO-GO**
+
+Any critical blocker means NO-GO. States: PASS / WARN / FAIL / SKIP / BLOCKED; nothing skipped or inconclusive is
+counted as PASS.
+
+| Gate | State | Evidence / reason |
+|---|---|---|
+| SARIF 2.1.0 valid against the official OASIS schema; taxonomy (no `security-severity` on quality rules) | PASS | `sarif-schema.test.ts`, `sarif-taxonomy.test.ts` |
+| Differential quality gate (`absolute` default = 0.6.0, `regression-only`, `hybrid`) with exit contract 0/1/2 and decision in JSON/SARIF | PASS | `quality-gate.test.ts` (truth table), `cli-quality-gate.test.ts` |
+| Truthful security/privacy documentation of GitHub and Git writes | PASS | `docs-consistency.test.ts` |
+| Typecheck, lint, l10n keys, unit/engine suite, production build (local, Windows) | PASS | Evidence E11 |
+| PR validation split from publishing; one checksummed VSIX | PASS | CI run on PR #16 (E10) |
+| Independent external precision/recall benchmark (≥600 cases, holdout) | BLOCKED | Needs licensed real-world data with human ground truth; the 26-case authored corpus is a regression test only |
+| Merge-candidate protection (strict required checks or merge queue) | BLOCKED | Ruleset change needs maintainer authorization |
+| Extension Host on Windows/macOS; Remote SSH/WSL/Dev Containers | BLOCKED | Only Linux Extension Host runs in CI |
+| Threat model update, adversarial suite, optional sandbox, SBOM/provenance | FAIL | Phase IV not completed |
+| Per-module coverage ≥85% lines / ≥80% branches | WARN | `git` and `mutation` branch coverage below 80% |
+| Accessibility audit (WCAG 2.2 AA) on packaged VSIX, final screenshots | FAIL | Phase VI not started |
+| Performance P50/P95 and peak memory on real repositories | WARN | Only the existing synthetic budgets |
+
+## Previous acceptance record — 0.5.0 (2026-11-03)
+
+This record replaced the historical 0.1.0 release snapshot; old statements about one webview, read-only GitHub access
+or promoting AI hypotheses from matching lines do not describe the current product.
 
 **Local acceptance recorded; merging requires the exact-head GitHub checks.** The combined suite passed 404 tests,
 TypeScript, lint with 1084 complete translation keys, production build and CLI smoke. The subsequent POSIX snapshot
@@ -11,7 +38,7 @@ fix passed all 10 affected mutation-engine tests. The extracted VSIX passed 12 r
 Remote checks and publication are recorded separately in the pull request and release workflow.
 No skipped or inconclusive check is treated as PASS.
 
-## Evidence already obtained
+### Evidence (0.5.0)
 
 | Area | Evidence | Qualification |
 |---|---|---|
@@ -24,7 +51,7 @@ No skipped or inconclusive check is treated as PASS.
 | Mutation execution | Final hardened Stryker 10.1.1 fixture passed: base 5 killed/2 survived; changed tests 3 killed/4 survived; atomic terminal emission and Markdown/JSON/SARIF exports checked. | Integrated release gate remains pending. |
 | Open VSX | Installed CLI supports `--trusted-publishing`; focused publication tests passed. | Live publishing is not certified by a local test. |
 
-## Final acceptance record
+### Final acceptance record (0.5.0)
 
 The local acceptance record is:
 

@@ -8,6 +8,9 @@ All notable changes to Probato PR are documented here. The project follows [Sema
 
 - CLI `--gate absolute|regression-only|hybrid` and `--on-inconclusive fail|warn`. The default (`absolute`) keeps the
   0.6.0 exit codes; differential modes block only demonstrated regressions and print their decision to stderr.
+- Differential gate decisions are also recorded in the JSON (`qualityGate`) and SARIF (`runs[0].properties.qualityGate`)
+  reports. Additive optional field; `absolute` reports are unchanged.
+- SARIF output is validated in the test suite against the official OASIS SARIF 2.1.0 schema.
 
 ### Fixed
 

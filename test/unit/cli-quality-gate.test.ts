@@ -33,6 +33,23 @@ describe('independent CLI quality and execution decisions', () => {
     expect(() => parseCliArgs(['--mutation-memory', '1024'])).toThrow(/authorization/);
     expect(parseCliArgs(['--mutation', '--mutation-baseline', '--mutation-gate', '--mutation-fail-on-degradation'])).toMatchObject({ mutation: true, mutationBaseline: true, mutationGate: true, mutationFailOnDegradation: true });
   });
+  it('records the differential gate decision in JSON and SARIF reports, and keeps absolute reports unchanged', async () => {
+    const fixture = tempDir('probato-gate-report-');
+    try {
+      initRepo(fixture.dir, { 'source.ts': 'export const number = 1;' });
+      const report = async (...extra: string[]) => {
+        let out = '';
+        const exit = await runCli(['--root', fixture.dir, ...extra], { stdout: (text) => { out += text; }, stderr: () => undefined });
+        return { exit, report: JSON.parse(out) as { qualityGate?: unknown; runs?: { properties: { qualityGate?: unknown } }[] } };
+      };
+      const json = await report('--format', 'json', '--gate', 'regression-only');
+      expect(json.exit).toBe(0);
+      expect(json.report.qualityGate).toMatchObject({ mode: 'regression-only', outcome: 'PASS', exitCode: 0 });
+      const sarif = await report('--format', 'sarif', '--gate', 'hybrid');
+      expect(sarif.report.runs?.[0]?.properties.qualityGate).toMatchObject({ mode: 'hybrid', outcome: 'PASS', exitCode: 0 });
+      expect((await report('--format', 'json')).report.qualityGate).toBeUndefined();
+    } finally { fixture.cleanup(); }
+  });
   it('fails closed on an invalid repository policy instead of silently disabling its gate', async () => {
     const fixture = tempDir('probato-invalid-policy-');
     try {

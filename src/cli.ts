@@ -228,11 +228,13 @@ async function executeCli(args: readonly string[], io: CliIo = { stdout: (text) 
       if (!previous) throw new Error(tr('The previous review report is invalid or unsupported.'));
       comparison = compareReviews(previous, review);
     }
-    const report = options.format === 'json' ? renderJson(review, comparison) : options.format === 'sarif' ? renderSarif(review) : renderMarkdown(review, comparison);
-    if (options.output) { await writeFile(options.output, report, 'utf8'); } else { io.stdout(report); }
     const decision = evaluateQualityGate(review, { mode: options.gate, threshold: options.failOn, inconclusive: options.onInconclusive });
-    // The absolute mode keeps the 0.6.0 output untouched; differential modes always explain their decision.
-    if (options.gate !== 'absolute') io.stderr(`${redactSecrets([tr('Quality gate ({0}): {1}', decision.mode, decision.outcome), ...decision.reasons.map((reason) => `- ${reason}`)].join('\n'))}\n`);
+    // The absolute mode keeps the 0.6.0 output untouched; differential modes always explain their decision,
+    // in the machine-readable report (WARN is never hidden) and on stderr.
+    const reportedGate = options.gate === 'absolute' ? undefined : decision;
+    const report = options.format === 'json' ? renderJson(review, comparison, reportedGate) : options.format === 'sarif' ? renderSarif(review, reportedGate) : renderMarkdown(review, comparison);
+    if (options.output) { await writeFile(options.output, report, 'utf8'); } else { io.stdout(report); }
+    if (reportedGate) io.stderr(`${redactSecrets([tr('Quality gate ({0}): {1}', decision.mode, decision.outcome), ...decision.reasons.map((reason) => `- ${reason}`)].join('\n'))}\n`);
     return decision.exitCode;
   } finally {
     await isolated?.dispose();

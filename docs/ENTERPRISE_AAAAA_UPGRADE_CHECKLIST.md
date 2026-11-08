@@ -8,11 +8,11 @@ States: `TODO` · `IN_PROGRESS` · `PASS` · `WARN` · `BLOCKED`. Evidence refer
 | ID | Task | State | Evidence | Commit | Acceptance |
 |---|---|---|---|---|---|
 | I.1 | Typed rule taxonomy; SARIF `security-severity` only on security rules, `problem.severity` elsewhere (P1-01) | PASS | E1, E2 (`sarif-taxonomy.test.ts`, 5 tests) | c830af6 | 0 non-security rules with `security-severity`; every shipped rule ID classified |
-| I.2 | SARIF validated against the official 2.1.0 JSON schema and GitHub fixtures | TODO | — | — | Requires adding a schema validator dependency and the vendored schema; not done |
+| I.2 | SARIF validated against the official 2.1.0 JSON schema and GitHub fixtures | PASS | E11 (`sarif-schema.test.ts`, 12 tests: 5 fixtures × with/without gate, formats `uri`/`uri-reference`/`date-time`, GitHub upload constraints, stable fingerprints, redaction, importer round trip) | Phase I closing commit | OASIS schema vendored unmodified and pinned by SHA-256; dev-only `ajv` 8.20.0 + `ajv-draft-04` 1.0.0. The schema caught a duplicate `security` tag introduced earlier in this branch (c830af6), fixed. GitHub Code Scanning is checked statically, not by a live upload |
 | I.3 | Gate modes `absolute`/`regression-only`/`hybrid` + `--on-inconclusive` (P1-03) | PASS | E1, E2 (`quality-gate.test.ts`, 31 tests: 28-row truth table) | c830af6 | Default behavior identical to 0.6.0 (checked against `reportExitCode` for 5 thresholds) |
-| I.4 | Gate decision surfaced in JSON/SARIF reports (not only stderr) | TODO | — | — | Needs a versioned optional report field |
-| I.5 | SECURITY/PRIVACY/README/manual plan truthful about GitHub and Git writes and approval UI (P1-02) | PASS | E2 (`docs-consistency.test.ts`) | — | No contradiction between `GitHubDelivery` writes and SECURITY.md |
-| I.6 | `PRODUCT_RELEASE_READINESS.md` updated for 0.6.0/0.7.0 candidate (P2-06) | TODO | — | — | — |
+| I.4 | Gate decision surfaced in JSON/SARIF reports (not only stderr) | PASS | E11 (`sarif-schema.test.ts`, `cli-quality-gate.test.ts` real CLI run) | Phase I closing commit | Additive optional `qualityGate` (JSON) / `runs[0].properties.qualityGate` (SARIF) for differential modes; `REPORT_SCHEMA_VERSION` stays 1 because history readers are `loose()`; `absolute` reports unchanged. Markdown keeps the stderr explanation only |
+| I.5 | SECURITY/PRIVACY/README/manual plan truthful about GitHub and Git writes and approval UI (P1-02) | PASS | E2 (`docs-consistency.test.ts`) | 6ea5a84 | No contradiction between `GitHubDelivery` writes and SECURITY.md |
+| I.6 | `PRODUCT_RELEASE_READINESS.md` updated for 0.6.0/0.7.0 candidate (P2-06) | PASS | GO/NO-GO table for the 0.7.0 candidate (verdict NO-GO), 0.5.0 record kept as history | Phase I closing commit | Every open blocker listed as BLOCKED/FAIL/WARN, none counted as PASS |
 
 ## Phase II — precision and external benchmark
 

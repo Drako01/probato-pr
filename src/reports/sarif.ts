@@ -3,6 +3,7 @@ import { verificationLabel } from '../core/labels';
 import { sanitizeText } from '../core/sanitize';
 import { pathToFileURL } from 'node:url';
 import { SEVERITIES, type ReviewResult, type Severity } from '../core/model';
+import type { GateDecision } from '../core/quality-gate';
 import { classifyRule } from '../core/rule-taxonomy';
 
 // SARIF 2.1.0 (OASIS). Consumed by GitHub code scanning, VS Code SARIF Viewer and most CI tools.
@@ -19,7 +20,8 @@ const PROBLEM_SEVERITY: Readonly<Record<Severity, 'error' | 'warning' | 'recomme
 function ruleProperties(ruleId: string, severity: Severity): Record<string, unknown> {
   const { category, cwe } = classifyRule(ruleId);
   if (category === 'security') {
-    return { tags: ['security', category, ...cwe.map((id) => `external/cwe/${id.toLowerCase()}`)], category, 'security-severity': SECURITY_SEVERITY[severity] };
+    // SARIF property-bag tags are `uniqueItems`: the category already is 'security'.
+    return { tags: [category, ...cwe.map((id) => `external/cwe/${id.toLowerCase()}`)], category, 'security-severity': SECURITY_SEVERITY[severity] };
   }
   return { tags: [category, 'quality'], category, 'problem.severity': PROBLEM_SEVERITY[severity] };
 }
@@ -35,7 +37,8 @@ function ruleName(ruleId: string): string {
     .join('');
 }
 
-export function renderSarif(result: ReviewResult): string {
+/** `qualityGate`, when given, is exposed additively as `runs[0].properties.qualityGate`. */
+export function renderSarif(result: ReviewResult, qualityGate?: GateDecision): string {
   result = sanitizeText(result);
   // A rule's default severity is the most severe finding it produced in this run.
   const rules = new Map<string, { index: number; severity: Severity }>();
@@ -99,6 +102,7 @@ export function renderSarif(result: ReviewResult): string {
           ...(result.performance ? { analysisPerformance: result.performance } : {}),
           scope: result.scope.label,
           checks: result.checks.map((c) => ({ command: c.commandLine, status: c.status, attribution: c.attribution })),
+          ...(qualityGate ? { qualityGate: sanitizeText(qualityGate) } : {}),
         },
       },
     ],
