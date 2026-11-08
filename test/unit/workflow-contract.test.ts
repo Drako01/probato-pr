@@ -31,6 +31,25 @@ describe('workflow contract', () => {
     expect(publish.match(/sha256sum -c probato-pr\.vsix\.sha256/g)).toHaveLength(downloads);
   });
 
+  it('runs the release gate only when the merged tree is not proven identical to the validated PR head', () => {
+    expect(publish).toContain("git rev-parse 'HEAD^{tree}'");
+    expect(publish).toMatch(/repos\/\$GH_REPO\/commits\/\$GITHUB_SHA\/pulls/);
+    // Tree identity alone is not proof: the required Verify checks must have passed on the PR head.
+    expect(publish).toMatch(/repos\/\$GH_REPO\/commits\/\$head\/check-runs/);
+    expect(publish).toContain('[ "$passed" -ge 3 ]');
+    expect(publish).toContain('checks: read');
+    for (const step of ['pnpm run verify:delivery', 'xvfb-run -a pnpm run test:integration']) {
+      expect(publish).toMatch(new RegExp(`if: needs\\.plan\\.outputs\\.tree_validated != 'true'\\n\\s+run: ${step.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+    }
+  });
+
+  it('attests the build provenance of the VSIX and ships a CycloneDX SBOM with the release', () => {
+    expect(publish).toMatch(/actions\/attest-build-provenance@[0-9a-f]{40}[^\n]*\n\s+with:\n\s+subject-path: probato-pr\.vsix/);
+    expect(publish).toContain('attestations: write');
+    expect(publish).toContain('pnpm run sbom');
+    expect(publish).toMatch(/gh release create .*probato-pr\.cdx\.json/);
+  });
+
   it('pins every action to a full commit SHA', () => {
     for (const workflow of [ci, publish]) {
       for (const [, ref] of workflow.matchAll(/uses: [\w.-]+\/[\w.-]+@(\S+)/g)) expect(ref).toMatch(/^[0-9a-f]{40}$/);

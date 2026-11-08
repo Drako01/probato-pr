@@ -20,7 +20,7 @@ counted as PASS.
 | Typecheck, lint, l10n keys, unit/engine suite, production build (local, Windows) | PASS | Evidence E11 |
 | PR validation split from publishing; one checksummed VSIX | PASS | CI run on PR #16 (E10) |
 | Independent external precision/recall benchmark (≥600 cases, holdout) | BLOCKED | Needs licensed real-world data with human ground truth; the authored corpus (71 cases, 36 traps, sealed holdout, per-rule metrics with Wilson CIs — `docs/BENCHMARK.md`) is a regression test only |
-| Merge-candidate protection (strict required checks or merge queue) | BLOCKED | Ruleset change needs maintainer authorization |
+| Merge-candidate protection (strict required checks or merge queue) | PASS (static) | Ruleset `26362018` has `strict_required_status_checks_policy=true` (read with `gh api`, 2026-11-08); `publish.yml` proves tree identity + green Verify checks before skipping the post-merge gate (`workflow-contract.test.ts`). First real run happens at the next version-changing merge |
 | Extension Host on Windows/macOS; Remote SSH/WSL/Dev Containers | BLOCKED | Only Linux Extension Host runs in CI |
 | Threat model update, adversarial suite, optional sandbox, SBOM/provenance | FAIL | Phase IV not completed |
 | Per-module coverage ≥85% lines / ≥80% branches | WARN | `git` and `mutation` branch coverage below 80% |

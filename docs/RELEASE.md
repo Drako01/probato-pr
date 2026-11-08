@@ -42,18 +42,22 @@ Step-by-step guide, accounts and first-time setup: [`PUBLICACION.md`](PUBLICACIO
   dependencies change; otherwise it reports *skipped*.
 - **Later releases (automatic):** `.github/workflows/publish.yml`, on `push` to `main` only. A push that keeps the
   version does nothing beyond the plan job (no repeated QA). A push that changes the version in `package.json`
-  (compared with the previous tip of `main`, so squash merges and multi-commit pushes are both covered) runs one
-  release gate on the merged tree (`verify:delivery`, `pnpm audit --prod`, Extension Host on Linux), packages the
-  VSIX once, checks that its manifest version matches, records its SHA-256 and publishes that same file to the
-  Marketplace (Trusted Publishing, `vsce publish --oidc`, no stored token) and to Open VSX, and creates the GitHub
-  release with the VSIX and its SHA-256. Every publishing job re-checks the SHA-256 before using the file.
+  (compared with the previous tip of `main`, so squash merges and multi-commit pushes are both covered) runs
+  `pnpm audit --prod`, packages the VSIX once, checks that its manifest version matches, records its SHA-256, creates
+  a signed build provenance attestation (`actions/attest-build-provenance`, verifiable with
+  `gh attestation verify probato-pr.vsix --repo Drako01/probato-pr`) and a CycloneDX SBOM of the runtime
+  dependencies (`pnpm run sbom`), and publishes that same file to the Marketplace (Trusted Publishing,
+  `vsce publish --oidc`, no stored token) and to Open VSX, and creates the GitHub release with the VSIX, its SHA-256
+  and the SBOM. Every publishing job re-checks the SHA-256 before using the file.
   *Actions → publish → Run workflow* publishes the version on `main` by hand; publishing is idempotent
   (`--skip-duplicate`) and runs are never cancelled half-way.
-- **Why the release gate still runs after merge:** the ruleset has `strict_required_status_checks_policy=false`, so
-  the squash commit on `main` can contain a tree that no PR check validated (another PR merged in between). Until the
-  maintainer enables "require branches to be up to date" or a merge queue, the release gate is the only evidence for
-  the exact published tree. With either option enabled it could be reduced to packaging. A SHA-256 checksum proves
-  integrity of the file between jobs, not provenance; build attestation is not configured yet.
+- **When the release gate runs after merge:** the `main` ruleset has `strict_required_status_checks_policy=true`
+  (branches must be up to date), so a squash merge of a green PR yields the tree its checks validated. The plan job
+  proves it for each publishing push: it finds the merged PR of the pushed commit, compares its head tree with the
+  pushed tree and requires the three `Verify (…)` checks to have succeeded on that head. Only when any of that cannot
+  be shown (a push that did not come from a PR, an admin bypass, a different tree) does the release gate
+  (`verify:delivery` + Extension Host on Linux) run on the merged tree. The checksum proves integrity between jobs;
+  the attestation proves which workflow run and commit built the file.
 - **Open VSX never blocks the release.** The Marketplace is the primary channel and the GitHub release depends on it
   only. `scripts/open-vsx-publish.mjs` retries transient failures, waits for the version to become active and, if the
   registry holds it back (unverified namespace, publish-time scan), reports a warning instead of failing. The

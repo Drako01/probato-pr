@@ -676,6 +676,7 @@
     "test:integration": "pnpm run build && tsc -p test/integration && node out/integration/run.js",
     "perf": "vitest run --config vitest.perf.config.mts",
     "audit": "pnpm audit --prod",
+    "sbom": "pnpm sbom --sbom-format cyclonedx --prod --sbom-type application --lockfile-only --out probato-pr.cdx.json",
     "verify": "pnpm run typecheck && pnpm run lint && pnpm run test",
     "package": "pnpm run verify && vsce package --no-dependencies --out probato-pr.vsix",
     "vscode:prepublish": "pnpm run build:prod && node scripts/third-party-notices.mjs",
