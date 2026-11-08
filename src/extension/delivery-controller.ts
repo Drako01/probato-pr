@@ -4,7 +4,7 @@ import type { ReviewResult } from '../core/model';
 import { redactSecrets } from '../core/secrets';
 import type { GitClient } from '../git/git-client';
 import { GitHubClient, parseGitHubRemote, type GitHubRepoRef } from '../github/github-client';
-import { buildReviewDraft, GitHubDelivery, type DeliveryPull } from '../github/delivery';
+import { buildReviewDraft, GitHubDelivery, type CheckOutcome, type CheckRequirement, type DeliveryPull, type DeliveryStatus } from '../github/delivery';
 import { renderPullRequestDescription } from '../reports/markdown';
 import { exclusiveWithProgress } from './exclusive-progress';
 import type { ReviewSession } from './review-session';
@@ -115,8 +115,8 @@ export class DeliveryController {
       const pull = await this.pickPull(target, signal);
       if (!pull) return;
       const status = await this.delivery.status(target.ref, pull.number, signal);
-      await this.preview([`${target.ref.owner}/${target.ref.repo} #${pull.number}: ${pull.title}`, pull.html_url, vscode.l10n.t('Head commit: {0}', status.pull.head.sha), vscode.l10n.t('GitHub state: {0}', githubStateLabel(status.pull.mergeable_state)), ...status.checks.map((c) => `${githubStateLabel(c.state)}: ${c.name}${c.url ? `\n${c.url}` : ''}`), ...status.blockers].join('\n\n'));
-      const selected = await vscode.window.showQuickPick(status.checks.filter((c) => c.url).map((c) => ({ label: c.name, description: githubStateLabel(c.state), url: c.url ?? '' })), { title: vscode.l10n.t('Choose a CI job to read its logs') });
+      await this.preview([`${target.ref.owner}/${target.ref.repo} #${pull.number}: ${pull.title}`, pull.html_url, vscode.l10n.t('Head commit: {0}', status.pull.head.sha), vscode.l10n.t('GitHub state: {0}', githubStateLabel(status.pull.mergeable_state)), ...checksOverview(status), ...status.checks.map((c) => `${githubStateLabel(c.state)} · ${requirementLabel(c.requirement)}: ${c.name}${c.url ? `\n${c.url}` : ''}`), ...status.blockers].join('\n\n'));
+      const selected = await vscode.window.showQuickPick(status.checks.filter((c) => c.url).map((c) => ({ label: c.name, description: `${githubStateLabel(c.state)} · ${requirementLabel(c.requirement)}`, url: c.url ?? '' })), { title: vscode.l10n.t('Choose a CI job to read its logs') });
       if (!selected) return;
       const url = new URL(selected.url);
       const job = /\/actions\/runs\/\d+\/job\/(\d+)/.exec(url.pathname)?.[1];
@@ -139,7 +139,7 @@ export class DeliveryController {
         const status = await this.delivery.status(target.ref, pull.number, signal);
         this.deps.log.info(`PR #${pull.number} ${status.pull.head.sha}: ${status.checks.map((c) => `${c.name}=${c.state}`).join(', ')}. ${status.blockers.join(' ')}`);
         if (status.pull.head.sha !== pull.head.sha) throw new Error(vscode.l10n.t('The pull request head changed. Review the new commit before continuing.'));
-        if (status.checks.length && status.checks.every((c) => !['pending', 'queued', 'in_progress', 'waiting', 'requested'].includes(c.state))) {
+        if (status.checks.length && status.checks.every((c) => c.outcome !== 'pending')) {
           void vscode.window.showInformationMessage(vscode.l10n.t('CI completed. Refresh pull request status to inspect results.')); return;
         }
         await new Promise<void>((resolve, reject) => {
@@ -287,6 +287,27 @@ function mergeMethodLabel(method: 'merge' | 'squash' | 'rebase'): string {
     case 'squash': return vscode.l10n.t('Squash and merge');
     case 'rebase': return vscode.l10n.t('Rebase and merge');
   }
+}
+
+function requirementLabel(requirement: CheckRequirement): string {
+  switch (requirement) {
+    case 'required': return vscode.l10n.t('Required');
+    case 'informative': return vscode.l10n.t('Informative');
+    case 'unknown': return vscode.l10n.t('Requirement unknown');
+  }
+}
+
+/** Counts per outcome; neutral and skipped are reported separately from passed, never merged into it. */
+function checksOverview(status: DeliveryStatus): string[] {
+  const count = (outcome: CheckOutcome): number => status.checks.filter((c) => c.outcome === outcome).length;
+  const lines = [vscode.l10n.t('Checks: {0} passed · {1} neutral · {2} skipped · {3} pending · {4} not passed', count('passed'), count('neutral'), count('skipped'), count('pending'), count('failed'))];
+  if (count('neutral') + count('skipped') > 0) lines.push(vscode.l10n.t('Neutral and skipped checks do not block a GitHub merge, but they are not evidence that the change passed them.'));
+  lines.push(status.requiredChecks === undefined
+    ? vscode.l10n.t('Required checks could not be read with this account; requirements are shown as unknown.')
+    : status.requiredChecks.length
+      ? vscode.l10n.t('Required by the base branch: {0}', status.requiredChecks.join(', '))
+      : vscode.l10n.t('The base branch requires no status checks.'));
+  return lines;
 }
 
 /** Unknown API states remain intact so new provider values are never misrepresented. */

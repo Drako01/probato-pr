@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { GitHubClient, type FetchFn } from '../../src/github/github-client';
-import { buildReviewDraft, commentMarker, GitHubDelivery, type DeliveryPull, type InlineDraft } from '../../src/github/delivery';
+import { buildReviewDraft, checkOutcome, commentMarker, GitHubDelivery, type DeliveryPull, type InlineDraft } from '../../src/github/delivery';
 import type { ReviewFinding } from '../../src/core/model';
 
 const ref = { owner: 'owner', repo: 'repo' };
@@ -23,6 +23,8 @@ function fixture(handler?: (url: string, init: RequestInit) => Response | undefi
     if (url.endsWith('/user')) return Promise.resolve(Response.json({ id: 2, login: 'reviewer' }));
     if (url.includes('/comments?')) return Promise.resolve(Response.json([]));
     if (url.includes('/git/ref/heads/')) return Promise.resolve(Response.json({ object: { sha } }));
+    if (url.includes('/rules/branches/')) return Promise.resolve(Response.json([]));
+    if (url.endsWith('/branches/main')) return Promise.resolve(Response.json({ protected: false }));
     return Promise.resolve(new Response('', { status: 500 }));
   });
   const client = new GitHubClient(fetch, () => Promise.resolve('synthetic-token'));
@@ -224,8 +226,32 @@ const writes = (requests: readonly { url: string; init: RequestInit }[]) => requ
     const old = { context: 'tests', state: 'failure', target_url: null };
     const { delivery } = fixture((url) => url.includes('/statuses?') ? Response.json(new URL(url).searchParams.get('page') === '1' ? [{ ...old, state: 'success' }, ...Array.from({ length: 99 }, () => old)] : [old]) : undefined);
     const result = await delivery.status(ref, 7);
-    expect(result.checks).toEqual([{ name: 'tests', state: 'success', url: null }]);
+    expect(result.checks).toEqual([{ name: 'tests', state: 'success', url: null, outcome: 'passed', requirement: 'informative' }]);
     expect(result.blockers).toEqual([]);
+  });
+  it('distinguishes passed, neutral, skipped, pending and failed outcomes, failing closed on unknown states', () => {
+    expect(['success', 'neutral', 'skipped', 'queued', 'expected', 'failure', 'stale', 'brand_new_state'].map(checkOutcome)).toEqual(['passed', 'neutral', 'skipped', 'pending', 'pending', 'failed', 'failed', 'failed']);
+  });
+  it('labels required versus informative checks from rulesets and classic protection, and blocks a missing required check', async () => {
+    const run = (name: string, conclusion: string) => ({ id: 1, name, status: 'completed', conclusion, details_url: null });
+    const { delivery, requests } = fixture((url) => {
+      if (url.includes('/check-runs?')) return Response.json({ check_runs: [run('Verify (ubuntu)', 'success'), run('Docs', 'skipped'), run('Lint', 'neutral')] });
+      if (url.includes('/rules/branches/main?')) return Response.json([{ type: 'pull_request', parameters: { required_approving_review_count: 1 } }, { type: 'required_status_checks', parameters: { required_status_checks: [{ context: 'Verify (ubuntu)' }, { context: 'Verify (windows)' }] } }]);
+      if (url.endsWith('/branches/main')) return Response.json({ protected: true, protection: { required_status_checks: { contexts: ['Lint'] } } });
+      return undefined;
+    });
+    const status = await delivery.status(ref, 7);
+    expect(status.requiredChecks).toEqual(['Lint', 'Verify (ubuntu)', 'Verify (windows)']);
+    expect(status.checks.map((c) => [c.name, c.outcome, c.requirement])).toEqual([['Verify (ubuntu)', 'passed', 'required'], ['Docs', 'skipped', 'informative'], ['Lint', 'neutral', 'required']]);
+    expect(status.blockers).toEqual(['Required check Verify (windows) has not reported on this commit.']);
+    expect(writes(requests)).toEqual([]);
+  });
+  it('reports requirements as unknown, never as "none", when the policy is unreadable', async () => {
+    const { delivery } = fixture((url) => url.includes('/rules/branches/') ? new Response('', { status: 404 }) : undefined);
+    const status = await delivery.status(ref, 7);
+    expect(status.requiredChecks).toBeUndefined();
+    const malformed = fixture((url) => url.includes('/rules/branches/') ? Response.json([{ type: 'required_status_checks', parameters: { unexpected: true } }]) : undefined);
+    expect(await malformed.delivery.requiredChecks(ref, 'main')).toBeUndefined();
   });
   it('does not silently truncate a PR at the GitHub file ceiling', async () => {
     const { client } = fixture((url) => url.includes('/files?') ? Response.json(Array.from({ length: 100 }, () => file)) : undefined);
