@@ -29,7 +29,7 @@ node scripts/create-demo-repo.mjs C:\temp\probato-demo
 ## 2. Verification with attribution
 
 1. Click the beaker (**Verify Findings**) in the Verification view.
-2. The picker shows `npm run test` with the script body and "Executes repository code" (not pre-selected). Select it, confirm the modal.
+2. The picker shows `npm run test` with its rationale and the "Executes repository code" warning (not pre-selected); it does not show the script body. Select it, confirm the modal.
 3. Choose **Compare with base**.
 4. Expected: check **failed · introduced** ("Passes on the base revision and fails with this change"); review risk **CRITICAL** (the committed AWS key), with the regression listed among the reasons; the Evidence node opens a log with command, revision, exit code, duration and output hash.
 5. Run `git worktree list` in the demo repo: only the main worktree remains.

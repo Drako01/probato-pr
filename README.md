@@ -272,6 +272,16 @@ Choose a suitable temporary output path on Windows. Checks execute only when exp
 `--baseline` also authorizes the base comparison. Exit codes are 0 below the finding threshold, 1 when the threshold
 is reached and 2 for execution/configuration errors. See the [delivery guide](docs/DELIVERY.md) for all options.
 
+`--gate` chooses how the exit code is decided (the default, `absolute`, keeps the 0.6.0 behavior):
+
+| Mode | Exit 1 (quality failure) | Reported as WARN (exit 0) | Exit 2 |
+|---|---|---|---|
+| `absolute` | Any failed check, mutation gate failure or finding at `--fail-on` | — | Execution error or incomplete run |
+| `regression-only` | Checks that fail only on your change (`introduced`), mutation gate failure, and `confirmed`/`evidenced` findings attributed as `introduced` | Pre-existing failures; findings that are `suspected`, `not-verified` or not attributed | Execution error; failed checks without a comparable baseline (`--on-inconclusive warn` turns these into WARN) |
+| `hybrid` | Like `regression-only` for checks; `confirmed`/`evidenced` findings at `--fail-on` unless attributed as `pre-existing`/`fixed` | Pre-existing failures; `suspected`/`not-verified` findings | Same as `regression-only` |
+
+In the differential modes the decision and its reasons are printed to stderr; a WARN is never reported as PASS.
+
 ## Offline mode
 
 Local review and reports work offline. GitHub delivery, remote Git operations and AI review need their respective

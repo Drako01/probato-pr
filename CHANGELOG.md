@@ -2,6 +2,20 @@
 
 All notable changes to Probato PR are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- CLI `--gate absolute|regression-only|hybrid` and `--on-inconclusive fail|warn`. The default (`absolute`) keeps the
+  0.6.0 exit codes; differential modes block only demonstrated regressions and print their decision to stderr.
+
+### Fixed
+
+- SARIF: `security-severity` is emitted only for security rules; other rules use `problem.severity`, so quality
+  issues are no longer presented as vulnerabilities in GitHub code scanning. Rule severity is the most severe finding.
+- `SECURITY.md`, `PRIVACY.md` and the manual test plan now describe the GitHub and local Git writes Probato performs and
+  what the check approval UI actually shows.
+
 ## [0.6.0] — 2026-11-07
 
 ### Added
