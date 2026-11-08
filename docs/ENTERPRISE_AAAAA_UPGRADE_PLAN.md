@@ -23,7 +23,18 @@ compatible. No new frameworks or layers without a demonstrated need. SKIP/WARN/I
 Exit-code precedence (all modes): execution error/incomplete (2) > demonstrated failure (1) > inconclusive attribution
 (2 or WARN by policy) > WARN (0) > PASS (0).
 
-## Phases II–VI — not started in this change
+## Phase III / V — implemented so far
+
+| Decision | Where | Why |
+|---|---|---|
+| `ci.yml` (pull_request + merge_group) validates; `publish.yml` (push main, dispatch, schedule) only publishes | `.github/workflows/` | Required checks keep their names (`Verify (<os>)`); no QA matrix on every push to main. |
+| One release gate on the merged tree, only for version-changing pushes | `publish.yml` `package` job | The ruleset is not strict, so the squash tree may differ from what PR CI saw. Removable once strict checks or a merge queue is enabled (V.2). |
+| One VSIX, manifest version checked, SHA-256 re-checked by every consumer | `publish.yml` | Same artifact in every store; checksum is integrity, not provenance. |
+| Path-gated real Stryker E2E | `ci.yml` `mutation-e2e` | Runs only when the mutation/verification/report contract or deps change; skipped otherwise, never reported as passed. |
+| Per-module coverage ratchet | `scripts/coverage-modules.mjs`, `vitest.config.mts` | Critical modules measured separately; floors = measured baseline; target 85/80 reported as WARN when unmet. Collected in the same CI unit run. |
+| Seeded property tests without a new dependency | `test/unit/property-based.test.ts` | Reproducible counterexamples (`PROBATO_FUZZ_SEED`). |
+
+## Remaining phases
 
 Order and dependencies: II (external benchmark) needs licensed real-world material and labeling time; III (refactors,
 coverage, property/fault tests) should precede IV (adversarial tests, optional container sandbox, SBOM); V (CI split,

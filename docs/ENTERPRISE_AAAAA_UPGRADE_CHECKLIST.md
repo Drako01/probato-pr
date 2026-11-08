@@ -37,15 +37,15 @@ States: `TODO` · `IN_PROGRESS` · `PASS` · `WARN` · `BLOCKED`. Evidence refer
 | IV.1 | Threat model update for write operations, AI providers, webviews | TODO |
 | IV.2 | Adversarial test suite (refs, `.cmd`, git filters, traversal/TOCTOU, SSRF, XSS, prompt injection) | TODO |
 | IV.3 | Optional isolated execution backend (container, no network) or explicit `unavailable` | TODO |
-| IV.4 | SBOM, VSIX integrity/provenance, Dependabot failure triage of 2026-11-07 (P2-07) | TODO |
+| IV.4 | SBOM, VSIX integrity/provenance, Dependabot failure triage of 2026-11-07 (P2-07) | IN_PROGRESS — open alert #3 triaged (E9): GHSA-g3hv-75wg-m249, `minimatch` 10.2.6, **development scope only** (eslint, vsce/ovsx, mocha), not bundled in the VSIX; fix is 11.0.1, a major version outside what those tools declare. Third-party policy: WARN, no forced override (risk of breaking lint/packaging for a DoS through developer-controlled glob patterns). VSIX checksum between jobs done (V.4); SBOM and provenance attestation TODO |
 
 ## Phase V — CI/CD, release, performance
 
 | ID | Task | State |
 |---|---|---|
-| V.1 | Split `ci.yml` / `publish.yml`; no duplicate QA on `push(main)` (P1-06) | PASS (static) — E5 `workflow-contract.test.ts`; first real run happens on this PR. `push(main)` without a version change runs only the plan job; a version change runs one release gate on the merged tree because V.2 is open |
+| V.1 | Split `ci.yml` / `publish.yml`; no duplicate QA on `push(main)` (P1-06) | PASS — E5 `workflow-contract.test.ts`; `ci.yml` ran green on PR #16 with the required check names (E10); `publish.yml` did not run on the PR. The push(main) path is only verified statically until the next merge. `push(main)` without a version change runs only the plan job; a version change runs one release gate on the merged tree because V.2 is open |
 | V.2 | Strict required checks or merge queue | BLOCKED — ruleset `26362018` has `strict_required_status_checks_policy=false` (read with `gh api repos/Drako01/probato-pr/rules/branches/main`). Changing it needs explicit maintainer authorization. `ci.yml` already listens to `merge_group` |
-| V.3 | Mutation E2E gated on relevant paths (P1-05) | WARN — `Mutation E2E` job in `ci.yml` runs real Stryker on changes to mutation/verification/reports/deps, reports skipped otherwise; not a required check; no CI run observed yet |
+| V.3 | Mutation E2E gated on relevant paths (P1-05) | PASS — `Mutation E2E` job in `ci.yml` ran real Stryker in CI (E10); skipped otherwise with an explicit summary line. Not a required check (adding it needs a ruleset change) |
 | V.4 | Single SHA-256-identified VSIX to Marketplace/Open VSX/Release | PASS (static) — one `vsce package`, manifest version check, `sha256sum -c` in every consumer job (E5). Build provenance attestation: TODO |
 | V.5 | P50/P95 and peak RSS on real repositories (P2-04) | TODO |
 
