@@ -27,7 +27,7 @@ States: `TODO` · `IN_PROGRESS` · `PASS` · `WARN` · `BLOCKED`. Evidence refer
 |---|---|---|
 | III.1 | Split `review-controller`, `delivery-controller`, `home-panel`, `github/delivery`, `mutation/engine`, `ts-contracts` along functional boundaries | TODO |
 | III.2 | Vitest coverage with per-module thresholds (P2-01) | WARN — E6: `@vitest/coverage-v8` 5.1.0, `pnpm run test:coverage`, per-module gate `scripts/coverage-modules.mjs` (floors = measured baseline, wired into CI Linux without a second test pass). Target 85/80 met by `core`, `verification`, `github`; branch coverage of `git` (73.3%) and `mutation` (74.6%) is below 80% |
-| III.3 | Property-based/fuzz tests (diff parser, paths, refs, CLI, SARIF, redaction) | TODO |
+| III.3 | Property-based/fuzz tests (diff parser, paths, refs, CLI, SARIF, redaction) | IN_PROGRESS — E8 `property-based.test.ts` (seeded, 300 cases per property, `PROBATO_FUZZ_SEED` to reproduce): git path quoting round trip, diff parser line numbers/counts/robustness, secret redaction (no leak, idempotent, no false rewrite). Refs, CLI arguments, SARIF and AI-result parsing still TODO; no automatic shrinking |
 | III.4 | Fault injection (cancellation, worktree cleanup, corrupt persistence) | TODO |
 
 ## Phase IV — security and supply chain
