@@ -6,6 +6,7 @@ import type { GitClient } from '../git/git-client';
 import { GitHubClient, parseGitHubRemote, type GitHubRepoRef } from '../github/github-client';
 import { buildReviewDraft, GitHubDelivery, type DeliveryPull } from '../github/delivery';
 import { renderPullRequestDescription } from '../reports/markdown';
+import { exclusiveWithProgress } from './exclusive-progress';
 import type { ReviewSession } from './review-session';
 
 export interface DeliveryControllerDeps {
@@ -267,10 +268,7 @@ export class DeliveryController {
     await this.guarded(async () => {
       const target = await this.target();
       if (!target) return;
-      await this.deps.session.exclusive(label, (signal) => vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Probato PR: ${label}`, cancellable: true }, async (_progress, token) => {
-        const subscription = token.onCancellationRequested(() => this.deps.session.cancel());
-        try { await operation(target, signal); } finally { subscription.dispose(); }
-      }));
+      await exclusiveWithProgress(this.deps.session, label, vscode.ProgressLocation.Notification, `Probato PR: ${label}`, (signal) => operation(target, signal));
     });
   }
   private async guarded(operation: () => Promise<void>): Promise<void> {

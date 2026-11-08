@@ -902,6 +902,7 @@
   "An analysis is already running. Cancel it before starting another review.": "Ya hay un análisis en ejecución. Cancelalo antes de iniciar otra revisión.",
   "Analysis exceeded its time limit and was stopped. No successful result was produced.": "El análisis superó su límite de tiempo y se detuvo. No se produjo un resultado exitoso.",
   "The analysis worker stopped unexpectedly (exit {0}). No successful result was produced.": "El proceso de análisis se detuvo inesperadamente (salida {0}). No se produjo un resultado exitoso.",
+  "The analysis worker exceeded its memory limit ({0} MB) and was stopped. No successful result was produced.": "El proceso de análisis superó su límite de memoria ({0} MB) y se detuvo. No se produjo un resultado exitoso.",
   "Analysis source transfer exceeded its safe content budget.": "La transferencia de archivos fuente del análisis superó su presupuesto seguro de contenido.",
   "Analysis source listing exceeded its safe file limit.": "El listado de archivos fuente del análisis superó su límite seguro de archivos.",
   "A committed revision is required to prepare isolated mutation testing.": "Se necesita una revisión con commit para preparar las pruebas de mutación aisladas.",

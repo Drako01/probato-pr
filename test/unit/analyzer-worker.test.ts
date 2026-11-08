@@ -11,11 +11,14 @@ const sandbox = tempDir('probato-worker-');
 const actualWorker = path.join(sandbox.dir, 'analyzer.cjs');
 const busyWorker = path.join(sandbox.dir, 'busy.cjs');
 const stoppedWorker = path.join(sandbox.dir, 'stopped.cjs');
+const hungryWorker = path.join(sandbox.dir, 'hungry.cjs');
 beforeAll(async () => {
   await build({ entryPoints: ['src/analyzer-worker.ts'], outfile: actualWorker, bundle: true, format: 'cjs', platform: 'node', target: 'node20', logLevel: 'silent' });
   // Controlled CPU-bound test worker: a heartbeat on the calling thread must continue throughout this loop.
   await writeFile(busyWorker, `const {parentPort}=require('node:worker_threads');parentPort.on('message',m=>{if(m.type!=='review')return;const start=Date.now();while(Date.now()-start<200){}parentPort.postMessage({type:'result',reviewId:m.reviewId,result:{id:'busy-complete'}});});`);
   await writeFile(stoppedWorker, `process.exit(3);`);
+  // Fault injection: unbounded allocation must hit the worker heap ceiling, never the calling process.
+  await writeFile(hungryWorker, `const {parentPort}=require('node:worker_threads');parentPort.on('message',m=>{if(m.type!=='review')return;const hoard=[];for(;;)hoard.push(new Array(1e5).fill({k:hoard.length}));});`);
 }, 30_000);
 afterAll(() => { sandbox.cleanup(); });
 
@@ -76,6 +79,15 @@ describe('analysis outside the calling event loop', () => {
       await expect(timed.review(changes(), sources())).rejects.toThrow(/time limit/);
     } finally { stopped.dispose(); timed.dispose(); }
   });
+
+  it('fault injection: stops a worker at its memory limit and recovers with a fresh worker', async () => {
+    const hungry = new AnalyzerWorkerHost({ workerPath: hungryWorker, version: 'test', memoryLimitMb: 32 });
+    try {
+      await expect(hungry.review(changes(), sources())).rejects.toThrow(/memory limit \(32 MB\)/);
+    } finally { hungry.dispose(); }
+    const healthy = new AnalyzerWorkerHost({ workerPath: busyWorker, version: 'test', memoryLimitMb: 32 });
+    try { expect((await healthy.review(changes(), sources())).id).toBe('busy-complete'); } finally { healthy.dispose(); }
+  }, 30_000);
 
   it('rejects reviews after disposal or when already cancelled without creating a worker', async () => {
     const host = new AnalyzerWorkerHost({ workerPath: 'missing-worker.cjs', version: 'test' });

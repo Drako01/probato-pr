@@ -3,8 +3,10 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv-draft-04';
 import { describe, expect, it } from 'vitest';
-import type { ReviewFinding, ReviewResult, Severity } from '../../src/core/model';
-import { evaluateQualityGate } from '../../src/core/quality-gate';
+import { SEVERITIES, VERIFICATION_STATUSES, type ReviewFinding, type ReviewResult, type Severity } from '../../src/core/model';
+import { evaluateQualityGate, GATE_MODES, INCONCLUSIVE_POLICIES } from '../../src/core/quality-gate';
+import { isSecurityRule } from '../../src/core/rule-taxonomy';
+import { forAll } from './fuzz';
 import { ReviewEngine } from '../../src/core/review-engine';
 import { renderJson } from '../../src/reports/json';
 import { renderSarif } from '../../src/reports/sarif';
@@ -100,6 +102,40 @@ describe('SARIF 2.1.0 schema conformance', () => {
     const imported = importSarif(renderSarif(review), target);
     expect(imported.findings.map((f) => f.location.file).sort()).toEqual([...target.changedFiles].sort());
     expect(imported.findings.every((f) => f.verification === 'evidenced' && f.attribution === 'unknown')).toBe(true);
+  });
+});
+
+describe('property: SARIF export of generated reviews', () => {
+  const RULES = ['secrets/aws-access-key', 'dependencies/install-script', 'config/workflow-write-all', 'config/other', 'tests/skipped', 'contracts/export-removed', 'errors/empty-catch', 'ai/review', 'external/eslint/x', 'constructor', '__proto__/x', 'unknown-tool/rule'];
+  const ATTRIBUTIONS = ['introduced', 'pre-existing', 'fixed', 'inconclusive', 'unknown', undefined] as const;
+
+  it('is schema-valid, never marks non-security rules as vulnerabilities, keeps unique stable fingerprints and leaks no secret', () => {
+    forAll((g, size, label) => {
+      const findings = Array.from({ length: g.int(4 * size) }, (_, index) => {
+        const ruleId = g.pick(RULES);
+        const file = `${g.text(3 * size, 'ab/ ñ#%[]?é中😀') || 'f'}${index}.ts`.replace(/^\/+/, '');
+        const attribution = g.pick(ATTRIBUTIONS);
+        return finding(ruleId, g.pick(SEVERITIES), file, {
+          id: `${ruleId}:${index}`, verification: g.pick(VERIFICATION_STATUSES),
+          title: g.pick(['t', `uses ${SECRET}`, g.text(20)]) || 't', description: g.pick(['d', `token=${SECRET}`, g.text(40)]) || 'd',
+          location: { file, startLine: g.int(50), ...(g.int(1) ? { endLine: 50 + g.int(5) } : {}) },
+          ...(attribution ? { attribution } : {}),
+        });
+      });
+      const review: ReviewResult = { ...base, repository: { ...base.repository, root: g.pick(['', '/repo', 'C:\\work\\x y']) }, findings };
+      const gate = g.int(1) ? evaluateQualityGate(review, { mode: g.pick(GATE_MODES), threshold: g.pick(SEVERITIES), inconclusive: g.pick(INCONCLUSIVE_POLICIES) }) : undefined;
+      const text = renderSarif(review, gate);
+      expect(validate(JSON.parse(text)), `${label} ${JSON.stringify(validate.errors)}`).toBe(true);
+      expect(text, label).not.toContain(SECRET);
+      const run = parse(text).runs[0];
+      for (const rule of run.tool.driver.rules) {
+        const id = (rule as unknown as { id: string }).id;
+        expect(rule.properties['security-severity'] !== undefined, `${label} ${id}`).toBe(isSecurityRule(id));
+      }
+      const prints = run.results.map((result) => result.partialFingerprints['probatoFindingId/v1']);
+      expect(new Set(prints).size, label).toBe(prints.length);
+      expect(parse(renderSarif(review, gate)).runs[0].results.map((result) => result.partialFingerprints['probatoFindingId/v1']), label).toEqual(prints);
+    });
   });
 });
 

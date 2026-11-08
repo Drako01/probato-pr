@@ -156,6 +156,22 @@ const writes = (requests: readonly { url: string; init: RequestInit }[]) => requ
     expect(await delivery.publishReview(ref, 7, sha, { comments: [], skipped: [] })).toEqual({ created: 0, updated: 0 });
     expect(writes(requests).map((r) => r.init.method)).toEqual(['PATCH']);
   });
+  it('fault injection: a partial API failure is reported, and the retry neither re-edits nor duplicates', async () => {
+    const second: InlineDraft = { ...comment, key: 'def', line: 2, body: `${commentMarker('def')}\nAnother` };
+    let stored = oldComment();
+    let reviewAttempts = 0;
+    const { delivery, requests } = fixture((url, init) => {
+      if (url.includes('/comments?')) return Response.json([stored]);
+      if (url.endsWith('/pulls/comments/123')) { stored = { ...stored, body: comment.body }; return Response.json(stored); }
+      // The first review POST fails after the PATCH was already applied: GitHub is left half updated.
+      if (url.endsWith('/reviews') && init.method === 'POST') return ++reviewAttempts === 1 ? new Response('upstream error', { status: 502 }) : Response.json({ id: 1 });
+      return undefined;
+    });
+    await expect(delivery.publishReview(ref, 7, sha, { comments: [comment, second], skipped: [] })).rejects.toThrow();
+    expect(await delivery.publishReview(ref, 7, sha, { comments: [comment, second], skipped: [] })).toEqual({ created: 1, updated: 0 });
+    expect(writes(requests).map((r) => `${r.init.method ?? 'GET'} ${r.url.replace(/^.*\/repos\/owner\/repo/, '')}`)).toEqual(['PATCH /pulls/comments/123', 'POST /pulls/7/reviews', 'POST /pulls/7/reviews']);
+    expect(JSON.parse(stringBody(writes(requests)[2])).comments).toHaveLength(1);
+  });
   it('refuses stale review publication and self approval before a write', async () => {
     const { delivery, requests } = fixture((url) => url.endsWith('/user') ? Response.json({ id: 1, login: 'author' }) : undefined);
     await expect(delivery.publishReview(ref, 7, 'old', { comments: [comment], skipped: [] })).rejects.toThrow(/changed/);

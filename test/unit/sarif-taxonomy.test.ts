@@ -25,7 +25,8 @@ describe('SARIF rule taxonomy', () => {
   });
 
   it('never classifies unknown, external, AI or prototype-like rule IDs as security', () => {
-    for (const id of ['external/security/sql-injection', 'ai/review', 'unknown/rule', 'constructor/x', '__proto__/x', '', 'secrets']) {
+    // Bare 'constructor', 'toString' and 'hasOwnProperty' regress a bug found by the SARIF property test.
+    for (const id of ['external/security/sql-injection', 'ai/review', 'unknown/rule', 'constructor/x', '__proto__/x', '', 'secrets', 'constructor', 'toString', 'hasOwnProperty', '__proto__']) {
       const category = classifyRule(id).category;
       if (id === 'secrets') expect(category).toBe('security');
       else expect(category).not.toBe('security');

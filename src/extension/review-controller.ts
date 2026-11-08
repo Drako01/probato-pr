@@ -2,20 +2,18 @@ import { readFile, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { buildAiContext } from '../ai/ai-context';
-import { AiProviderError, type AIReviewProvider } from '../ai/ai-provider';
-import { InvalidBaseUrlError } from '../ai/openai-compatible-provider';
+import type { AIReviewProvider } from '../ai/ai-provider';
 import { parseAiReview } from '../ai/ai-response';
 import { EMPTY_WORKSPACE, type WorkspaceIndex } from '../core/analyzer';
 import type { ChangeSet, PlannedCheck, ReviewResult } from '../core/model';
 import { loadRepositoryPolicy } from '../infrastructure/repository-policy';
-import { applyReviewPolicy, type RepositoryPolicy } from '../core/repository-policy';
-import { recommendChecks } from '../verification/check-impact';
-import { checkKindLabel } from '../core/labels';
+import { applyReviewPolicy } from '../core/repository-policy';
+import { mutationRunConfig } from '../mutation/run-config';
 import { isWithin, PathOutsideWorkspaceError, resolveInside } from '../core/paths';
 import { finalizeResult, type ProgressReporter, type ReviewEngine } from '../core/review-engine';
-import { CancelledError, GitError, GitNotFoundError, OutputTooLargeError, type GitClient } from '../git/git-client';
+import { CancelledError, type GitClient } from '../git/git-client';
 import { assertReviewCurrent, repositorySnapshot } from '../git/repository-snapshot';
-import { LocalChangeCollector, NoChangesError, type LocalReviewRequest } from '../git/local-changes';
+import { LocalChangeCollector, type LocalReviewRequest } from '../git/local-changes';
 import { GitHubError, parseGitHubRemote, type GitHubClient } from '../github/github-client';
 import { pullRequestChangeSet } from '../github/pull-request-changes';
 import { RevisionWorkspaceIndex } from '../infrastructure/revision-workspace-index';
@@ -29,7 +27,10 @@ import type { ApprovedChecks } from '../verification/approved-checks';
 import { detectMonorepoChecks } from '../verification/monorepo-checks';
 import { ReviewedWorktree } from '../verification/review-worktree';
 import type { VerificationEngine } from '../verification/verification-engine';
-import { BusyError, type ReviewSession } from './review-session';
+import { reportCommandError } from './command-errors';
+import { exclusiveWithProgress, type ProgressMessage } from './exclusive-progress';
+import type { ReviewSession } from './review-session';
+import { VerificationPrompts } from './verification-prompts';
 import { ensureSavedRepository } from './review-state';
 import { DEFAULT_MUTATION_SETTINGS, type Settings } from './settings';
 import type { MutationRequest } from '../mutation/engine';
@@ -59,8 +60,11 @@ export class ReviewController {
   private lastChanges: ChangeSet | undefined;
   private lastReviewId: string | undefined;
   private lastRepo: string | undefined;
+  private readonly prompts: VerificationPrompts;
 
-  constructor(private readonly deps: ControllerDeps) {}
+  constructor(private readonly deps: ControllerDeps) {
+    this.prompts = new VerificationPrompts(deps.approvals, () => deps.settings().verification.baseline);
+  }
 
   // ---------------------------------------------------------------- reviews
 
@@ -214,9 +218,9 @@ export class ReviewController {
           }
           const policy = await loadRepositoryPolicy(executionRoot);
           for (const warning of policy.warnings) void vscode.window.showWarningMessage(warning);
-          const approved = await this.approveChecks(root, plan, review.changedFiles, policy.policy);
+          const approved = await this.prompts.approveChecks(root, plan, review.changedFiles, policy.policy);
           if (!approved) return;
-          const baselineCommit = await this.chooseBaseline(review);
+          const baselineCommit = await this.prompts.chooseBaseline(review);
           ensureSavedRepository(root);
           await assertReviewCurrent(this.deps.git, review, signal, false);
           const settings = this.deps.settings();
@@ -262,13 +266,11 @@ export class ReviewController {
           const loaded = await loadRepositoryPolicy(executionRoot, workspace);
           for (const warning of loaded.warnings) void vscode.window.showWarningMessage(warning);
           const settings = this.deps.settings().mutation ?? DEFAULT_MUTATION_SETTINGS;
-          const policy = loaded.policy?.mutation;
           const headCommit = review.scope.headSha ?? review.repository.headSha;
           const request: MutationRequest = {
             root: executionRoot, dependencyRoot: root, impactedFiles, authorized: false,
             ...(headCommit ? { headCommit } : {}),
-            limits: { timeoutMs: settings.timeoutSeconds * 1000, concurrency: settings.concurrency, memoryMb: settings.memoryMb, maxFiles: settings.maxFiles },
-            gatePolicy: { enabled: policy?.enabled ?? settings.gateEnabled, failOnDegradation: policy?.failOnDegradation ?? settings.failOnDegradation, minimumScore: policy?.minimumScore ?? settings.minimumScore, tolerancePoints: policy?.tolerancePoints ?? settings.tolerancePoints },
+            ...mutationRunConfig(settings, loaded.policy?.mutation),
             signal, progress,
             onUpdate: (result) => { if (this.currentReviewId() === review.id) this.deps.session.setMutation(result, mutationCommandEvidence(result)); },
           };
@@ -297,101 +299,8 @@ export class ReviewController {
     });
   }
 
-  /**
-   * Checks remembered for this repository run without asking while their command and script are unchanged.
-   * Otherwise the user picks and confirms, and may choose to be remembered.
-   */
-  private async approveChecks(root: string, plan: readonly PlannedCheck[], changedFiles: readonly string[] = [], policy?: RepositoryPolicy): Promise<readonly PlannedCheck[] | undefined> {
-    const { approved, changed } = this.deps.approvals.match(root, plan);
-    if (changed.length > 0) {
-      await this.deps.approvals.forget(root);
-      void vscode.window.showWarningMessage(
-        vscode.l10n.t('{0} changed since you approved it, so Probato PR asks again before running anything.', changed.map((c) => c.label).join(', ')),
-      );
-    } else if (approved.length > 0) {
-      const forget = vscode.l10n.t('Forget');
-      void vscode.window
-        .showInformationMessage(vscode.l10n.t('Running the checks you approved for this exact repository state: {0}.', approved.map((c) => c.label).join(', ')), forget)
-        .then(async (answer) => {
-          if (answer === forget) {
-            await this.deps.approvals.forget(root);
-          }
-        });
-      return approved;
-    }
-    const impact = recommendChecks(plan, changedFiles, policy);
-    const recommendations = new Map(impact.recommendations.map((item) => [item.checkId, item]));
-    const rank = { high: 0, medium: 1, low: 2 };
-    const ordered = [...plan].sort((a, b) => rank[recommendations.get(a.id)?.confidence ?? 'low'] - rank[recommendations.get(b.id)?.confidence ?? 'low']);
-    const items = ordered.map((check) => ({
-      label: check.label,
-      description: checkKindLabel(check.kind),
-      detail: [recommendations.get(check.id)?.reason ?? check.rationale, ...check.warnings, ...check.requires.map((r) => vscode.l10n.t('May require: {0}', r))].join(' · '),
-      // Pre-select only checks that do not run repository code; everything else is an explicit opt-in.
-      picked: !check.runsRepositoryCode,
-      check,
-    }));
-    const picked = await vscode.window.showQuickPick(items, {
-      canPickMany: true,
-      title: vscode.l10n.t('Probato PR: select the checks to run'),
-      placeHolder: vscode.l10n.t('Commands run locally with your user permissions. They are not sandboxed.'),
-      ignoreFocusOut: true,
-    });
-    if (!picked || picked.length === 0) {
-      return undefined;
-    }
-    const commands = picked.map((p) => `• ${p.check.label}  (${p.check.command.executable} ${p.check.command.args.join(' ')})`).join('\n');
-    const confirm = vscode.l10n.t('Run');
-    const remember = vscode.l10n.t('Run and remember');
-    const answer = await vscode.window.showWarningMessage(
-      vscode.l10n.t('Run {0} command(s) in this repository?', picked.length),
-      {
-        modal: true,
-        detail: `${commands}\n\n${vscode.l10n.t('They execute with your normal user permissions (no sandbox). Repository scripts are untrusted code: review them before running.')}\n\n${vscode.l10n.t('"Run and remember" applies only while the repository content, commands and configuration remain unchanged.')}`,
-      },
-      confirm,
-      remember,
-    );
-    const checks = picked.map((p) => p.check);
-    if (answer === remember) {
-      await this.deps.approvals.remember(root, checks);
-    }
-    return answer === confirm || answer === remember ? checks : undefined;
-  }
-
-  async forgetApprovedChecks(): Promise<void> {
-    const count = await this.deps.approvals.forgetAll();
-    void vscode.window.showInformationMessage(
-      count > 0 ? vscode.l10n.t('Probato PR will ask again before running checks in {0} repository(ies).', count) : vscode.l10n.t('There are no remembered checks.'),
-    );
-  }
-
-  private async chooseBaseline(review: ReviewResult): Promise<string | undefined> {
-    const base = review.scope.baseSha;
-    const mode = this.deps.settings().verification.baseline;
-    if (!base || mode === 'never') {
-      return undefined;
-    }
-    if (mode === 'always') {
-      return base;
-    }
-    const yes = vscode.l10n.t('Compare with base');
-    const always = vscode.l10n.t('Always compare');
-    const no = vscode.l10n.t('Head only');
-    const answer = await vscode.window.showInformationMessage(
-      vscode.l10n.t('If a check fails, re-run it on the base revision ({0}) to tell new failures from existing ones?', base.slice(0, 10)),
-      {
-        modal: true,
-        detail: `${vscode.l10n.t('A temporary git worktree is created outside your repository and removed afterwards. Your working tree is not modified.')}\n\n${vscode.l10n.t('"Always compare" saves this choice in your user settings (Probato PR › Verification: Baseline).')}`,
-      },
-      yes,
-      always,
-      no,
-    );
-    if (answer === always) {
-      await vscode.workspace.getConfiguration('probatoPR').update('verification.baseline', 'always', vscode.ConfigurationTarget.Global);
-    }
-    return answer === yes || answer === always ? base : undefined;
+  forgetApprovedChecks(): Promise<void> {
+    return this.prompts.forgetAll();
   }
 
   // ---------------------------------------------------------------- AI
@@ -722,20 +631,9 @@ export class ReviewController {
     label: string,
     location: vscode.ProgressLocation,
     title: string,
-    operation: (signal: AbortSignal, report: (message: string) => void) => Promise<void>,
+    operation: (signal: AbortSignal, report: ProgressMessage) => Promise<void>,
   ): Promise<void> {
-    return this.deps.session.exclusive(label, (signal) =>
-      vscode.window.withProgress({ location, title, cancellable: true }, async (progress, token) => {
-        const subscription = token.onCancellationRequested(() => this.deps.session.cancel());
-        try {
-          await operation(signal, (message) => {
-            progress.report({ message });
-          });
-        } finally {
-          subscription.dispose();
-        }
-      }),
-    );
+    return exclusiveWithProgress(this.deps.session, label, location, title, operation);
   }
 
   /** Central error handling: every failure becomes an actionable message plus a full log entry. */
@@ -750,40 +648,7 @@ export class ReviewController {
     }
   }
 
-  private async report(error: unknown): Promise<void> {
-    const showLog = vscode.l10n.t('Show Log');
-    if (error instanceof BusyError) {
-      void vscode.window.showInformationMessage(vscode.l10n.t('Probato PR is busy ({0}). Wait for it to finish or cancel it.', error.activity));
-      return;
-    }
-    if (error instanceof CancelledError || (error instanceof Error && error.name === 'AbortError')) {
-      vscode.window.setStatusBarMessage(vscode.l10n.t('Probato PR: cancelled'), 5000);
-      return;
-    }
-    if (error instanceof NoChangesError) {
-      void vscode.window.showInformationMessage(vscode.l10n.t('Nothing to review: no {0}. Edit some files, or review a branch or a commit instead.', error.scopeLabel));
-      return;
-    }
-    this.deps.log.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
-    let message: string;
-    const actions: string[] = [showLog];
-    if (error instanceof GitNotFoundError) {
-      message = vscode.l10n.t('Git was not found. Install Git (https://git-scm.com/downloads), make sure it is on PATH, and reload VS Code.');
-    } else if (error instanceof OutputTooLargeError) {
-      message = vscode.l10n.t('The diff is larger than probatoPR.review.maxDiffBytes. Review fewer changes or raise the limit.');
-      actions.unshift(vscode.l10n.t('Open Settings'));
-    } else if (error instanceof GitError) {
-      message = vscode.l10n.t('Git error: {0}', error.message);
-    } else if (error instanceof GitHubError || error instanceof AiProviderError || error instanceof InvalidBaseUrlError) {
-      message = error.message;
-    } else {
-      message = vscode.l10n.t('Unexpected error: {0}', error instanceof Error ? error.message : String(error));
-    }
-    const answer = await vscode.window.showErrorMessage(message, ...actions);
-    if (answer === showLog) {
-      this.deps.log.show(true);
-    } else if (answer === vscode.l10n.t('Open Settings')) {
-      await vscode.commands.executeCommand('workbench.action.openSettings', 'probatoPR.review');
-    }
+  private report(error: unknown): Promise<void> {
+    return reportCommandError(error, this.deps.log);
   }
 }

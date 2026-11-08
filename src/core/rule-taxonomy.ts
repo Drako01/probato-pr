@@ -35,10 +35,11 @@ const PREFIX_CATEGORY: Readonly<Record<string, RuleCategory>> = {
 const SECRET_CWE: readonly string[] = ['CWE-798'];
 
 export function classifyRule(ruleId: string): RuleClassification {
-  const exact = SECURITY_RULES[ruleId];
+  // hasOwn guards against inherited keys such as "constructor" coming from repository-controlled rule IDs
+  // (imported SARIF, external tools): an inherited property must never classify a rule as security.
+  const exact = Object.hasOwn(SECURITY_RULES, ruleId) ? SECURITY_RULES[ruleId] : undefined;
   if (exact) return { category: 'security', cwe: exact };
   const prefix = ruleId.split('/')[0] ?? '';
-  // hasOwn guards against inherited keys such as "constructor" coming from repository-controlled rule IDs.
   const category = (Object.hasOwn(PREFIX_CATEGORY, prefix) ? PREFIX_CATEGORY[prefix] : undefined) ?? 'external';
   if (category === 'security') return { category, cwe: prefix === 'secrets' ? SECRET_CWE : [] };
   return { category, cwe: [] };

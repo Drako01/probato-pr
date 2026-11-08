@@ -6,11 +6,12 @@ import { readFileSync } from 'node:fs';
 import * as path from 'node:path';
 
 const TARGET = { lines: 85, branches: 80 };
-// Measured on 2026-11-08 (docs/ENTERPRISE_AAAAA_TEST_EVIDENCE.md), rounded down.
+// Measured on 2026-11-08 (docs/ENTERPRISE_AAAAA_TEST_EVIDENCE.md, E6 and E13), rounded down with one point of
+// slack for platform-specific branches (Windows and Linux runs differ slightly).
 const FLOOR = {
   core: { lines: 90, branches: 84 },
   verification: { lines: 94, branches: 83 },
-  git: { lines: 90, branches: 73 },
+  git: { lines: 91, branches: 74 },
   github: { lines: 95, branches: 80 },
   mutation: { lines: 91, branches: 74 },
 };

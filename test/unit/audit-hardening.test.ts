@@ -175,5 +175,41 @@ describe('audit: per-package baseline dependencies', () => {
       expect(git(temp.dir, 'worktree', 'list').trim().split('\n')).toHaveLength(1);
     } finally { alias.cleanup(); temp.cleanup(); }
   });
-
+  it('fault injection: deletes the directory and prunes the registration when git cannot remove the worktree', async () => {
+    const temp = tempDir();
+    try {
+      initRepo(temp.dir, { '.gitignore': '**/node_modules/\n', 'packages/a/package.json': '{}' });
+      writeFiles(temp.dir, { 'node_modules/dep/index.js': 'module.exports = 1;' });
+      const injected = new Error('injected: worktree remove failed');
+      const failing = new (class extends GitClient {
+        override removeWorktree(): Promise<void> { return Promise.reject(injected); }
+      })(new NodeProcessRunner(), { timeoutMs: 30_000, maxBytes: 1_000_000 });
+      const baseline = await BaselineWorktree.create(failing, temp.dir, git(temp.dir, 'rev-parse', 'HEAD').trim());
+      await expect(baseline.dispose()).rejects.toBe(injected);
+      expect(existsSync(baseline.directory)).toBe(false);
+      expect(git(temp.dir, 'worktree', 'list').trim().split('\n')).toHaveLength(1);
+      expect(existsSync(path.join(temp.dir, 'node_modules/dep/index.js'))).toBe(true);
+    } finally { temp.cleanup(); }
+  });
+  it('fault injection: still deletes the directory and reports every failure when remove and prune both fail', async () => {
+    const temp = tempDir();
+    try {
+      initRepo(temp.dir, { '.gitignore': '**/node_modules/\n', 'packages/a/package.json': '{}' });
+      writeFiles(temp.dir, { 'node_modules/dep/index.js': 'module.exports = 1;' });
+      const removeFailure = new Error('injected: worktree remove failed');
+      const pruneFailure = new Error('injected: worktree prune failed');
+      const failing = new (class extends GitClient {
+        override removeWorktree(): Promise<void> { return Promise.reject(removeFailure); }
+        override pruneWorktrees(): Promise<void> { return Promise.reject(pruneFailure); }
+      })(new NodeProcessRunner(), { timeoutMs: 30_000, maxBytes: 1_000_000 });
+      const baseline = await BaselineWorktree.create(failing, temp.dir, git(temp.dir, 'rev-parse', 'HEAD').trim());
+      const failure: unknown = await baseline.dispose().then(() => undefined, (error: unknown) => error);
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect((failure as AggregateError).errors).toEqual([removeFailure, pruneFailure]);
+      expect(existsSync(baseline.directory)).toBe(false);
+      expect(existsSync(path.join(temp.dir, 'node_modules/dep/index.js'))).toBe(true);
+      git(temp.dir, 'worktree', 'prune');
+      expect(git(temp.dir, 'worktree', 'list').trim().split('\n')).toHaveLength(1);
+    } finally { temp.cleanup(); }
+  });
 });

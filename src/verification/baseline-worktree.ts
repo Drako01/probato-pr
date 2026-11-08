@@ -1,6 +1,7 @@
 import { lstat, mkdir, readdir, realpath, rm, symlink, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
+import { asError, throwCollected } from '../core/errors';
 import { uniqueId } from '../core/ids';
 import { isWithin, resolveInside } from '../core/paths';
 import type { GitClient } from '../git/git-client';
@@ -78,8 +79,17 @@ export class BaselineWorktree {
         throw new Error(`Refusing to clean up ${this.directory}: node_modules is not the expected link.`);
       }
     }
-    await this.git.removeWorktree(this.repoRoot, this.directory);
-    await rm(this.directory, { recursive: true, force: true });
+    // Every cleanup step runs even when an earlier one fails: the temporary directory is deleted when Git
+    // cannot unregister the worktree (locked, crashed, killed), stale registrations are then pruned, and
+    // every failure is still reported (one as is, several as an AggregateError).
+    const failures: Error[] = [];
+    const attempt = async (step: () => Promise<void>): Promise<void> => {
+      try { await step(); } catch (error) { failures.push(asError(error)); }
+    };
+    await attempt(() => this.git.removeWorktree(this.repoRoot, this.directory));
+    await attempt(() => rm(this.directory, { recursive: true, force: true }));
+    if (failures.length > 0) await attempt(() => this.git.pruneWorktrees(this.repoRoot));
+    throwCollected(failures, `Could not fully clean up baseline worktree ${this.directory}.`);
   }
 }
 
