@@ -19,7 +19,7 @@ counted as PASS.
 | Truthful security/privacy documentation of GitHub and Git writes | PASS | `docs-consistency.test.ts` |
 | Typecheck, lint, l10n keys, unit/engine suite, production build (local, Windows) | PASS | Evidence E11 |
 | PR validation split from publishing; one checksummed VSIX | PASS | CI run on PR #16 (E10) |
-| Independent external precision/recall benchmark (≥600 cases, holdout) | BLOCKED | Needs licensed real-world data with human ground truth; the 26-case authored corpus is a regression test only |
+| Independent external precision/recall benchmark (≥600 cases, holdout) | BLOCKED | Needs licensed real-world data with human ground truth; the authored corpus (71 cases, 36 traps, sealed holdout, per-rule metrics with Wilson CIs — `docs/BENCHMARK.md`) is a regression test only |
 | Merge-candidate protection (strict required checks or merge queue) | BLOCKED | Ruleset change needs maintainer authorization |
 | Extension Host on Windows/macOS; Remote SSH/WSL/Dev Containers | BLOCKED | Only Linux Extension Host runs in CI |
 | Threat model update, adversarial suite, optional sandbox, SBOM/provenance | FAIL | Phase IV not completed |

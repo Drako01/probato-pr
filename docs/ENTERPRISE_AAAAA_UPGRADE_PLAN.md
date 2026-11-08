@@ -23,6 +23,16 @@ compatible. No new frameworks or layers without a demonstrated need. SKIP/WARN/I
 Exit-code precedence (all modes): execution error/incomplete (2) > demonstrated failure (1) > inconclusive attribution
 (2 or WARN by policy) > WARN (0) > PASS (0).
 
+## Phase II — benchmark harness (external data BLOCKED)
+
+| Decision | Where | Why |
+|---|---|---|
+| Corpus as data with provenance, language, tags and trap `guards` | `test/unit/benchmark/corpus.ts` | Same shape will hold external cases; authored cases are labeled as such. |
+| Split from `sha256(id)`, holdout sealed by hash | `corpus.ts`, `benchmark.test.ts` | Nobody chooses the holdout; edits to it are visible. |
+| Pure metrics with Wilson intervals, versioned JSON report | `test/unit/benchmark/metrics.ts` | Sample size travels with every percentage; no `1.0` without a denominator. |
+| One test-side rule catalog checked against analyzer sources | `test/unit/benchmark/rule-catalog.ts` | Removes the duplicated list in the SARIF test; new rules without cases fail the gap check. |
+| Test-only, no product change | — | The benchmark measures the product; it is not a user feature. |
+
 ## Phase III / V — implemented so far
 
 | Decision | Where | Why |

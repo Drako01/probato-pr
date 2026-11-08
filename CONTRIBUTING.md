@@ -17,7 +17,7 @@ pnpm run verify
 - TypeScript `strict` (plus `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`); no `any`.
 - `src/core`, `src/analyzers`, `src/git`, `src/verification`, `src/reports`, `src/github` and `src/infrastructure` must not import `vscode` (enforced by `test/unit/ai-github-reports.test.ts`). No import cycles (same test).
 - Processes are spawned only through `ProcessRunner` (enforced by ESLint).
-- Analyzers report only facts they observed and state their verification level honestly. New analyzers implement `Analyzer` and are registered in `src/analyzers/index.ts`; add true-positive and trap cases to `test/unit/benchmark.test.ts`.
+- Analyzers report only facts they observed and state their verification level honestly. New analyzers implement `Analyzer` and are registered in `src/analyzers/index.ts`; add their rule IDs to `test/unit/benchmark/rule-catalog.ts` and true-positive and trap cases to `test/unit/benchmark/corpus.ts` (see `docs/BENCHMARK.md`).
 - Never fabricate evidence: `CommandEvidence` is created only from a real `RunResult`.
 - User-facing strings go through `vscode.l10n.t` (UI layer), `tr()` / `msg()` from `src/core/i18n.ts` (engine layers, which cannot import `vscode`) or `package.nls.json` (manifest). Write message templates as single-quoted literals with `{0}` placeholders, and check the Spanish bundle with `node scripts/l10n-keys.mjs l10n/bundle.l10n.es.json`.
 

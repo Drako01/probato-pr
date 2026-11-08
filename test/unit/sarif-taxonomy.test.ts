@@ -3,6 +3,7 @@ import type { ReviewFinding, Severity } from '../../src/core/model';
 import { ReviewEngine } from '../../src/core/review-engine';
 import { classifyRule, RULE_CATEGORIES } from '../../src/core/rule-taxonomy';
 import { renderSarif } from '../../src/reports/sarif';
+import { EXPECTED_SECURITY_RULES, SHIPPED_RULES } from './benchmark/rule-catalog';
 import { changeSetOf, workspaceOf } from './helpers';
 
 const base = await new ReviewEngine([], 'test').review(changeSetOf([]), workspaceOf({}));
@@ -11,17 +12,7 @@ const finding = (ruleId: string, severity: Severity): ReviewFinding => ({ id: `$
 interface SarifRule { id: string; defaultConfiguration: { level: string }; properties: Record<string, unknown> & { tags: string[] } }
 const rulesOf = (findings: ReviewFinding[]): SarifRule[] => (JSON.parse(renderSarif({ ...base, findings })) as { runs: { tool: { driver: { rules: SarifRule[] } } }[] }).runs[0]?.tool.driver.rules ?? [];
 
-// Every rule ID emitted by the shipped analyzers, the verification linker, SARIF import and AI review.
-const SHIPPED_RULES = [
-  'ai/review', 'contracts/export-removed', 'contracts/arity-increased', 'contracts/module-removed', 'contracts/enum-member-removed', 'contracts/property-removed',
-  'errors/empty-catch', 'errors/empty-promise-catch', 'errors/type-check-suppressed', 'errors/lint-suppressed',
-  'cross-stack/api-property-removed', 'cross-stack/sql-column-reference', 'cross-stack/tenant-predicate-removed',
-  'secrets/sensitive-file-added', 'secrets/aws-access-key', 'dependencies/install-script', 'dependencies/major-upgrade', 'dependencies/removed-but-imported', 'dependencies/go-local-replace',
-  'config/ts-strictness-reduced', 'config/workflow-pull-request-target', 'config/workflow-write-all',
-  'tests/file-deleted', 'tests/cases-removed', 'tests/focused', 'tests/skipped', 'tests/assertions-removed', 'tests/assertions-reduced',
-  'verification/test', 'external/eslint/no-unused-vars',
-];
-const SECURITY = new Set(['secrets/sensitive-file-added', 'secrets/aws-access-key', 'dependencies/install-script', 'config/workflow-pull-request-target', 'config/workflow-write-all', 'cross-stack/tenant-predicate-removed']);
+const SECURITY = EXPECTED_SECURITY_RULES;
 
 describe('SARIF rule taxonomy', () => {
   it('classifies every shipped rule into a known category, with security reserved for security rules', () => {

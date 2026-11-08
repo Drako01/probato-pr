@@ -18,8 +18,11 @@ States: `TODO` · `IN_PROGRESS` · `PASS` · `WARN` · `BLOCKED`. Evidence refer
 
 | ID | Task | State | Evidence |
 |---|---|---|---|
-| II.1 | Internal corpus (26 cases / 11 traps) kept as regression test, not external validation | PASS | E2 (`benchmark.test.ts`) |
-| II.2 | External benchmark ≥600 cases, ≥20 repos, holdout (P1-04) | BLOCKED | Needs licensed real-world material and human ground-truth labeling; no synthetic filler will be used |
+| II.1 | Authored corpus kept as regression test, not external validation; expanded from 26 cases / 11 traps to 71 / 36 with provenance, language, tags and trap `guards` | PASS | E12 (`benchmark.test.ts`, corpus `probato-authored@2`) |
+| II.2 | External benchmark ≥600 cases, ≥20 repos, holdout (P1-04) | BLOCKED | Needs licensed real-world material and human ground-truth labeling; no synthetic filler will be used. The harness (II.3) accepts external cases with repository/commit/license/path provenance |
+| II.3 | Versioned benchmark harness: hash-derived dev/validation/holdout split, sealed holdout, per-rule/per-language/per-split precision, recall, F1, Wilson 95% CI, FP per case, inconclusive rate, JSON report | PASS | E12 (`benchmark-harness.test.ts`, `benchmark.test.ts`); methodology in `docs/BENCHMARK.md` |
+| II.4 | Every analyzer rule has a positive and a negative case, or is an explicit gap | WARN | E12: 32 of 37 analyzer rules covered both ways; 5 secret formats (`anthropic-key`, `openai-key`, `stripe-live-key`, `google-api-key`, `jwt`) listed in `KNOWN_GAPS`. Rule catalog checked against analyzer sources |
+| II.5 | AI evaluated as an isolated hypothesis; injection cannot raise certainty | PASS | Existing tests (`ai-github-reports.test.ts`: never `confirmed`, injection scrubbed; `quality-gate.test.ts`: heuristic/AI never block a differential gate alone). AI is excluded from deterministic metrics by design; no AI precision is claimed (needs a live provider) |
 
 ## Phase III — architecture, coverage, deep tests
 
