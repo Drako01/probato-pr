@@ -170,7 +170,7 @@ const writes = (requests: readonly { url: string; init: RequestInit }[]) => requ
     await expect(delivery.publishReview(ref, 7, sha, { comments: [comment, second], skipped: [] })).rejects.toThrow();
     expect(await delivery.publishReview(ref, 7, sha, { comments: [comment, second], skipped: [] })).toEqual({ created: 1, updated: 0 });
     expect(writes(requests).map((r) => `${r.init.method ?? 'GET'} ${r.url.replace(/^.*\/repos\/owner\/repo/, '')}`)).toEqual(['PATCH /pulls/comments/123', 'POST /pulls/7/reviews', 'POST /pulls/7/reviews']);
-    expect(JSON.parse(stringBody(writes(requests)[2])).comments).toHaveLength(1);
+    expect((JSON.parse(stringBody(writes(requests)[2])) as { comments: unknown[] }).comments).toHaveLength(1);
   });
   it('refuses stale review publication and self approval before a write', async () => {
     const { delivery, requests } = fixture((url) => url.endsWith('/user') ? Response.json({ id: 1, login: 'author' }) : undefined);
