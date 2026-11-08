@@ -35,11 +35,29 @@ SemVer. `0.x` while the public API (settings, commands, report schema) may still
 Step-by-step guide, accounts and first-time setup: [`PUBLICACION.md`](PUBLICACION.md) (Spanish).
 
 - **First release:** upload the verified `probato-pr.vsix` on the publisher management page (no token needed).
-- **Later releases (automatic):** `.github/workflows/publish.yml`. A pull request merged to `main` that changes the
-  version in `package.json` runs the quality gate, packages the VSIX once, publishes that same file to the Marketplace
-  (Trusted Publishing, `vsce publish --oidc`, no stored token) and to Open VSX, and creates the GitHub release with
-  the VSIX and its SHA-256. A merge that keeps the version only verifies. *Actions → publish → Run workflow* publishes
-  the version on `main` by hand; publishing is idempotent (`--skip-duplicate`).
+- **Validation before merge:** `.github/workflows/ci.yml` runs on every pull request (and `merge_group`, should a
+  merge queue be enabled). Its `Verify (ubuntu-latest|windows-latest|macos-latest)` jobs are the required checks of
+  the `main` ruleset; the Extension Host integration test and `pnpm audit --prod` run on Linux. `Mutation E2E` runs a
+  real Stryker fixture only when `src/mutation/**`, `src/verification/**`, `src/reports/**`, the fixture or the
+  dependencies change; otherwise it reports *skipped*.
+- **Later releases (automatic):** `.github/workflows/publish.yml`, on `push` to `main` only. A push that keeps the
+  version does nothing beyond the plan job (no repeated QA). A push that changes the version in `package.json`
+  (compared with the previous tip of `main`, so squash merges and multi-commit pushes are both covered) runs
+  `pnpm audit --prod`, packages the VSIX once, checks that its manifest version matches, records its SHA-256, creates
+  a signed build provenance attestation (`actions/attest-build-provenance`, verifiable with
+  `gh attestation verify probato-pr.vsix --repo Drako01/probato-pr`) and a CycloneDX SBOM of the runtime
+  dependencies (`pnpm run sbom`), and publishes that same file to the Marketplace (Trusted Publishing,
+  `vsce publish --oidc`, no stored token) and to Open VSX, and creates the GitHub release with the VSIX, its SHA-256
+  and the SBOM. Every publishing job re-checks the SHA-256 before using the file.
+  *Actions → publish → Run workflow* publishes the version on `main` by hand; publishing is idempotent
+  (`--skip-duplicate`) and runs are never cancelled half-way.
+- **When the release gate runs after merge:** the `main` ruleset has `strict_required_status_checks_policy=true`
+  (branches must be up to date), so a squash merge of a green PR yields the tree its checks validated. The plan job
+  proves it for each publishing push: it finds the merged PR of the pushed commit, compares its head tree with the
+  pushed tree and requires the three `Verify (…)` checks to have succeeded on that head. Only when any of that cannot
+  be shown (a push that did not come from a PR, an admin bypass, a different tree) does the release gate
+  (`verify:delivery` + Extension Host on Linux) run on the merged tree. The checksum proves integrity between jobs;
+  the attestation proves which workflow run and commit built the file.
 - **Open VSX never blocks the release.** The Marketplace is the primary channel and the GitHub release depends on it
   only. `scripts/open-vsx-publish.mjs` retries transient failures, waits for the version to become active and, if the
   registry holds it back (unverified namespace, publish-time scan), reports a warning instead of failing. The
@@ -61,6 +79,12 @@ Run the opt-in real Stryker fixture described in [Mutation Testing](MUTATION_TES
 or comparability changes. Record base/head commits, tool and dependency versions, mutant population and exported
 reports. Ordinary checks must continue without Stryker installed. A fixture skipped for a missing tool is not E2E
 acceptance. Preserve all existing README screenshots when updating release documentation.
+
+## README screenshots
+
+Regenerate them for every release with UI changes: `pnpm run screenshots`. It launches VS Code with the extension
+on the demonstration repository, runs a review and writes `media/screenshots/{home,review-summary,settings}-{dark,light}.png`
+through the DevTools protocol. Review the images before committing them.
 
 ## Rollback / withdrawal
 

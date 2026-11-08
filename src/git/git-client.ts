@@ -219,6 +219,10 @@ export class GitClient {
 
   async removeWorktree(root: string, target: string): Promise<void> {
     await this.exec(root, ['worktree', 'remove', '--force', target], { allowExitCodes: [0, 128] });
+    await this.pruneWorktrees(root);
+  }
+
+  async pruneWorktrees(root: string): Promise<void> {
     await this.exec(root, ['worktree', 'prune'], { allowExitCodes: [0, 128] });
   }
 }

@@ -3,6 +3,7 @@ dist/
 out/
 .vscode-test/
 *.vsix
+*.cdx.json
 coverage/
 .claude/
 

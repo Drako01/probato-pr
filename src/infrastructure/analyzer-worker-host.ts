@@ -1,4 +1,5 @@
 import { Worker } from 'node:worker_threads';
+import { asError } from '../core/errors';
 import { tr } from '../core/i18n';
 import type { WorkspaceIndex } from '../core/analyzer';
 import type { ChangeSet, ReviewResult } from '../core/model';
@@ -33,6 +34,8 @@ interface ActiveReview {
 }
 const MAX_RPC_BYTES = 128 * 1024 * 1024;
 const MAX_FILES = 100_000;
+/** Heap ceiling of the analysis worker: a hostile or huge change set exhausts the worker, not the extension host. */
+const DEFAULT_MEMORY_LIMIT_MB = 2048;
 
 /** Analysis CPU runs outside the extension host. Source reads remain in the exact caller-provided snapshot. */
 export class AnalyzerWorkerHost {
@@ -41,7 +44,7 @@ export class AnalyzerWorkerHost {
   private sequence = 0;
   private disposed = false;
 
-  constructor(private readonly options: { readonly workerPath: string; readonly version: string; readonly locale?: string; readonly timeoutMs?: number }) {}
+  constructor(private readonly options: { readonly workerPath: string; readonly version: string; readonly locale?: string; readonly timeoutMs?: number; readonly memoryLimitMb?: number }) {}
 
   review(changes: ChangeSet, workspace: WorkspaceIndex, options: { signal?: AbortSignal; progress?: ProgressReporter } = {}): Promise<ReviewResult> {
     if (this.disposed || options.signal?.aborted) return Promise.reject(new CancelledError());
@@ -59,17 +62,26 @@ export class AnalyzerWorkerHost {
         const serialized: SerializedChangeSet = { scope: changes.scope, repository: changes.repository, files: changes.files, skipped: changes.skipped };
         const message: AnalyzerHostMessage = { type: 'review', reviewId: id, changes: serialized };
         worker.postMessage(message);
-      } catch (error) { this.stop(error instanceof Error ? error : new Error(String(error))); }
+      } catch (error) { this.stop(asError(error)); }
     });
   }
 
   private createWorker(): Worker {
-    const worker = new Worker(this.options.workerPath, { execArgv: [], workerData: { version: this.options.version, locale: this.options.locale ?? 'en' } });
+    const memoryLimitMb = this.options.memoryLimitMb ?? DEFAULT_MEMORY_LIMIT_MB;
+    const worker = new Worker(this.options.workerPath, {
+      execArgv: [], resourceLimits: { maxOldGenerationSizeMb: memoryLimitMb },
+      workerData: { version: this.options.version, locale: this.options.locale ?? 'en' },
+    });
     this.worker = worker;
     worker.on('message', (message: AnalyzerWorkerMessage) => {
-      void this.receive(worker, message).catch((error: unknown) => { if (this.worker === worker) this.stop(error instanceof Error ? error : new Error(String(error))); });
+      void this.receive(worker, message).catch((error: unknown) => { if (this.worker === worker) this.stop(asError(error)); });
     });
-    worker.on('error', (error) => { if (this.worker === worker) this.stop(error); });
+    worker.on('error', (error: Error & { code?: string }) => {
+      if (this.worker !== worker) return;
+      this.stop(error.code === 'ERR_WORKER_OUT_OF_MEMORY'
+        ? new Error(tr('The analysis worker exceeded its memory limit ({0} MB) and was stopped. No successful result was produced.', memoryLimitMb), { cause: error })
+        : error);
+    });
     worker.on('exit', (code) => {
       if (this.worker !== worker) return;
       this.worker = undefined;

@@ -20,12 +20,21 @@ export function isWithin(root: string, candidate: string): boolean {
 }
 
 /**
+ * True for any path carrying a root on either platform: POSIX absolute, Windows absolute, UNC, rooted (`\x`) and
+ * drive-relative (`C:x`). A drive-relative path resolves against that drive's current directory, not the root, so
+ * it is never a valid repository-relative path, whatever the host OS.
+ */
+function hasRoot(p: string): boolean {
+  return path.isAbsolute(p) || path.win32.parse(p).root !== '';
+}
+
+/**
  * Resolves a repository-relative path and guarantees the result stays inside root, following
- * symlinks for paths that exist. Rejects absolute paths and traversal from untrusted input
- * (diffs, PR file lists, AI responses).
+ * symlinks for paths that exist. Rejects rooted or drive-prefixed paths and traversal from untrusted
+ * input (diffs, PR file lists, AI responses).
  */
 export async function resolveInside(root: string, relative: string): Promise<string> {
-  if (relative.includes('\0') || path.isAbsolute(relative) || path.win32.isAbsolute(relative)) {
+  if (relative.includes('\0') || hasRoot(relative)) {
     throw new PathOutsideWorkspaceError(relative, root);
   }
   const realRoot = await realpath(root);
@@ -33,17 +42,30 @@ export async function resolveInside(root: string, relative: string): Promise<str
   if (!isWithin(realRoot, candidate)) {
     throw new PathOutsideWorkspaceError(relative, root);
   }
-  let resolved: string;
-  try {
-    resolved = await realpath(candidate);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return candidate; // does not exist yet: lexical check above is the guarantee
-    }
-    throw error;
-  }
+  const resolved = await realpathOfNearestExisting(candidate);
   if (!isWithin(realRoot, resolved)) {
     throw new PathOutsideWorkspaceError(relative, root);
   }
   return resolved;
+}
+
+/**
+ * Real path of `candidate`; when it does not exist yet, the real path of its nearest existing ancestor joined with
+ * the missing tail. A lexical answer alone would let `link/new.txt` escape through a symlinked parent directory.
+ */
+async function realpathOfNearestExisting(candidate: string): Promise<string> {
+  const missing: string[] = [];
+  let current = candidate;
+  for (;;) {
+    try {
+      return path.join(await realpath(current), ...missing.reverse());
+    } catch (error) {
+      const parent = path.dirname(current);
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || parent === current) {
+        throw error;
+      }
+      missing.push(path.basename(current));
+      current = parent;
+    }
+  }
 }

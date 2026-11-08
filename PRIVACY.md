@@ -30,6 +30,8 @@ Nothing, unless you use one of these optional features:
 | AI review — VS Code model | The provider of the chat model selected in VS Code (e.g. GitHub Copilot) | The diffs of the files listed in the confirmation dialog; the full current content of the changed files listed as "for context" (unless `probatoPR.ai.includeFileContent` is off); titles and locations of findings Probato PR already reported. Secrets redacted. | Only after you confirm the dialog, every time |
 | AI review — Anthropic | Anthropic API | Same as above | Only after you confirm the dialog, every time |
 | AI review — OpenAI or OpenAI-compatible API | The server at `probatoPR.ai.openaiCompatible.baseUrl` (OpenAI, OpenRouter, Azure OpenAI, or a local server such as Ollama) | Same as above | Only after you confirm the dialog, every time |
+| GitHub delivery (create/update PR, publish findings, reviews, replies, thread resolution, merge, merge queue) | GitHub API (`api.github.com`) | The title, description, comments, replies or decisions shown in the preview/confirmation; see *GitHub delivery* below | Only after you confirm each action |
+| Local Git push and synchronization | Your configured Git remote | Commits and refs of the branch you push | Only when you run the local Git action |
 | Connect Your AI | The chosen provider | A request for its model list, authenticated with your key. No code is sent. | When you run the setup |
 
 Sensitive files (`.env*`, private keys, certificates, credential files, Terraform state) are never sent to AI providers,

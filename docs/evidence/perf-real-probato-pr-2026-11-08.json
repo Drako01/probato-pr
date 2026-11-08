@@ -1,0 +1,670 @@
+{
+  "schema": "probato-perf-real@1",
+  "measuredAt": "2026-11-08T19:33:36.715Z",
+  "environment": {
+    "platform": "win32",
+    "osRelease": "10.0.26320",
+    "cpu": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+    "logicalCores": 16,
+    "totalMemoryBytes": 34275217408,
+    "node": "v24.22.1",
+    "git": "git version 2.56.0.windows.3"
+  },
+  "repository": {
+    "name": "probato-pr",
+    "head": "db678e023a9fcc249b75e08b6dbdae973e815623",
+    "trackedFiles": 238,
+    "commitsMeasured": 30
+  },
+  "method": "CLI --scope commit per commit, JSON output, two sequential executions; wall time includes process start; peak RSS is the CLI process (main + worker threads), excluding git children",
+  "thresholds": {
+    "files": 10,
+    "lines": 300
+  },
+  "overall": {
+    "runs": 60,
+    "failures": 0,
+    "p50Ms": 2666.8,
+    "p95Ms": 14584.8,
+    "maxMs": 25912,
+    "peakRssBytes": 204087296
+  },
+  "byExecution": {
+    "first": {
+      "runs": 30,
+      "failures": 0,
+      "p50Ms": 2664.7,
+      "p95Ms": 14768.7,
+      "maxMs": 25912,
+      "peakRssBytes": 204087296
+    },
+    "second": {
+      "runs": 30,
+      "failures": 0,
+      "p50Ms": 2680.6,
+      "p95Ms": 14584.8,
+      "maxMs": 25675.2,
+      "peakRssBytes": 202985472
+    }
+  },
+  "byProfile": {
+    "small": {
+      "runs": 32,
+      "failures": 0,
+      "p50Ms": 2060.8,
+      "p95Ms": 2948.7,
+      "maxMs": 2957.2,
+      "peakRssBytes": 120139776
+    },
+    "large": {
+      "runs": 28,
+      "failures": 0,
+      "p50Ms": 4863.7,
+      "p95Ms": 25675.2,
+      "maxMs": 25912,
+      "peakRssBytes": 204087296
+    }
+  },
+  "samples": [
+    {
+      "sha": "db678e023a9fcc249b75e08b6dbdae973e815623",
+      "execution": "first",
+      "profile": "small",
+      "files": 8,
+      "lines": 227,
+      "wallMs": 2664.7,
+      "peakRssBytes": 112295936,
+      "exitCode": 0
+    },
+    {
+      "sha": "db678e023a9fcc249b75e08b6dbdae973e815623",
+      "execution": "second",
+      "profile": "small",
+      "files": 8,
+      "lines": 227,
+      "wallMs": 2687.4,
+      "peakRssBytes": 112676864,
+      "exitCode": 0
+    },
+    {
+      "sha": "9f2e0fa2f9915aed04d404fac85bca1dd5e7beea",
+      "execution": "first",
+      "profile": "small",
+      "files": 7,
+      "lines": 113,
+      "wallMs": 2236,
+      "peakRssBytes": 112230400,
+      "exitCode": 0
+    },
+    {
+      "sha": "9f2e0fa2f9915aed04d404fac85bca1dd5e7beea",
+      "execution": "second",
+      "profile": "small",
+      "files": 7,
+      "lines": 113,
+      "wallMs": 2258.9,
+      "peakRssBytes": 112214016,
+      "exitCode": 0
+    },
+    {
+      "sha": "73720b2ebde09f8218156671d80b42923c228dc1",
+      "execution": "first",
+      "profile": "small",
+      "files": 1,
+      "lines": 2,
+      "wallMs": 2152.4,
+      "peakRssBytes": 116379648,
+      "exitCode": 0
+    },
+    {
+      "sha": "73720b2ebde09f8218156671d80b42923c228dc1",
+      "execution": "second",
+      "profile": "small",
+      "files": 1,
+      "lines": 2,
+      "wallMs": 2184.4,
+      "peakRssBytes": 116727808,
+      "exitCode": 0
+    },
+    {
+      "sha": "9de43c34821a29314b4cf030887849794373b034",
+      "execution": "first",
+      "profile": "small",
+      "files": 2,
+      "lines": 4,
+      "wallMs": 1976.1,
+      "peakRssBytes": 112308224,
+      "exitCode": 0
+    },
+    {
+      "sha": "9de43c34821a29314b4cf030887849794373b034",
+      "execution": "second",
+      "profile": "small",
+      "files": 2,
+      "lines": 4,
+      "wallMs": 2004.1,
+      "peakRssBytes": 112443392,
+      "exitCode": 0
+    },
+    {
+      "sha": "6931c8b3df85362feddf7deff5a7715186ee8331",
+      "execution": "first",
+      "profile": "large",
+      "files": 24,
+      "lines": 826,
+      "wallMs": 5768.2,
+      "peakRssBytes": 138768384,
+      "exitCode": 0
+    },
+    {
+      "sha": "6931c8b3df85362feddf7deff5a7715186ee8331",
+      "execution": "second",
+      "profile": "large",
+      "files": 24,
+      "lines": 826,
+      "wallMs": 5753.7,
+      "peakRssBytes": 130195456,
+      "exitCode": 0
+    },
+    {
+      "sha": "0f8fd2657162824d2fe103653de5aa33fe2f863d",
+      "execution": "first",
+      "profile": "large",
+      "files": 13,
+      "lines": 902,
+      "wallMs": 2958.2,
+      "peakRssBytes": 115355648,
+      "exitCode": 0
+    },
+    {
+      "sha": "0f8fd2657162824d2fe103653de5aa33fe2f863d",
+      "execution": "second",
+      "profile": "large",
+      "files": 13,
+      "lines": 902,
+      "wallMs": 3006.7,
+      "peakRssBytes": 114323456,
+      "exitCode": 0
+    },
+    {
+      "sha": "5e93076da29d1ed0a9aadf94e612d96835daeee3",
+      "execution": "first",
+      "profile": "large",
+      "files": 14,
+      "lines": 3660,
+      "wallMs": 3303.8,
+      "peakRssBytes": 113659904,
+      "exitCode": 0
+    },
+    {
+      "sha": "5e93076da29d1ed0a9aadf94e612d96835daeee3",
+      "execution": "second",
+      "profile": "large",
+      "files": 14,
+      "lines": 3660,
+      "wallMs": 3259.5,
+      "peakRssBytes": 116969472,
+      "exitCode": 0
+    },
+    {
+      "sha": "f9f9c6b11800391d4a226c2d1f61873e15192866",
+      "execution": "first",
+      "profile": "small",
+      "files": 4,
+      "lines": 46,
+      "wallMs": 1664.3,
+      "peakRssBytes": 119234560,
+      "exitCode": 0
+    },
+    {
+      "sha": "f9f9c6b11800391d4a226c2d1f61873e15192866",
+      "execution": "second",
+      "profile": "small",
+      "files": 4,
+      "lines": 46,
+      "wallMs": 1662.6,
+      "peakRssBytes": 118669312,
+      "exitCode": 0
+    },
+    {
+      "sha": "44d9e413c6ea0f3a3ad978b6e3e9b9ed8ec5875c",
+      "execution": "first",
+      "profile": "small",
+      "files": 3,
+      "lines": 137,
+      "wallMs": 2009,
+      "peakRssBytes": 111271936,
+      "exitCode": 0
+    },
+    {
+      "sha": "44d9e413c6ea0f3a3ad978b6e3e9b9ed8ec5875c",
+      "execution": "second",
+      "profile": "small",
+      "files": 3,
+      "lines": 137,
+      "wallMs": 1991.1,
+      "peakRssBytes": 111554560,
+      "exitCode": 0
+    },
+    {
+      "sha": "f4090b0e0ca73fca83c6f66b90a18568918cff5c",
+      "execution": "first",
+      "profile": "small",
+      "files": 7,
+      "lines": 176,
+      "wallMs": 2628.8,
+      "peakRssBytes": 111824896,
+      "exitCode": 0
+    },
+    {
+      "sha": "f4090b0e0ca73fca83c6f66b90a18568918cff5c",
+      "execution": "second",
+      "profile": "small",
+      "files": 7,
+      "lines": 176,
+      "wallMs": 2613.6,
+      "peakRssBytes": 110874624,
+      "exitCode": 0
+    },
+    {
+      "sha": "bad14f088a990499d7ad6b5706758662d31892ed",
+      "execution": "first",
+      "profile": "small",
+      "files": 6,
+      "lines": 239,
+      "wallMs": 2056.8,
+      "peakRssBytes": 110469120,
+      "exitCode": 0
+    },
+    {
+      "sha": "bad14f088a990499d7ad6b5706758662d31892ed",
+      "execution": "second",
+      "profile": "small",
+      "files": 6,
+      "lines": 239,
+      "wallMs": 2060.8,
+      "peakRssBytes": 111230976,
+      "exitCode": 0
+    },
+    {
+      "sha": "6ea5a84744bcdb9abf3a369c6791de0c78558832",
+      "execution": "first",
+      "profile": "small",
+      "files": 10,
+      "lines": 218,
+      "wallMs": 2173.4,
+      "peakRssBytes": 110993408,
+      "exitCode": 0
+    },
+    {
+      "sha": "6ea5a84744bcdb9abf3a369c6791de0c78558832",
+      "execution": "second",
+      "profile": "small",
+      "files": 10,
+      "lines": 218,
+      "wallMs": 2184.8,
+      "peakRssBytes": 110227456,
+      "exitCode": 0
+    },
+    {
+      "sha": "c830af6ffc1a3044ef8b761a4c25e35d14df43ac",
+      "execution": "first",
+      "profile": "large",
+      "files": 7,
+      "lines": 352,
+      "wallMs": 3063.5,
+      "peakRssBytes": 111685632,
+      "exitCode": 0
+    },
+    {
+      "sha": "c830af6ffc1a3044ef8b761a4c25e35d14df43ac",
+      "execution": "second",
+      "profile": "large",
+      "files": 7,
+      "lines": 352,
+      "wallMs": 3090,
+      "peakRssBytes": 113037312,
+      "exitCode": 0
+    },
+    {
+      "sha": "9466260992e92604934fc4bc1679ef7a2a361aae",
+      "execution": "first",
+      "profile": "small",
+      "files": 9,
+      "lines": 184,
+      "wallMs": 2666.8,
+      "peakRssBytes": 113491968,
+      "exitCode": 0
+    },
+    {
+      "sha": "9466260992e92604934fc4bc1679ef7a2a361aae",
+      "execution": "second",
+      "profile": "small",
+      "files": 9,
+      "lines": 184,
+      "wallMs": 2680.6,
+      "peakRssBytes": 112939008,
+      "exitCode": 0
+    },
+    {
+      "sha": "1fe4729ec8b94531b8c0bdd485d6739145febb6c",
+      "execution": "first",
+      "profile": "large",
+      "files": 85,
+      "lines": 4799,
+      "wallMs": 14768.7,
+      "peakRssBytes": 169328640,
+      "exitCode": 0
+    },
+    {
+      "sha": "1fe4729ec8b94531b8c0bdd485d6739145febb6c",
+      "execution": "second",
+      "profile": "large",
+      "files": 85,
+      "lines": 4799,
+      "wallMs": 14584.8,
+      "peakRssBytes": 169021440,
+      "exitCode": 0
+    },
+    {
+      "sha": "e088457917829c9d1be932996e990668151948bb",
+      "execution": "first",
+      "profile": "large",
+      "files": 20,
+      "lines": 427,
+      "wallMs": 5415.8,
+      "peakRssBytes": 135655424,
+      "exitCode": 0
+    },
+    {
+      "sha": "e088457917829c9d1be932996e990668151948bb",
+      "execution": "second",
+      "profile": "large",
+      "files": 20,
+      "lines": 427,
+      "wallMs": 5381.4,
+      "peakRssBytes": 144609280,
+      "exitCode": 0
+    },
+    {
+      "sha": "84687ad28cfc2e2461f8c7ebe449744d23680686",
+      "execution": "first",
+      "profile": "large",
+      "files": 21,
+      "lines": 700,
+      "wallMs": 3831.3,
+      "peakRssBytes": 120741888,
+      "exitCode": 0
+    },
+    {
+      "sha": "84687ad28cfc2e2461f8c7ebe449744d23680686",
+      "execution": "second",
+      "profile": "large",
+      "files": 21,
+      "lines": 700,
+      "wallMs": 3841.6,
+      "peakRssBytes": 120303616,
+      "exitCode": 0
+    },
+    {
+      "sha": "cfe05895c54dafa302e5e34e1052896c7f5c2912",
+      "execution": "first",
+      "profile": "large",
+      "files": 72,
+      "lines": 4005,
+      "wallMs": 12044.7,
+      "peakRssBytes": 136663040,
+      "exitCode": 0
+    },
+    {
+      "sha": "cfe05895c54dafa302e5e34e1052896c7f5c2912",
+      "execution": "second",
+      "profile": "large",
+      "files": 72,
+      "lines": 4005,
+      "wallMs": 12165.9,
+      "peakRssBytes": 138317824,
+      "exitCode": 0
+    },
+    {
+      "sha": "2d79dc57eb901933ef5f8462425002a02aa57dd2",
+      "execution": "first",
+      "profile": "small",
+      "files": 7,
+      "lines": 198,
+      "wallMs": 2948.7,
+      "peakRssBytes": 114233344,
+      "exitCode": 0
+    },
+    {
+      "sha": "2d79dc57eb901933ef5f8462425002a02aa57dd2",
+      "execution": "second",
+      "profile": "small",
+      "files": 7,
+      "lines": 198,
+      "wallMs": 2957.2,
+      "peakRssBytes": 114307072,
+      "exitCode": 0
+    },
+    {
+      "sha": "968f04b841bf6b7bf7c962b3d69a4ac7c8cee739",
+      "execution": "first",
+      "profile": "large",
+      "files": 19,
+      "lines": 962,
+      "wallMs": 4836.2,
+      "peakRssBytes": 126156800,
+      "exitCode": 0
+    },
+    {
+      "sha": "968f04b841bf6b7bf7c962b3d69a4ac7c8cee739",
+      "execution": "second",
+      "profile": "large",
+      "files": 19,
+      "lines": 962,
+      "wallMs": 4863.7,
+      "peakRssBytes": 126124032,
+      "exitCode": 0
+    },
+    {
+      "sha": "3d685320875f2c3d38e9111ac47dcec0f72f89e3",
+      "execution": "first",
+      "profile": "large",
+      "files": 21,
+      "lines": 759,
+      "wallMs": 4875.6,
+      "peakRssBytes": 125743104,
+      "exitCode": 0
+    },
+    {
+      "sha": "3d685320875f2c3d38e9111ac47dcec0f72f89e3",
+      "execution": "second",
+      "profile": "large",
+      "files": 21,
+      "lines": 759,
+      "wallMs": 4904.1,
+      "peakRssBytes": 132775936,
+      "exitCode": 0
+    },
+    {
+      "sha": "d5bccd2c368039bdc4d539df360405f8f88f2a11",
+      "execution": "first",
+      "profile": "large",
+      "files": 7,
+      "lines": 389,
+      "wallMs": 2371.5,
+      "peakRssBytes": 110645248,
+      "exitCode": 0
+    },
+    {
+      "sha": "d5bccd2c368039bdc4d539df360405f8f88f2a11",
+      "execution": "second",
+      "profile": "large",
+      "files": 7,
+      "lines": 389,
+      "wallMs": 2382.8,
+      "peakRssBytes": 112103424,
+      "exitCode": 0
+    },
+    {
+      "sha": "086d922c8628094359a9713d07dbf15cb6342ded",
+      "execution": "first",
+      "profile": "large",
+      "files": 7,
+      "lines": 895,
+      "wallMs": 1799,
+      "peakRssBytes": 112254976,
+      "exitCode": 0
+    },
+    {
+      "sha": "086d922c8628094359a9713d07dbf15cb6342ded",
+      "execution": "second",
+      "profile": "large",
+      "files": 7,
+      "lines": 895,
+      "wallMs": 1786.9,
+      "peakRssBytes": 112947200,
+      "exitCode": 0
+    },
+    {
+      "sha": "34bb58ecbd98e169aa2f9b3caa321a5a2c435ae7",
+      "execution": "first",
+      "profile": "small",
+      "files": 10,
+      "lines": 52,
+      "wallMs": 2873.8,
+      "peakRssBytes": 113868800,
+      "exitCode": 0
+    },
+    {
+      "sha": "34bb58ecbd98e169aa2f9b3caa321a5a2c435ae7",
+      "execution": "second",
+      "profile": "small",
+      "files": 10,
+      "lines": 52,
+      "wallMs": 2775,
+      "peakRssBytes": 112766976,
+      "exitCode": 0
+    },
+    {
+      "sha": "fa603b66c9859b9d52692b07c107c39dfe2f3bba",
+      "execution": "first",
+      "profile": "large",
+      "files": 23,
+      "lines": 849,
+      "wallMs": 5926.9,
+      "peakRssBytes": 128139264,
+      "exitCode": 0
+    },
+    {
+      "sha": "fa603b66c9859b9d52692b07c107c39dfe2f3bba",
+      "execution": "second",
+      "profile": "large",
+      "files": 23,
+      "lines": 849,
+      "wallMs": 5906.5,
+      "peakRssBytes": 137584640,
+      "exitCode": 0
+    },
+    {
+      "sha": "c1a1232e7afff7326c5a05faa03af55cf4235db5",
+      "execution": "first",
+      "profile": "small",
+      "files": 1,
+      "lines": 8,
+      "wallMs": 1646.2,
+      "peakRssBytes": 119267328,
+      "exitCode": 0
+    },
+    {
+      "sha": "c1a1232e7afff7326c5a05faa03af55cf4235db5",
+      "execution": "second",
+      "profile": "small",
+      "files": 1,
+      "lines": 8,
+      "wallMs": 1673.6,
+      "peakRssBytes": 119369728,
+      "exitCode": 0
+    },
+    {
+      "sha": "b27b77de7c0b33fb801f9c4d7b704dbac9c852e5",
+      "execution": "first",
+      "profile": "small",
+      "files": 2,
+      "lines": 4,
+      "wallMs": 1666.4,
+      "peakRssBytes": 119816192,
+      "exitCode": 0
+    },
+    {
+      "sha": "b27b77de7c0b33fb801f9c4d7b704dbac9c852e5",
+      "execution": "second",
+      "profile": "small",
+      "files": 2,
+      "lines": 4,
+      "wallMs": 1657.5,
+      "peakRssBytes": 119910400,
+      "exitCode": 0
+    },
+    {
+      "sha": "cd6999965fdf841e33f7eb0deb77c30dd6a8eadc",
+      "execution": "first",
+      "profile": "small",
+      "files": 9,
+      "lines": 117,
+      "wallMs": 1674.9,
+      "peakRssBytes": 118259712,
+      "exitCode": 0
+    },
+    {
+      "sha": "cd6999965fdf841e33f7eb0deb77c30dd6a8eadc",
+      "execution": "second",
+      "profile": "small",
+      "files": 9,
+      "lines": 117,
+      "wallMs": 1667.4,
+      "peakRssBytes": 117456896,
+      "exitCode": 0
+    },
+    {
+      "sha": "40edc7c089b30b4fa0dbb498998b212ff7c43bda",
+      "execution": "first",
+      "profile": "small",
+      "files": 1,
+      "lines": 10,
+      "wallMs": 1660,
+      "peakRssBytes": 119386112,
+      "exitCode": 0
+    },
+    {
+      "sha": "40edc7c089b30b4fa0dbb498998b212ff7c43bda",
+      "execution": "second",
+      "profile": "small",
+      "files": 1,
+      "lines": 10,
+      "wallMs": 1661.2,
+      "peakRssBytes": 120139776,
+      "exitCode": 0
+    },
+    {
+      "sha": "0e69c4dfd94ca9d547d30d0b91b35c91dca9718a",
+      "execution": "first",
+      "profile": "large",
+      "files": 40,
+      "lines": 1779,
+      "wallMs": 25912,
+      "peakRssBytes": 204087296,
+      "exitCode": 0
+    },
+    {
+      "sha": "0e69c4dfd94ca9d547d30d0b91b35c91dca9718a",
+      "execution": "second",
+      "profile": "large",
+      "files": 40,
+      "lines": 1779,
+      "wallMs": 25675.2,
+      "peakRssBytes": 202985472,
+      "exitCode": 0
+    }
+  ]
+}

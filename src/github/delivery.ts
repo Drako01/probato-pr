@@ -22,11 +22,40 @@ const CheckSchema = z.object({ id: z.number(), name: z.string(), status: z.strin
 const StatusSchema = z.object({ context: z.string(), state: z.string(), target_url: z.string().nullable() });
 const ReviewCommentSchema = z.object({ id: z.number(), body: z.string(), user: UserSchema.nullable(), path: z.string(), line: z.number().nullable(), side: z.string().optional(), commit_id: z.string(), performed_via_github_app: z.object({ id: z.number() }).nullable().optional() });
 export type ReviewComment = z.infer<typeof ReviewCommentSchema>;
+const RuleSchema = z.object({ type: z.string(), parameters: z.unknown().optional() });
+const RequiredChecksRuleSchema = z.object({ required_status_checks: z.array(z.object({ context: z.string() })) });
+const BranchSchema = z.object({ protected: z.boolean(), protection: z.object({ required_status_checks: z.object({ contexts: z.array(z.string()) }).nullable().optional() }).optional() });
+
+/** What a CI result means for the merge: neutral and skipped do not block GitHub, but they are not proof of a pass. */
+export type CheckOutcome = 'passed' | 'neutral' | 'skipped' | 'pending' | 'failed';
+/** `unknown` when neither repository rules nor branch protection could be read with the signed-in account. */
+export type CheckRequirement = 'required' | 'informative' | 'unknown';
+export interface DeliveryCheck {
+  readonly name: string;
+  /** Raw GitHub conclusion or status, kept so new provider values are never misrepresented. */
+  readonly state: string;
+  readonly url: string | null;
+  readonly outcome: CheckOutcome;
+  readonly requirement: CheckRequirement;
+}
 export interface DeliveryStatus {
   readonly pull: DeliveryPull;
-  readonly checks: readonly { readonly name: string; readonly state: string; readonly url: string | null }[];
+  readonly checks: readonly DeliveryCheck[];
+  /** Check names the base branch requires; `undefined` when the requirements could not be read. */
+  readonly requiredChecks: readonly string[] | undefined;
   readonly blockers: readonly string[];
   readonly methods: readonly MergeMethod[];
+}
+
+const PENDING_STATES: ReadonlySet<string> = new Set(['pending', 'queued', 'in_progress', 'waiting', 'requested', 'expected']);
+/** Fails closed: any state GitHub may add later counts as not passed until it is mapped explicitly. */
+export function checkOutcome(state: string): CheckOutcome {
+  switch (state) {
+    case 'success': return 'passed';
+    case 'neutral': return 'neutral';
+    case 'skipped': return 'skipped';
+    default: return PENDING_STATES.has(state) ? 'pending' : 'failed';
+  }
 }
 export type MergeMethod = 'merge' | 'squash' | 'rebase';
 export interface InlineDraft { readonly key: string; readonly path: string; readonly line: number; readonly side: 'LEFT' | 'RIGHT'; readonly body: string }
@@ -128,29 +157,57 @@ export class GitHubDelivery {
   }
   async status(ref: GitHubRepoRef, number: number, signal?: AbortSignal): Promise<DeliveryStatus> {
     const pull = await this.pull(ref, number, signal);
-    const [repo, checkRuns, statuses] = await Promise.all([
+    const [repo, checkRuns, statuses, requiredChecks] = await Promise.all([
       this.repository(ref, signal),
       this.listCheckRuns(ref, pull.head.sha, signal),
       this.client.paginate(`${endpoint(ref)}/commits/${encodeURIComponent(pull.head.sha)}/statuses`, z.array(StatusSchema), signal),
+      this.requiredChecks(ref, pull.base.ref, signal),
     ]);
-    const checks = checkRuns.map((c) => ({ name: c.name, state: c.status === 'completed' ? c.conclusion ?? 'unknown' : c.status, url: c.details_url ?? c.html_url ?? null }));
+    const raw = checkRuns.map((c) => ({ name: c.name, state: c.status === 'completed' ? c.conclusion ?? 'unknown' : c.status, url: c.details_url ?? c.html_url ?? null }));
     const latest = new Map<string, z.infer<typeof StatusSchema>>();
     for (const s of statuses) if (!latest.has(s.context)) latest.set(s.context, s);
-    checks.push(...[...latest.values()].map((s) => ({ name: s.context, state: s.state, url: s.target_url })));
+    raw.push(...[...latest.values()].map((s) => ({ name: s.context, state: s.state, url: s.target_url })));
+    const requirement = (name: string): CheckRequirement => requiredChecks === undefined ? 'unknown' : requiredChecks.includes(name) ? 'required' : 'informative';
+    const checks: DeliveryCheck[] = raw.map((c) => ({ ...c, outcome: checkOutcome(c.state), requirement: requirement(c.name) }));
     const blockers: string[] = [];
+    for (const name of requiredChecks ?? []) if (!checks.some((c) => c.name === name)) blockers.push(tr('Required check {0} has not reported on this commit.', name));
     if (pull.state !== 'open' || pull.merged) blockers.push(tr('The pull request is not open.'));
     if (pull.draft) blockers.push(tr('The pull request is a draft.'));
     if (pull.mergeable !== true) blockers.push(pull.mergeable === false ? tr('Merge conflicts must be resolved.') : tr('GitHub is still calculating mergeability.'));
     if (!['clean', 'has_hooks'].includes(pull.mergeable_state)) blockers.push(tr('GitHub merge state: {0}. Branch requirements may be pending.', pull.mergeable_state));
     if (repo.permissions?.push !== true) blockers.push(tr('The signed-in account does not have merge permissions.'));
-    const unfinished = checks.filter((c) => !['success', 'neutral', 'skipped'].includes(c.state));
+    const unfinished = checks.filter((c) => c.outcome === 'pending' || c.outcome === 'failed');
     if (unfinished.length) blockers.push(tr('{0} check(s) have not passed.', unfinished.length));
     const methods: MergeMethod[] = [];
     if (repo.allow_squash_merge) methods.push('squash');
     if (repo.allow_merge_commit) methods.push('merge');
     if (repo.allow_rebase_merge) methods.push('rebase');
     if (!methods.length) blockers.push(tr('No merge method is enabled.'));
-    return { pull, checks, blockers, methods };
+    return { pull, checks, requiredChecks, blockers, methods };
+  }
+  /**
+   * Union of the checks required by repository rulesets and by classic branch protection on the base branch. Both are
+   * readable with read access. When either cannot be read the answer is `undefined` (shown as unknown), never "none".
+   */
+  async requiredChecks(ref: GitHubRepoRef, branch: string, signal?: AbortSignal): Promise<string[] | undefined> {
+    const path = branch.split('/').map(encodeURIComponent).join('/');
+    try {
+      const [rules, protection] = await Promise.all([
+        this.client.paginate(`${endpoint(ref)}/rules/branches/${path}`, z.array(RuleSchema), signal),
+        this.client.rest(`${endpoint(ref)}/branches/${path}`, BranchSchema, 'GET', undefined, signal),
+      ]);
+      const required = new Set(protection.protection?.required_status_checks?.contexts ?? []);
+      for (const rule of rules.filter((r) => r.type === 'required_status_checks')) {
+        const parameters = RequiredChecksRuleSchema.safeParse(rule.parameters);
+        if (!parameters.success) return undefined;
+        for (const check of parameters.data.required_status_checks) required.add(check.context);
+      }
+      return [...required].sort();
+    } catch (error) {
+      // Cancellation and programming errors propagate; only an unreadable GitHub policy degrades to "unknown".
+      if (error instanceof GitHubError && !signal?.aborted) return undefined;
+      throw error;
+    }
   }
   private async listCheckRuns(ref: GitHubRepoRef, sha: string, signal?: AbortSignal): Promise<z.infer<typeof CheckSchema>[]> {
     const values: z.infer<typeof CheckSchema>[] = [];

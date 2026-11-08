@@ -31,3 +31,16 @@ export function recommendChecks(plan: readonly PlannedCheck[], changedFiles: rea
   if (!fallback && !matched) return { fallback: true, recommendations: recommendations.map((item) => ({ ...item, reason: tr('No project impact could be established; keep the full check plan available.') })) };
   return { recommendations, fallback };
 }
+
+export interface RankedCheck { readonly check: PlannedCheck; readonly recommendation?: CheckRecommendation }
+const CONFIDENCE_RANK = { high: 0, medium: 1, low: 2 } as const;
+
+/** Whole plan ordered by recommendation confidence (stable within a confidence level); nothing is dropped. */
+export function rankChecks(plan: readonly PlannedCheck[], changedFiles: readonly string[], policy?: RepositoryPolicy): readonly RankedCheck[] {
+  const byId = new Map(recommendChecks(plan, changedFiles, policy).recommendations.map((item) => [item.checkId, item]));
+  const rank = (check: PlannedCheck): number => CONFIDENCE_RANK[byId.get(check.id)?.confidence ?? 'low'];
+  return [...plan].sort((a, b) => rank(a) - rank(b)).map((check) => {
+    const recommendation = byId.get(check.id);
+    return recommendation ? { check, recommendation } : { check };
+  });
+}

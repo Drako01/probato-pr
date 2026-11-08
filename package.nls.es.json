@@ -1,5 +1,5 @@
 {
-  "extension.displayName": "Probato PR — Revisión de código con pruebas",
+  "extension.displayName": "Probato PR",
   "extension.description": "Tu IA revisa el código. Nosotros verificamos qué podría romperse. Revisión local y con evidencia de cambios Git y pull requests: analizadores deterministas, checks del proyecto aprobados con atribución de regresiones base vs. cambio, reportes SARIF y Markdown. Sin cuentas ni API keys de IA.",
   "capabilities.untrustedWorkspaces": "Las revisiones ejecutan Git y, con tu aprobación, herramientas del proyecto. Ambas se desactivan en Modo Restringido.",
   "capabilities.virtualWorkspaces": "Requiere un repositorio Git local y ejecución local de procesos.",

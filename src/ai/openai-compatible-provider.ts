@@ -121,6 +121,9 @@ export class OpenAiCompatibleProvider implements AIReviewProvider {
       response = await this.fetchImpl(`${this.baseUrl.href}/${path}`, {
         method: init.method,
         signal: init.signal,
+        // A redirect would resend the repository data (307/308 keep the body) to a server the base URL policy never
+        // checked, possibly over plain http. Never follow one.
+        redirect: 'manual',
         headers: { 'content-type': 'application/json', ...(key ? { authorization: `Bearer ${key}` } : {}) },
         ...(init.body !== undefined ? { body: init.body } : {}),
       });
@@ -129,6 +132,9 @@ export class OpenAiCompatibleProvider implements AIReviewProvider {
         throw error;
       }
       throw new AiProviderError(tr('Could not reach {0}. Local review results are unaffected.', this.baseUrl.host), 'network');
+    }
+    if (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) {
+      throw new AiProviderError(tr('{0} answered with a redirect, which is never followed. Set the final API URL with "Probato PR: Connect Your AI".', this.baseUrl.host), 'other');
     }
     if (response.status === 401 || response.status === 403) {
       throw new AiProviderError(tr('{0} rejected the API key. Run "Probato PR: Connect Your AI" to set it again.', this.baseUrl.host), 'auth');
