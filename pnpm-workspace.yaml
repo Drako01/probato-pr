@@ -1,3 +1,8 @@
 allowBuilds:
   '@vscode/vsce-sign': true
   esbuild: true
+
+# GHSA-g3hv-75wg-m249 (minimatch globParts amplification, fixed in 11.0.1). Development-only transitive dependency of
+# eslint, typescript-eslint, @vscode/vsce and mocha; remove once they depend on a patched minimatch themselves.
+overrides:
+  'minimatch@>=7.0.0 <11.0.1': '^11.0.5'
