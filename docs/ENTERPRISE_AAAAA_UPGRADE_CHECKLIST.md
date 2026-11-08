@@ -37,9 +37,9 @@ States: `TODO` · `IN_PROGRESS` · `PASS` · `WARN` · `BLOCKED`. Evidence refer
 
 | ID | Task | State |
 |---|---|---|
-| IV.1 | Threat model update for write operations, AI providers, webviews | TODO |
-| IV.2 | Adversarial test suite (refs, `.cmd`, git filters, traversal/TOCTOU, SSRF, XSS, prompt injection) | TODO |
-| IV.3 | Optional isolated execution backend (container, no network) or explicit `unavailable` | TODO |
+| IV.1 | Threat model update for write operations, AI providers, webviews | PASS — `docs/THREAT_MODEL.md`: assets, attackers, 18 threats each mapped to control, test evidence and residual risk; linked from SECURITY.md |
+| IV.2 | Adversarial test suite (refs, `.cmd`, git filters, traversal/TOCTOU, SSRF, XSS, prompt injection) | PASS — E14 `adversarial.test.ts` (36 cases) plus the existing suites referenced per threat. **Two real defects found and fixed:** (1) the OpenAI-compatible provider followed HTTP redirects, so a 307/308 resent repository data to an unchecked host, even over plain http (now `redirect: 'manual'`, 3xx is an error; a real attacker server receives nothing); (2) `resolveInside` returned the lexical path for a non-existent file below a parent symlinked outside the repository (now resolves the nearest existing ancestor) |
+| IV.3 | Optional isolated execution backend (container, no network) or explicit `unavailable` | WARN — not implemented. The runner is documented as **not a sandbox** (SECURITY.md, THREAT_MODEL T13, accepted risk with explicit approval and script-body binding). A container backend needs Docker on the user's machine, which the product directive forbids as a requirement; building it as an optional mode is left for a later release |
 | IV.4 | SBOM, VSIX integrity/provenance, Dependabot failure triage of 2026-11-07 (P2-07) | IN_PROGRESS — open alert #3 triaged (E9): GHSA-g3hv-75wg-m249, `minimatch` 10.2.6, **development scope only** (eslint, vsce/ovsx, mocha), not bundled in the VSIX; fix is 11.0.1, a major version outside what those tools declare. Third-party policy: WARN, no forced override (risk of breaking lint/packaging for a DoS through developer-controlled glob patterns). VSIX checksum between jobs done (V.4); CycloneDX 1.7 SBOM of runtime dependencies (`pnpm run sbom`, 11 components, generated locally on 2026-11-08) attached to every GitHub release; signed build provenance attestation of the VSIX (V.4) |
 
 ## Phase V — CI/CD, release, performance

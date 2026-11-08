@@ -724,6 +724,7 @@
   "{0} returned an unexpected response.": "{0} devolvió una respuesta inesperada.",
   "Could not reach {0}. Local review results are unaffected.": "No se pudo conectar con {0}. Los resultados de la revisión local se conservan.",
   "{0} rejected the API key. Run \"Probato PR: Connect Your AI\" to set it again.": "{0} rechazó la API key. Ejecutá «Probato PR: Conectar tu IA» para configurarla de nuevo.",
+  "{0} answered with a redirect, which is never followed. Set the final API URL with \"Probato PR: Connect Your AI\".": "{0} respondió con una redirección, que nunca se sigue. Configurá la URL final de la API con «Probato PR: Conectar tu IA».",
   "{0} rate limit reached. Try again later.": "Se alcanzó el límite de solicitudes de {0}. Volvé a intentarlo más tarde.",
   "{0} returned HTTP {1}.": "{0} devolvió HTTP {1}.",
   "{0} returned a response that is not JSON.": "{0} devolvió una respuesta que no es JSON.",
