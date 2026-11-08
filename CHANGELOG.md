@@ -23,6 +23,8 @@ format of 0.6.0 are unchanged; everything below is additive.
 - Differential gate decisions are also recorded in the JSON (`qualityGate`) and SARIF (`runs[0].properties.qualityGate`)
   reports. Additive optional field; `absolute` reports are unchanged.
 - SARIF output is validated in the test suite against the official OASIS SARIF 2.1.0 schema.
+- `pnpm run screenshots` regenerates the README screenshots from the real extension (Home, Review Summary and
+  Settings, dark and light themes). `Probato PR: Open Probato Home` accepts an optional section for automation.
 
 ### Changed
 

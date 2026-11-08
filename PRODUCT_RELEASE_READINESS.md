@@ -28,7 +28,7 @@ counted as PASS.
 | Optional isolated execution backend | WARN | Not implemented; the runner is documented as not a sandbox (checklist IV.3) |
 | Required vs informative CI checks; neutral/skipped never shown as pass | PASS | `github-delivery.test.ts` (checklist VI.1) |
 | Per-module coverage ≥85% lines / ≥80% branches | WARN | `git` and `mutation` branch coverage below 80% |
-| Accessibility audit (WCAG 2.2 AA) on packaged VSIX, final screenshots | BLOCKED | Manual acceptance on the installed VSIX, owned by the maintainer; screenshots are the labeled 0.4.0 captures |
+| Accessibility audit (WCAG 2.2 AA) on packaged VSIX, final screenshots | BLOCKED | Manual acceptance on the installed VSIX, owned by the maintainer; screenshots are regenerated automatically from 1.0.0 (`pnpm run screenshots`) |
 | Performance P50/P95 and peak memory on real repositories | PASS (one machine) | `pnpm run perf:real`, 60 runs on Windows 11 (`docs/evidence/`, checklist V.5); other OSes not measured |
 
 ## Previous acceptance record — 0.5.0 (2026-11-03)

@@ -80,6 +80,12 @@ or comparability changes. Record base/head commits, tool and dependency versions
 reports. Ordinary checks must continue without Stryker installed. A fixture skipped for a missing tool is not E2E
 acceptance. Preserve all existing README screenshots when updating release documentation.
 
+## README screenshots
+
+Regenerate them for every release with UI changes: `pnpm run screenshots`. It launches VS Code with the extension
+on the demonstration repository, runs a review and writes `media/screenshots/{home,review-summary,settings}-{dark,light}.png`
+through the DevTools protocol. Review the images before committing them.
+
 ## Rollback / withdrawal
 
 - The Marketplace does not allow re-publishing an existing version. Fix forward with a patch version (`0.1.1`).

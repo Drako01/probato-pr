@@ -155,7 +155,7 @@ function localizedRisk(value: string): string {
   return riskLabel(value === 'critical' || value === 'high' || value === 'medium' || value === 'low' ? value : 'unknown');
 }
 
-function isSection(value: unknown): value is HomeSection {
+export function isSection(value: unknown): value is HomeSection {
   return typeof value === 'string' && ['home', 'review', 'verify', 'github', 'settings', 'history'].includes(value);
 }
 

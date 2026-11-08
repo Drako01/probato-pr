@@ -674,6 +674,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage && node scripts/coverage-modules.mjs",
     "test:integration": "pnpm run build && tsc -p test/integration && node out/integration/run.js",
+    "screenshots": "pnpm run build && tsc -p test/integration && node out/integration/screenshots.js",
     "perf": "vitest run --config vitest.perf.config.mts",
     "perf:real": "node scripts/perf-real.mjs",
     "audit": "pnpm audit --prod",

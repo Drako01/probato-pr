@@ -20,7 +20,7 @@ import { NodeProcessRunner } from './infrastructure/process-runner';
 import { FindingCodeActions, FindingDiagnostics } from './ui/diagnostics';
 import { EVIDENCE_SCHEME, REPORT_SCHEME, ReviewDocuments } from './ui/documents';
 import { createFindingsView } from './ui/findings-tree';
-import { HomePanel, HOME_VIEW_TYPE } from './ui/home-panel';
+import { HomePanel, HOME_VIEW_TYPE, isSection } from './ui/home-panel';
 import { parseHomeSetting } from './extension/home-settings';
 import { OverviewTreeProvider } from './ui/overview-tree';
 import { ReviewStatusBar } from './ui/status-bar';
@@ -186,7 +186,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
   };
   context.subscriptions.push(home, overviewView, overviewProvider,
     vscode.window.registerWebviewPanelSerializer(HOME_VIEW_TYPE, home),
-    vscode.commands.registerCommand('probatoPR.openHome', () => { home.show(); }),
+    // Optional section argument (allowlisted) lets automation open a specific Home section, e.g. 'settings'.
+    vscode.commands.registerCommand('probatoPR.openHome', (section?: unknown) => { home.show(isSection(section) ? section : 'home'); }),
     overviewView.onDidChangeVisibility(openHomeOnFirstVisit),
   );
   openHomeOnFirstVisit();

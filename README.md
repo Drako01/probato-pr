@@ -96,15 +96,22 @@ Each scope shows its own values; workspace preferences can override user prefere
 
 ![Probato PR Settings in a dark theme: review and verification preferences](media/screenshots/settings-dark.png)
 
+The Review Summary shows the risk, the findings by severity and the next step: verify, then deliver.
+
+![Probato PR Review Summary in a dark theme: critical risk, findings by severity and the review, verify and deliver steps](media/screenshots/review-summary-dark.png)
+
 The same control center adapts to light themes, including navigation, text, controls and the brand accent.
 
 ![Probato PR Home in a light theme](media/screenshots/home-light.png)
 
+![Probato PR Review Summary in a light theme](media/screenshots/review-summary-light.png)
+
 ![Probato PR Settings in a light theme](media/screenshots/settings-light.png)
 
-*Real screenshots captured with version 0.4.0 in English, using a local demonstration repository; later versions
-may differ in small details. No GitHub account is connected and no code is published during these captures.
-Probato PR also includes Spanish translations.*
+*Real screenshots of version 1.0.0 in English, generated automatically with `pnpm run screenshots`: it opens
+VS Code with the extension on the demonstration repository from `scripts/create-demo-repo.mjs`, runs a review and
+captures each screen. No GitHub account is connected and no code is published. Probato PR also includes Spanish
+translations.*
 
 ## Quick start
 
