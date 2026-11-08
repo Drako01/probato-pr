@@ -35,6 +35,13 @@ shows that documented behavior does not regress; it says nothing about precision
   relabeling a case to make an analyzer pass is not an acceptable reason.
 - For the authored corpus the holdout is still not blind (same authors). It becomes meaningful for external data.
 
+Seal history:
+
+| Version | Reason |
+|---|---|
+| 2 | Expansion to 71 cases / 36 traps with provenance and `guards` |
+| 3 | Additive only: 5 positive and 5 trap cases for the secret formats that were `KNOWN_GAPS` (Anthropic, OpenAI, Stripe live, Google API key, JWT); some new cases hash into the holdout. No existing case was relabeled. Writing the Anthropic case exposed a real defect: the OpenAI pattern also matched `sk-ant-…` keys and reported them twice under the wrong label (fixed with a `(?!ant-)` guard in `src/core/secrets.ts`) |
+
 ## Metrics
 
 Computed by `test/unit/benchmark/metrics.ts` (pure, unit-tested in `benchmark-harness.test.ts`):

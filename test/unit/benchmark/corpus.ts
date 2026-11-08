@@ -6,7 +6,7 @@ import type { FileSpec } from '../helpers';
 
 export const CORPUS_ID = 'probato-authored';
 /** Bump when cases are added, removed or relabeled; reports carry it so numbers are never compared across versions. */
-export const CORPUS_VERSION = 2;
+export const CORPUS_VERSION = 3;
 
 export type Split = 'dev' | 'validation' | 'holdout';
 export type Language = 'typescript' | 'javascript' | 'go' | 'python' | 'php' | 'sql' | 'openapi' | 'package-json' | 'tsconfig' | 'github-actions' | 'go-mod' | 'env';
@@ -52,6 +52,12 @@ export function holdoutSeal(cases: readonly BenchmarkCase[]): string {
 const awsKey = ['AKIA', 'Z'.repeat(16)].join('');
 const githubToken = ['ghp', '_', 'A1b2C3d4E5'.repeat(4)].join('');
 const slackToken = ['xoxb', '-', '1234567890', '-', 'abcdefghij'].join('');
+// Synthetic values assembled at runtime so the repository itself never contains a scanner-shaped literal.
+const anthropicKey = ['sk', '-ant-', 'api03-', 'Z9y8X7w6V5'.repeat(4)].join('');
+const openAiKey = ['sk', '-proj-', 'Q7w8E9r0T1'.repeat(4)].join('');
+const stripeLiveKey = ['sk', '_live_', 'a1B2c3D4e5'.repeat(3)].join('');
+const googleApiKey = ['AIza', 'Sy', 'D'.repeat(33)].join('');
+const jwt = ['eyJhbGciOiJIUzI1NiJ9', 'eyJzdWIiOiIxMjM0NTY3ODkwIn0', 'dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U'].join('.');
 const privateKey = [['-----BEGIN', 'RSA PRIVATE KEY-----'].join(' '), 'MIIEowIBAAKCAQEA0Z3VS5JJcds3xfn', ['-----END', 'RSA PRIVATE KEY-----'].join(' ')].join('\n');
 const authored = { source: 'authored' } as const;
 
@@ -210,6 +216,28 @@ export const CASES: readonly BenchmarkCase[] = [
   { id: 'trap-ts-public-key-committed', title: 'public key block committed', language: 'typescript', tags: [], provenance: authored,
     files: [{ path: 'src/keys.ts', base: 'export {};\n', head: `export const pem = \`${['-----BEGIN', 'PUBLIC KEY-----'].join(' ')}\nMIIBIjANBgkqhkiG9w0BAQEFAAOC\n${['-----END', 'PUBLIC KEY-----'].join(' ')}\`;\n` }],
     expected: [], guards: ['secrets/private-key'] },
+  { id: 'ts-anthropic-key-committed', title: 'Anthropic key committed (must not also be reported as OpenAI)', language: 'typescript', tags: [], provenance: authored,
+    files: [{ path: 'src/llm.ts', base: 'export {};\n', head: `export const anthropic = '${anthropicKey}';\n` }], expected: ['secrets/anthropic-key'] },
+  { id: 'py-openai-key-committed', title: 'OpenAI project key committed in Python', language: 'python', tags: [], provenance: authored,
+    files: [{ path: 'app/llm.py', base: 'MODEL = "x"\n', head: `MODEL = "x"\nOPENAI = "${openAiKey}"\n` }], expected: ['secrets/openai-key'] },
+  { id: 'ts-stripe-live-key-committed', title: 'Stripe live key committed', language: 'typescript', tags: [], provenance: authored,
+    files: [{ path: 'src/billing.ts', base: 'export {};\n', head: `export const stripe = '${stripeLiveKey}';\n` }], expected: ['secrets/stripe-live-key'] },
+  { id: 'js-google-api-key-committed', title: 'Google API key committed', language: 'javascript', tags: [], provenance: authored,
+    files: [{ path: 'src/maps.js', base: 'export {};\n', head: `export const maps = '${googleApiKey}';\n` }], expected: ['secrets/google-api-key'] },
+  { id: 'ts-jwt-committed', title: 'signed JWT committed in a fixture', language: 'typescript', tags: [], provenance: authored,
+    files: [{ path: 'src/session.ts', base: 'export {};\n', head: `export const session = '${jwt}';\n` }], expected: ['secrets/jwt'] },
+  { id: 'trap-ts-anthropic-key-from-env', title: 'Anthropic key read from the environment', language: 'typescript', tags: [], provenance: authored,
+    files: [{ path: 'src/llm.ts', base: 'export {};\n', head: 'export const anthropic = process.env.ANTHROPIC_API_KEY;\n' }], expected: [], guards: ['secrets/anthropic-key'] },
+  { id: 'trap-ts-openai-prefix-in-prose', title: 'documentation mentions the OpenAI key prefix', language: 'typescript', tags: ['placeholder'], provenance: authored,
+    files: [{ path: 'src/help.ts', base: 'export {};\n', head: "export const hint = 'OpenAI project keys start with sk-proj- and must stay in your settings.';\n" }],
+    expected: [], guards: ['secrets/openai-key'] },
+  { id: 'trap-ts-stripe-test-key', title: 'Stripe test-mode key committed', language: 'typescript', tags: ['placeholder'], provenance: authored,
+    files: [{ path: 'src/billing-sandbox.ts', base: 'export {};\n', head: `export const stripe = '${stripeLiveKey.replace('_live_', '_test_')}';\n` }],
+    expected: [], guards: ['secrets/stripe-live-key'] },
+  { id: 'trap-js-google-key-from-env', title: 'Google API key read from the environment', language: 'javascript', tags: [], provenance: authored,
+    files: [{ path: 'src/maps.js', base: 'export {};\n', head: 'export const maps = process.env.GOOGLE_MAPS_KEY;\n' }], expected: [], guards: ['secrets/google-api-key'] },
+  { id: 'trap-ts-jwt-header-only', title: 'JWT header constant without payload or signature', language: 'typescript', tags: [], provenance: authored,
+    files: [{ path: 'src/session.ts', base: 'export {};\n', head: "export const header = 'eyJhbGciOiJIUzI1NiJ9';\n" }], expected: [], guards: ['secrets/jwt'] },
 
   // ------------------------------------------------------------------ dependencies
   { id: 'pkg-install-hook-added', title: 'install hook added', language: 'package-json', tags: [], provenance: authored,
@@ -275,10 +303,4 @@ export const CASES: readonly BenchmarkCase[] = [
  * Rules with no positive or no negative case yet. Reported as coverage gaps, never as measured. The benchmark test
  * keeps this list exact: adding a case for a rule forces removing it from here, and a new rule cannot ship silently.
  */
-export const KNOWN_GAPS: Readonly<Record<string, 'no-positive' | 'no-negative' | 'no-cases'>> = {
-  'secrets/anthropic-key': 'no-cases',
-  'secrets/openai-key': 'no-cases',
-  'secrets/stripe-live-key': 'no-cases',
-  'secrets/google-api-key': 'no-cases',
-  'secrets/jwt': 'no-cases',
-};
+export const KNOWN_GAPS: Readonly<Record<string, 'no-positive' | 'no-negative' | 'no-cases'>> = {};

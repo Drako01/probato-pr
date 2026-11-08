@@ -21,7 +21,7 @@ export const SECRET_PATTERNS: readonly SecretPattern[] = [
   { id: 'aws-access-key', label: msg('AWS access key ID'), confidence: 'high', regex: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g },
   { id: 'github-token', label: msg('GitHub token'), confidence: 'high', regex: /\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{60,})\b/g },
   { id: 'anthropic-key', label: msg('Anthropic API key'), confidence: 'high', regex: /\bsk-ant-[A-Za-z0-9_-]{20,}/g },
-  { id: 'openai-key', label: msg('OpenAI API key'), confidence: 'high', regex: /\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{32,}/g },
+  { id: 'openai-key', label: msg('OpenAI API key'), confidence: 'high', regex: /\bsk-(?!ant-)(?:proj-|svcacct-)?[A-Za-z0-9_-]{32,}/g },
   { id: 'slack-token', label: msg('Slack token'), confidence: 'high', regex: /\bxox[abposr]-[A-Za-z0-9-]{10,}/g },
   { id: 'stripe-live-key', label: msg('Stripe live secret key'), confidence: 'high', regex: /\b(?:sk|rk)_live_[A-Za-z0-9]{20,}/g },
   { id: 'google-api-key', label: msg('Google API key'), confidence: 'high', regex: /\bAIza[0-9A-Za-z_-]{35}\b/g },
