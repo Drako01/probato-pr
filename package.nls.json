@@ -1,5 +1,5 @@
 {
-  "extension.displayName": "Probato PR — Code Review with Proof",
+  "extension.displayName": "Probato PR",
   "extension.description": "Your AI reviews the code. We verify what could break. Local, evidence-backed review of Git changes and pull requests: deterministic analyzers, approved project checks with base-vs-head regression attribution, SARIF and Markdown reports. No account or AI key required.",
   "capabilities.untrustedWorkspaces": "Reviews run Git and, with your approval, project tools. Both are disabled in Restricted Mode.",
   "capabilities.virtualWorkspaces": "Requires a local Git repository and local process execution.",

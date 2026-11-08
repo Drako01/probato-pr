@@ -12,6 +12,10 @@ All notable changes to Probato PR are documented here. The project follows [Sema
   reports. Additive optional field; `absolute` reports are unchanged.
 - SARIF output is validated in the test suite against the official OASIS SARIF 2.1.0 schema.
 
+### Changed
+
+- The extension display name is now simply "Probato PR" (was "Probato PR — Code Review with Proof").
+
 ### Fixed
 
 - SARIF: `security-severity` is emitted only for security rules; other rules use `problem.severity`, so quality
