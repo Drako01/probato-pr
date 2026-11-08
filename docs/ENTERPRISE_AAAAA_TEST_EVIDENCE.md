@@ -10,6 +10,8 @@ Phase I working-tree changes. Platform: Windows 11 Pro 10.0.26320, local. No CI 
 | E3 | `pnpm run typecheck` | PASS | 4.9 s | Extension and webview projects |
 | E4 | `pnpm run lint` | PASS | 14.0 s | ESLint + l10n keys: 1098 keys, 0 missing/stale/invalid |
 | E5 | `pnpm exec vitest run test/unit/workflow-contract.test.ts` + `pnpm exec eslint test/unit/workflow-contract.test.ts` | PASS — 4 tests; lint clean | 0.7 s | Phase V CI/publish split. Static contract only: workflows have not run on GitHub yet |
+| E6 | `pnpm exec vitest run --coverage` then `node scripts/coverage-modules.mjs` | PASS — 39 files, 448 tests, 0 skipped. Global: lines 64.42%, branches 58.80% (includes untested UI/extension layers). Per module lines/branches: core 90.1/84.1 PASS, verification 94.6/83.7 PASS, git 90.9/73.3 WARN, github 95.6/80.4 PASS, mutation 91.4/74.6 WARN | 35.9 s | Windows 11, local, after commit `bad14f0` plus the coverage change |
+| E7 | `pnpm run lint` | PASS — 1098 l10n keys, 0 missing | 12.6 s | `pnpm peers check` reports a pre-existing unmet peer (`vitest@5.1.0` wants `@types/node` ^22, installed 20.19.43), not introduced by the coverage provider |
 
 Not executed in this change: `pnpm run test:integration`, `pnpm run perf`, `test:mutation:e2e`, `build:prod`,
 packaging, coverage. The changes do not touch `src/mutation/**` or `src/verification/**`, so mutation E2E is not
