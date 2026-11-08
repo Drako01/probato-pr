@@ -4,8 +4,20 @@ All notable changes to Probato PR are documented here. The project follows [Sema
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-11-08
+
+First stable release. Commands, settings, CLI defaults, exit codes, the JSON/SARIF report shape and the review history
+format of 0.6.0 are unchanged; everything below is additive.
+
 ### Added
 
+- GitHub Delivery shows each CI check as passed, neutral, skipped, pending or not passed, and whether the base branch
+  requires it (repository rulesets and classic branch protection). Neutral and skipped checks are no longer presented
+  as a pass, required checks that never reported become blockers, and unreadable requirements are shown as unknown.
+- `pnpm run perf:real` measures P50/P95 wall time and peak memory of the built CLI on the last commits of a real
+  repository. A first Windows measurement is stored in `docs/evidence/`.
+- Labeled benchmark corpus (version 3) now covers the Anthropic, OpenAI, Stripe live, Google API key and JWT secret
+  formats with positive and trap cases.
 - CLI `--gate absolute|regression-only|hybrid` and `--on-inconclusive fail|warn`. The default (`absolute`) keeps the
   0.6.0 exit codes; differential modes block only demonstrated regressions and print their decision to stderr.
 - Differential gate decisions are also recorded in the JSON (`qualityGate`) and SARIF (`runs[0].properties.qualityGate`)
@@ -15,6 +27,9 @@ All notable changes to Probato PR are documented here. The project follows [Sema
 ### Changed
 
 - The extension display name is now simply "Probato PR" (was "Probato PR — Code Review with Proof").
+- The AI endpoints never follow redirects, and new paths with symlinked parent folders are refused.
+- PR validation is split from publishing; the release workflow attests the VSIX provenance and ships a CycloneDX SBOM.
+- Development dependencies resolve `minimatch` 11.0.5 (GHSA-g3hv-75wg-m249). It was never bundled in the extension.
 
 ### Fixed
 
@@ -22,6 +37,7 @@ All notable changes to Probato PR are documented here. The project follows [Sema
   issues are no longer presented as vulnerabilities in GitHub code scanning. Rule severity is the most severe finding.
 - `SECURITY.md`, `PRIVACY.md` and the manual test plan now describe the GitHub and local Git writes Probato performs and
   what the check approval UI actually shows.
+- Secret scanning: an Anthropic key (`sk-ant-…`) was also reported a second time as an OpenAI key.
 
 ## [0.6.0] — 2026-11-07
 

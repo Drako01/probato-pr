@@ -1,15 +1,17 @@
 # Product release readiness — Probato PR
 
-Published version: **0.6.0**. Candidate under preparation: **0.7.0** (not versioned, tagged or published; the
-manifest stays at 0.6.0 so no publication is triggered). Assessment date: 2026-11-08, branch
+Published version: **0.6.0**. Candidate: **1.0.0** (manifest bumped on 2026-11-08 by maintainer decision; publication
+happens when the PR merges into `main`). Assessment date: 2026-11-08, branch
 `feat/enterprise-aaaaa-upgrade` (PR #16). Detailed evidence lives in
 [docs/ENTERPRISE_AAAAA_TEST_EVIDENCE.md](docs/ENTERPRISE_AAAAA_TEST_EVIDENCE.md), task status in
 [docs/ENTERPRISE_AAAAA_UPGRADE_CHECKLIST.md](docs/ENTERPRISE_AAAAA_UPGRADE_CHECKLIST.md) and the scored re-audit in
 [docs/ENTERPRISE_AAAAA_FINAL_AUDIT.md](docs/ENTERPRISE_AAAAA_FINAL_AUDIT.md); this page only keeps the decision.
 
-## Current decision — 0.7.0 candidate: **NO-GO**
+## Current decision — 1.0.0 candidate: **NO-GO until manual acceptance**
 
-Any critical blocker means NO-GO. States: PASS / WARN / FAIL / SKIP / BLOCKED; nothing skipped or inconclusive is
+The maintainer chose to version this release as 1.0.0 and to run the installed-VSIX acceptance (accessibility,
+Windows/macOS Extension Host, remote hosts) personally. The rows still BLOCKED or FAIL below remain open until that
+evidence exists; the external benchmark remains a documented limitation, not a claim. Any critical blocker means NO-GO. States: PASS / WARN / FAIL / SKIP / BLOCKED; nothing skipped or inconclusive is
 counted as PASS.
 
 | Gate | State | Evidence / reason |
@@ -22,10 +24,12 @@ counted as PASS.
 | Independent external precision/recall benchmark (≥600 cases, holdout) | BLOCKED | Needs licensed real-world data with human ground truth; the authored corpus (71 cases, 36 traps, sealed holdout, per-rule metrics with Wilson CIs — `docs/BENCHMARK.md`) is a regression test only |
 | Merge-candidate protection (strict required checks or merge queue) | PASS (static) | Ruleset `26362018` has `strict_required_status_checks_policy=true` (read with `gh api`, 2026-11-08); `publish.yml` proves tree identity + green Verify checks before skipping the post-merge gate (`workflow-contract.test.ts`). First real run happens at the next version-changing merge |
 | Extension Host on Windows/macOS; Remote SSH/WSL/Dev Containers | BLOCKED | Only Linux Extension Host runs in CI |
-| Threat model update, adversarial suite, optional sandbox, SBOM/provenance | FAIL | Phase IV not completed |
+| Threat model update, adversarial suite, SBOM/provenance, Dependabot alert #3 | PASS | `docs/THREAT_MODEL.md`, `adversarial.test.ts` (two real defects fixed), SBOM + attestation in `publish.yml`, `minimatch` override (checklist IV.1, IV.2, IV.4) |
+| Optional isolated execution backend | WARN | Not implemented; the runner is documented as not a sandbox (checklist IV.3) |
+| Required vs informative CI checks; neutral/skipped never shown as pass | PASS | `github-delivery.test.ts` (checklist VI.1) |
 | Per-module coverage ≥85% lines / ≥80% branches | WARN | `git` and `mutation` branch coverage below 80% |
-| Accessibility audit (WCAG 2.2 AA) on packaged VSIX, final screenshots | FAIL | Phase VI not started |
-| Performance P50/P95 and peak memory on real repositories | WARN | Only the existing synthetic budgets |
+| Accessibility audit (WCAG 2.2 AA) on packaged VSIX, final screenshots | BLOCKED | Manual acceptance on the installed VSIX, owned by the maintainer; screenshots are the labeled 0.4.0 captures |
+| Performance P50/P95 and peak memory on real repositories | PASS (one machine) | `pnpm run perf:real`, 60 runs on Windows 11 (`docs/evidence/`, checklist V.5); other OSes not measured |
 
 ## Previous acceptance record — 0.5.0 (2026-11-03)
 

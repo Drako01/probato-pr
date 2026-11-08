@@ -1,6 +1,6 @@
 # Threat model
 
-Scope: the Probato PR VS Code extension and its CLI (`probato-pr`), version 0.7.0 candidate. Reviewed 2026-11-08.
+Scope: the Probato PR VS Code extension and its CLI (`probato-pr`), version 1.0.0. Reviewed 2026-11-08.
 This page lists what an attacker can control, what they could gain, the control that stops it and the test that
 proves the control. It does not claim absolute security or any external certification. The short user-facing summary
 lives in [SECURITY.md](../SECURITY.md).

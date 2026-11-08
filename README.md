@@ -9,11 +9,33 @@
 Probato PR reviews your Git changes and pull requests inside VS Code and tells you **what is proven, what is only
 suspected, and why**. It runs deterministic analyzers locally, can execute your project's own checks with your approval,
 and compares results against the base revision to tell a regression *introduced by your change* from a failure that was
-already there. Version 0.4 brings a persistent control center: configure your workspace, review changes,
-verify evidence and deliver pull requests from the editor.
+already there. A persistent control center lets you configure your workspace, review changes, verify evidence and
+deliver pull requests without leaving the editor.
 
 No account, no AI key, no server, no subscription is needed for the core review. When you want more, **bring your own
 AI**: GitHub Copilot, Claude, OpenAI or a local model.
+
+## What's new in 1.0
+
+Version 1.0.0 is the first stable release. Everything that worked in 0.6.0 keeps working the same way: commands,
+settings, CLI defaults and exit codes, the JSON/SARIF report shape and the review history are unchanged.
+
+- **Differential quality gate for CI:** `--gate regression-only|hybrid` fails a pipeline only for regressions your
+  change introduced, never for failures that were already on the base branch. The decision and its reasons are
+  recorded in the JSON and SARIF reports ([details](#command-line)).
+- **Standards-valid SARIF:** reports are validated against the official OASIS SARIF 2.1.0 schema, and only security
+  rules carry a `security-severity`, so GitHub code scanning no longer shows quality issues as vulnerabilities.
+- **Honest CI status:** GitHub Delivery shows whether each check passed, was neutral, skipped, pending or not passed,
+  and whether the base branch requires it. Neutral and skipped checks are never presented as a pass; a required check
+  that never reported blocks the merge.
+- **Stronger secret detection:** Anthropic keys are no longer reported twice as OpenAI keys, and every supported secret
+  format is covered by labeled positive and trap cases.
+- **Hardened security:** AI endpoints never follow redirects, and new paths with symlinked parent folders are refused.
+- **Verifiable releases:** every VSIX is built once, checksummed, attested with build provenance and shipped with a
+  CycloneDX SBOM.
+- **Shorter name:** the extension is now simply **Probato PR**.
+
+See the [changelog](CHANGELOG.md) for the full list.
 
 ## Control center
 
@@ -26,7 +48,7 @@ level. AI credentials remain in the existing secure connection flow. Reviewing, 
 continue to use their existing approval steps. In a multi-root workspace, choose the repository for local reviews;
 Git and GitHub delivery retain their own repository selection.
 
-## Proof-driven review in 0.5
+## Proof-driven review
 
 Each finding now explains its reported observation, linked evidence, relevant executed checks and what still
 needs to be proved. Compare compatible reviews from History to distinguish newly observed, persisting and
@@ -62,26 +84,26 @@ An AI claim stays suspected. Executed tool diagnostics are reported independentl
 when a comparable baseline establishes the regression. A compiler error at the same location does not prove
 an unrelated AI hypothesis.
 
-## See version 0.4 in action
+## See it in action
 
 Home brings repository status, the current review and setup steps into one persistent editor tab.
 The original Probato PR logo and green accent remain consistent with your editor theme.
 
-![Probato PR 0.4 Home in a dark theme: repository status, review and workspace setup](media/screenshots/home-dark.png)
+![Probato PR Home in a dark theme: repository status, review and workspace setup](media/screenshots/home-dark.png)
 
 Choose User or Workspace settings to configure reviews, baseline comparison, timeouts and optional AI.
 Each scope shows its own values; workspace preferences can override user preferences.
 
-![Probato PR 0.4 Settings in a dark theme: review and verification preferences](media/screenshots/settings-dark.png)
+![Probato PR Settings in a dark theme: review and verification preferences](media/screenshots/settings-dark.png)
 
 The same control center adapts to light themes, including navigation, text, controls and the brand accent.
 
-![Probato PR 0.4 Home in a light theme](media/screenshots/home-light.png)
+![Probato PR Home in a light theme](media/screenshots/home-light.png)
 
-![Probato PR 0.4 Settings in a light theme](media/screenshots/settings-light.png)
+![Probato PR Settings in a light theme](media/screenshots/settings-light.png)
 
-*Real screenshots of version 0.4.0 in English, using a local demonstration repository.
-No GitHub account is connected and no code is published during these captures.
+*Real screenshots captured with version 0.4.0 in English, using a local demonstration repository; later versions
+may differ in small details. No GitHub account is connected and no code is published during these captures.
 Probato PR also includes Spanish translations.*
 
 ## Quick start
@@ -109,7 +131,8 @@ New to Probato PR? Run `Welcome: Open Walkthrough` and pick **Get started with P
 Use **Probato PR: GitHub Delivery** to create or update pull requests, publish selected findings, manage reviews
 and conversations, follow CI, read job logs and merge with an expected commit and destination. **Local Git Actions**
 handles branches, staging, commits, pushes and fast-forward synchronization. Every write presents its destination
-and content before execution. See the [delivery guide](docs/DELIVERY.md) for the full workflow and CLI.
+and content before execution. CI status separates passed, neutral, skipped, pending and failed checks and marks
+which ones the base branch requires. See the [delivery guide](docs/DELIVERY.md) for the full workflow and CLI.
 
 ## Features
 
@@ -284,6 +307,21 @@ In the differential modes the decision and its reasons are printed to stderr and
 (`qualityGate` in JSON, `runs[0].properties.qualityGate` in SARIF); a WARN is never reported as PASS. The `absolute`
 mode leaves the report shape of 0.6.0 unchanged.
 
+## Performance
+
+Measured with `pnpm run perf:real` on this repository's last 30 non-merge commits (60 CLI runs, no failures), on
+Windows 11 with an Intel Core i9-9900K and Node.js 24. Each commit is reviewed twice with `--scope commit`; wall time
+includes process start:
+
+| Change profile | P50 | P95 | Peak memory |
+|---|---|---|---|
+| Small (≤10 files, ≤300 lines) | 2.1 s | 2.9 s | 115 MiB |
+| Large | 4.9 s | 25.7 s | 195 MiB |
+| All runs | 2.7 s | 14.6 s | 195 MiB |
+
+The raw data is in [`docs/evidence/`](docs/evidence/). These numbers describe one machine and one repository; run the
+script against your own repository to measure yours.
+
 ## Offline mode
 
 Local review and reports work offline. GitHub delivery, remote Git operations and AI review need their respective
@@ -302,6 +340,9 @@ services. Approved project checks may use the network themselves. Service failur
   the server they were entered for.
 - No telemetry. GitHub delivery uses the GitHub API; push and synchronization use Git remotes. AI review requires a
   confirmation listing the shared files. Approved project checks can make their own network requests.
+- AI endpoints never follow HTTP redirects, so a server cannot forward your key elsewhere.
+- Every published VSIX is built once in CI, checksummed, attested with build provenance and accompanied by a CycloneDX
+  SBOM of its production dependencies.
 
 Details: `SECURITY.md` · `PRIVACY.md`.
 
@@ -342,6 +383,7 @@ pnpm install
 pnpm run verify:delivery # typecheck + lint + unit tests + production build + CLI smoke
 pnpm run test:integration  # real VS Code Extension Development Host
 pnpm run perf            # performance budgets on generated repositories
+pnpm run perf:real -- --repo <path>  # P50/P95 and peak memory on a real repository (after pnpm run build)
 pnpm run package         # verify + production build + VSIX
 ```
 
