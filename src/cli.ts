@@ -11,6 +11,7 @@ import spanish from '../l10n/bundle.l10n.es.json';
 import { createDefaultAnalyzers } from './analyzers';
 import { SEVERITIES, type ReviewResult, type Severity } from './core/model';
 import { ReviewEngine } from './core/review-engine';
+import { GATE_MODES, INCONCLUSIVE_POLICIES, evaluateQualityGate, type GateMode, type InconclusivePolicy } from './core/quality-gate';
 import { redactSecrets } from './core/secrets';
 import { GitClient } from './git/git-client';
 import { LocalChangeCollector, type LocalReviewRequest } from './git/local-changes';
@@ -33,6 +34,8 @@ export interface CliOptions {
   readonly format: 'json' | 'markdown' | 'sarif';
   readonly output?: string;
   readonly failOn: Severity | 'none';
+  readonly gate: GateMode;
+  readonly onInconclusive: InconclusivePolicy;
   readonly verify: readonly string[];
   readonly baseline: boolean;
   readonly listChecks: boolean;
@@ -56,6 +59,8 @@ export function cliHelp(): string {
     "  --format json|markdown|sarif    " + tr('Report format (default markdown)'),
     "  --output FILE                  " + tr('Write the report instead of stdout'),
     "  --fail-on critical|high|medium|low|none   " + tr('Finding threshold (default high)'),
+    "  --gate absolute|regression-only|hybrid   " + tr('Gate mode (default absolute, the 0.6.0 behavior)'),
+    "  --on-inconclusive fail|warn    " + tr('Differential modes: failed checks without comparable baseline exit 2 (fail, default) or 0 with WARN'),
     "  --list-checks                  " + tr('List detected check IDs without executing them'),
     "  --verify ID,ID | all           " + tr('Explicitly authorize these project checks'),
     "  --baseline                     " + tr('Explicitly authorize repeating failed checks on base'),
@@ -72,6 +77,7 @@ export function cliHelp(): string {
     "  --locale en|es                 " + tr('Language for report labels (default en)'),
     "  --help                        " + tr('Show this help'),
     tr('Exit codes: 0 threshold not reached; 1 findings meet threshold; 2 execution/configuration error.'),
+    tr('Differential modes: only demonstrated regressions return 1; pre-existing failures and unproven findings are reported as WARN.'),
     tr('Checks execute repository code with your permissions. Nothing is installed automatically.'),
   ].join('\n') + '\n';
 }
@@ -81,7 +87,7 @@ export function parseCliArgs(args: readonly string[], cwd = process.cwd()): CliO
   const values = new Map<string, string>();
   const flags = new Set<string>();
   const booleans = new Set(['--baseline', '--list-checks', '--help', '--mutation', '--mutation-baseline', '--mutation-gate', '--mutation-fail-on-degradation']);
-  const named = new Set(['--root', '--scope', '--base', '--ref', '--format', '--output', '--fail-on', '--verify', '--import-sarif', '--compare', '--locale', '--mutation-timeout', '--mutation-concurrency', '--mutation-memory', '--mutation-max-files']);
+  const named = new Set(['--root', '--scope', '--base', '--ref', '--format', '--output', '--fail-on', '--gate', '--on-inconclusive', '--verify', '--import-sarif', '--compare', '--locale', '--mutation-timeout', '--mutation-concurrency', '--mutation-memory', '--mutation-max-files']);
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
     if (!arg) { continue; }
@@ -107,6 +113,11 @@ export function parseCliArgs(args: readonly string[], cwd = process.cwd()): CliO
   if (format !== 'json' && format !== 'markdown' && format !== 'sarif') { throw new Error(tr('Unknown format: {0}', format)); }
   const failOn = values.get('--fail-on') ?? 'high';
   if (failOn !== 'none' && !SEVERITIES.includes(failOn as Severity)) { throw new Error(tr('Unknown severity: {0}', failOn)); }
+  const gate = values.get('--gate') ?? 'absolute';
+  if (!GATE_MODES.includes(gate as GateMode)) { throw new Error(tr('Unknown gate mode: {0}', gate)); }
+  const onInconclusive = values.get('--on-inconclusive') ?? 'fail';
+  if (!INCONCLUSIVE_POLICIES.includes(onInconclusive as InconclusivePolicy)) { throw new Error(tr('Unknown inconclusive policy: {0}', onInconclusive)); }
+  if (values.has('--on-inconclusive') && gate === 'absolute') { throw new Error(tr('--on-inconclusive applies only to the regression-only and hybrid gate modes.')); }
   const output = values.get('--output'), importFile = values.get('--import-sarif'), compareFile = values.get('--compare');
   const locale = values.get('--locale') ?? 'en';
   if (locale !== 'en' && locale !== 'es') throw new Error(tr('Supported report languages are en and es.'));
@@ -118,6 +129,7 @@ export function parseCliArgs(args: readonly string[], cwd = process.cwd()): CliO
   if (!flags.has('--mutation') && [...flags, ...values.keys()].some((flag) => flag.startsWith('--mutation-'))) throw new Error(tr('Mutation options require explicit --mutation authorization.'));
   return {
     root: path.resolve(cwd, values.get('--root') ?? '.'), scope, format, failOn: failOn as Severity | 'none',
+    gate: gate as GateMode, onInconclusive: onInconclusive as InconclusivePolicy,
     verify: (values.get('--verify') ?? '').split(',').filter(Boolean), baseline: flags.has('--baseline'), listChecks: flags.has('--list-checks'), help: flags.has('--help'),
     locale, mutation: flags.has('--mutation'), mutationBaseline: flags.has('--mutation-baseline'),
     mutationGate: flags.has('--mutation-gate'), mutationFailOnDegradation: flags.has('--mutation-fail-on-degradation'),
@@ -127,13 +139,9 @@ export function parseCliArgs(args: readonly string[], cwd = process.cwd()): CliO
   };
 }
 
+/** 0.6.0 contract, kept for compatibility: the `absolute` gate mode. */
 export function reportExitCode(review: ReviewResult, threshold: Severity | 'none'): number {
-  // Incomplete execution takes precedence over a simultaneous demonstrated quality failure.
-  if (review.analyzerRuns.some((run) => run.status === 'failed') || review.checks.some((check) => check.status === 'error' || check.status === 'timed-out' || check.status === 'cancelled' || check.status === 'pending')) return 2;
-  const mutation = review.mutation;
-  if (mutation && (mutation.execution.status !== 'COMPLETED' || mutation.verification.status === 'ERROR' || mutation.verification.status === 'INCONCLUSIVE' || mutation.head?.timedOut || mutation.base?.timedOut || (mutation.policy.enabled && mutation.gate.decision === 'INCONCLUSIVE'))) return 2;
-  if (mutation?.gate.decision === 'FAIL' || review.checks.some((check) => check.status === 'failed')) return 1;
-  return threshold !== 'none' && review.findings.some((finding) => SEVERITIES.indexOf(finding.severity) <= SEVERITIES.indexOf(threshold)) ? 1 : 0;
+  return evaluateQualityGate(review, { mode: 'absolute', threshold, inconclusive: 'fail' }).exitCode;
 }
 
 export interface CliIo { stdout(text: string): void; stderr(text: string): void }
@@ -222,7 +230,10 @@ async function executeCli(args: readonly string[], io: CliIo = { stdout: (text) 
     }
     const report = options.format === 'json' ? renderJson(review, comparison) : options.format === 'sarif' ? renderSarif(review) : renderMarkdown(review, comparison);
     if (options.output) { await writeFile(options.output, report, 'utf8'); } else { io.stdout(report); }
-    return reportExitCode(review, options.failOn);
+    const decision = evaluateQualityGate(review, { mode: options.gate, threshold: options.failOn, inconclusive: options.onInconclusive });
+    // The absolute mode keeps the 0.6.0 output untouched; differential modes always explain their decision.
+    if (options.gate !== 'absolute') io.stderr(`${redactSecrets([tr('Quality gate ({0}): {1}', decision.mode, decision.outcome), ...decision.reasons.map((reason) => `- ${reason}`)].join('\n'))}\n`);
+    return decision.exitCode;
   } finally {
     await isolated?.dispose();
     setTranslator(undefined);

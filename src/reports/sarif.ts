@@ -2,15 +2,27 @@ import { tr } from '../core/i18n';
 import { verificationLabel } from '../core/labels';
 import { sanitizeText } from '../core/sanitize';
 import { pathToFileURL } from 'node:url';
-import type { ReviewFinding, ReviewResult, Severity } from '../core/model';
+import { SEVERITIES, type ReviewResult, type Severity } from '../core/model';
+import { classifyRule } from '../core/rule-taxonomy';
 
 // SARIF 2.1.0 (OASIS). Consumed by GitHub code scanning, VS Code SARIF Viewer and most CI tools.
 
 type SarifLevel = 'error' | 'warning' | 'note';
 
 const LEVEL: Readonly<Record<Severity, SarifLevel>> = { critical: 'error', high: 'error', medium: 'warning', low: 'note' };
-/** GitHub code scanning security-severity scale (0-10). */
+/** GitHub code scanning security-severity scale (0-10). Emitted only for rules classified as security. */
 const SECURITY_SEVERITY: Readonly<Record<Severity, string>> = { critical: '9.5', high: '8.0', medium: '5.5', low: '2.0' };
+/** GitHub code scanning `problem.severity` for quality (non-security) rules. */
+const PROBLEM_SEVERITY: Readonly<Record<Severity, 'error' | 'warning' | 'recommendation'>> = { critical: 'error', high: 'error', medium: 'warning', low: 'recommendation' };
+
+// `precision` is deliberately omitted: it must come from an external benchmark, which does not exist yet.
+function ruleProperties(ruleId: string, severity: Severity): Record<string, unknown> {
+  const { category, cwe } = classifyRule(ruleId);
+  if (category === 'security') {
+    return { tags: ['security', category, ...cwe.map((id) => `external/cwe/${id.toLowerCase()}`)], category, 'security-severity': SECURITY_SEVERITY[severity] };
+  }
+  return { tags: [category, 'quality'], category, 'problem.severity': PROBLEM_SEVERITY[severity] };
+}
 
 function encodeUri(path: string): string {
   return path.split('/').map(encodeURIComponent).join('/');
@@ -25,11 +37,12 @@ function ruleName(ruleId: string): string {
 
 export function renderSarif(result: ReviewResult): string {
   result = sanitizeText(result);
-  const rules = new Map<string, { index: number; sample: ReviewFinding }>();
+  // A rule's default severity is the most severe finding it produced in this run.
+  const rules = new Map<string, { index: number; severity: Severity }>();
   for (const finding of result.findings) {
-    if (!rules.has(finding.ruleId)) {
-      rules.set(finding.ruleId, { index: rules.size, sample: finding });
-    }
+    const known = rules.get(finding.ruleId);
+    if (!known) rules.set(finding.ruleId, { index: rules.size, severity: finding.severity });
+    else if (SEVERITIES.indexOf(finding.severity) < SEVERITIES.indexOf(known.severity)) rules.set(finding.ruleId, { ...known, severity: finding.severity });
   }
   const root = result.repository.root ? pathToFileURL(result.repository.root.endsWith('/') || result.repository.root.endsWith('\\') ? result.repository.root : `${result.repository.root}/`).href : undefined;
 
@@ -45,12 +58,12 @@ export function renderSarif(result: ReviewResult): string {
             version: result.toolVersion,
             semanticVersion: result.toolVersion,
             informationUri: 'https://armotusitio.com.ar',
-            rules: [...rules.entries()].map(([id, { sample }]) => ({
+            rules: [...rules.entries()].map(([id, { severity }]) => ({
               id,
               name: ruleName(id),
               shortDescription: { text: id },
-              defaultConfiguration: { level: LEVEL[sample.severity] },
-              properties: { tags: [id.split('/')[0] ?? 'general'], 'security-severity': SECURITY_SEVERITY[sample.severity] },
+              defaultConfiguration: { level: LEVEL[severity] },
+              properties: ruleProperties(id, severity),
             })),
           },
         },
