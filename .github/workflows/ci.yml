@@ -1,0 +1,82 @@
+# Validates every pull request (and merge-queue candidate, if a merge queue is enabled) before it can reach main.
+# The `Verify (<os>)` job names are the required status checks of the main ruleset: renaming them blocks merges.
+# Publishing lives in publish.yml and never runs here.
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run verify:delivery
+      - name: Audit production dependencies
+        if: runner.os == 'Linux'
+        run: pnpm audit --prod
+      - name: Integration tests in a real VS Code
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pnpm run test:integration
+
+  mutation-e2e:
+    # Real Stryker run on a temporary fixture, only when the mutation/verification contract can change.
+    # Not a required check: a skipped run is reported as skipped, never as passed.
+    name: Mutation E2E (relevant changes only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Decide whether the change touches the mutation contract
+        id: scope
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: |
+          changed=$(git diff --name-only "$BASE" HEAD)
+          printf '%s\n' "$changed"
+          if printf '%s\n' "$changed" | grep -Eq '^(src/mutation/|src/verification/|src/reports/|test/fixtures/mutation/|scripts/test-mutation-e2e\.mjs$|package\.json$|pnpm-lock\.yaml$)'; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+            echo "Mutation E2E SKIPPED: no change under the mutation/verification/report contract." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        if: steps.scope.outputs.relevant == 'true'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.scope.outputs.relevant == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+      - if: steps.scope.outputs.relevant == 'true'
+        run: pnpm install --frozen-lockfile
+      - name: Run Stryker on the temporary fixture
+        if: steps.scope.outputs.relevant == 'true'
+        env:
+          PROBATO_MUTATION_E2E: '1'
+          PROBATO_MUTATION_E2E_INSTALL: '1'
+        run: pnpm run test:mutation:e2e

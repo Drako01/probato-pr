@@ -9,6 +9,7 @@ Phase I working-tree changes. Platform: Windows 11 Pro 10.0.26320, local. No CI 
 | E2 | `pnpm test` | PASS — 38 files, 444 tests, 0 skipped | 34.7 s | Includes the new `docs-consistency.test.ts`; internal corpus: 26 cases, precision 1.000, recall 1.000 (internal, not external validation) |
 | E3 | `pnpm run typecheck` | PASS | 4.9 s | Extension and webview projects |
 | E4 | `pnpm run lint` | PASS | 14.0 s | ESLint + l10n keys: 1098 keys, 0 missing/stale/invalid |
+| E5 | `pnpm exec vitest run test/unit/workflow-contract.test.ts` + `pnpm exec eslint test/unit/workflow-contract.test.ts` | PASS — 4 tests; lint clean | 0.7 s | Phase V CI/publish split. Static contract only: workflows have not run on GitHub yet |
 
 Not executed in this change: `pnpm run test:integration`, `pnpm run perf`, `test:mutation:e2e`, `build:prod`,
 packaging, coverage. The changes do not touch `src/mutation/**` or `src/verification/**`, so mutation E2E is not

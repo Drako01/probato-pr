@@ -35,11 +35,25 @@ SemVer. `0.x` while the public API (settings, commands, report schema) may still
 Step-by-step guide, accounts and first-time setup: [`PUBLICACION.md`](PUBLICACION.md) (Spanish).
 
 - **First release:** upload the verified `probato-pr.vsix` on the publisher management page (no token needed).
-- **Later releases (automatic):** `.github/workflows/publish.yml`. A pull request merged to `main` that changes the
-  version in `package.json` runs the quality gate, packages the VSIX once, publishes that same file to the Marketplace
-  (Trusted Publishing, `vsce publish --oidc`, no stored token) and to Open VSX, and creates the GitHub release with
-  the VSIX and its SHA-256. A merge that keeps the version only verifies. *Actions → publish → Run workflow* publishes
-  the version on `main` by hand; publishing is idempotent (`--skip-duplicate`).
+- **Validation before merge:** `.github/workflows/ci.yml` runs on every pull request (and `merge_group`, should a
+  merge queue be enabled). Its `Verify (ubuntu-latest|windows-latest|macos-latest)` jobs are the required checks of
+  the `main` ruleset; the Extension Host integration test and `pnpm audit --prod` run on Linux. `Mutation E2E` runs a
+  real Stryker fixture only when `src/mutation/**`, `src/verification/**`, `src/reports/**`, the fixture or the
+  dependencies change; otherwise it reports *skipped*.
+- **Later releases (automatic):** `.github/workflows/publish.yml`, on `push` to `main` only. A push that keeps the
+  version does nothing beyond the plan job (no repeated QA). A push that changes the version in `package.json`
+  (compared with the previous tip of `main`, so squash merges and multi-commit pushes are both covered) runs one
+  release gate on the merged tree (`verify:delivery`, `pnpm audit --prod`, Extension Host on Linux), packages the
+  VSIX once, checks that its manifest version matches, records its SHA-256 and publishes that same file to the
+  Marketplace (Trusted Publishing, `vsce publish --oidc`, no stored token) and to Open VSX, and creates the GitHub
+  release with the VSIX and its SHA-256. Every publishing job re-checks the SHA-256 before using the file.
+  *Actions → publish → Run workflow* publishes the version on `main` by hand; publishing is idempotent
+  (`--skip-duplicate`) and runs are never cancelled half-way.
+- **Why the release gate still runs after merge:** the ruleset has `strict_required_status_checks_policy=false`, so
+  the squash commit on `main` can contain a tree that no PR check validated (another PR merged in between). Until the
+  maintainer enables "require branches to be up to date" or a merge queue, the release gate is the only evidence for
+  the exact published tree. With either option enabled it could be reduced to packaging. A SHA-256 checksum proves
+  integrity of the file between jobs, not provenance; build attestation is not configured yet.
 - **Open VSX never blocks the release.** The Marketplace is the primary channel and the GitHub release depends on it
   only. `scripts/open-vsx-publish.mjs` retries transient failures, waits for the version to become active and, if the
   registry holds it back (unverified namespace, publish-time scan), reports a warning instead of failing. The

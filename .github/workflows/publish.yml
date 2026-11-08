@@ -1,15 +1,16 @@
-# Verifies every pull request and, when a merge to main changes the version in package.json, publishes that
-# version to the Visual Studio Marketplace (Trusted Publishing, no stored token) and to Open VSX, then creates
-# the GitHub release. The Marketplace is the primary channel: the release depends on it, not on Open VSX, whose
-# slower or held-back publishes are retried by the scheduled sync job in this same workflow. Publishing is idempotent: a version
-# that already exists in a store is skipped.
+# Publishes main. Pull requests are validated by ci.yml (required checks), so a push to main does not repeat the
+# full QA matrix. When a push to main changes the version in package.json, one release gate runs on the exact
+# merged tree (the ruleset does not require branches to be up to date, so the squash result may differ from the
+# PR head that CI validated), then a single VSIX is packaged, identified by SHA-256, and that same file is
+# published to the Visual Studio Marketplace (Trusted Publishing, no stored token), Open VSX and the GitHub
+# release. The Marketplace is the primary channel: the release depends on it, not on Open VSX, whose slower or
+# held-back publishes are retried by the scheduled sync job in this same workflow. Publishing is idempotent: a
+# version that already exists in a store is skipped.
 # Run it by hand (Actions → publish → Run workflow) to publish the version currently on main.
 # Setup and rotation: docs/RELEASE.md.
 name: publish
 
 on:
-  pull_request:
-    branches: [main]
   push:
     branches: [main]
   workflow_dispatch:
@@ -24,9 +25,10 @@ on:
 permissions:
   contents: read
 
+# One publisher at a time for main; a running publish is never cancelled half-way.
 concurrency:
   group: publish-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 jobs:
   plan:
@@ -39,52 +41,34 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 2
+          fetch-depth: 0
           persist-credentials: false
       - name: Decide whether this run publishes
         id: plan
         env:
           EVENT: ${{ github.event_name }}
+          # Previous tip of main for this push (covers squash merges and pushes with several commits); HEAD^ otherwise.
+          BEFORE: ${{ github.event.before }}
         run: |
           version=$(node -p "require('./package.json').version")
-          previous=$(git show HEAD^:package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version" 2>/dev/null || echo none)
+          base=HEAD^
+          if [ -n "$BEFORE" ] && [ "$BEFORE" != 0000000000000000000000000000000000000000 ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            base=$BEFORE
+          fi
+          previous=$(git show "$base:package.json" 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version" 2>/dev/null || echo none)
           publish=false
           if [ "$EVENT" = workflow_dispatch ] || { [ "$EVENT" = push ] && [ "$version" != "$previous" ]; }; then
             publish=true
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "publish=$publish" >> "$GITHUB_OUTPUT"
-          echo "Version $version (previous commit: $previous). Publish: $publish." >> "$GITHUB_STEP_SUMMARY"
-
-  verify:
-    name: Verify (${{ matrix.os }})
-    if: github.event_name != 'schedule' && !(github.event_name == 'workflow_dispatch' && inputs.open_vsx_sync)
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run verify:delivery
-      - name: Audit production dependencies
-        if: runner.os == 'Linux'
-        run: pnpm audit --prod
-      - name: Integration tests in a real VS Code
-        if: runner.os == 'Linux'
-        run: xvfb-run -a pnpm run test:integration
+          echo "Version $version (previous: $previous at $base). Publish: $publish." >> "$GITHUB_STEP_SUMMARY"
 
   package:
-    name: Package
-    needs: [plan, verify]
+    # Release gate + packaging, only for commits that publish. Runs once on the exact merged tree; it is not a
+    # repetition of the PR matrix on every push.
+    name: Release gate and package
+    needs: plan
     if: needs.plan.outputs.publish == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -97,9 +81,24 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Release gate on the merged tree
+        run: pnpm run verify:delivery
+      - name: Audit production dependencies
+        run: pnpm audit --prod
+      - name: Integration tests in a real VS Code
+        run: xvfb-run -a pnpm run test:integration
       - run: pnpm exec vsce package --no-dependencies --out probato-pr.vsix
-      - name: Record the VSIX checksum
-        run: sha256sum probato-pr.vsix | tee probato-pr.vsix.sha256
+      - name: Check the packaged version and record the VSIX checksum
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          packaged=$(unzip -p probato-pr.vsix extension/package.json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
+          if [ "$packaged" != "$VERSION" ]; then
+            echo "::error title=VSIX::Packaged version $packaged does not match planned version $VERSION."
+            exit 1
+          fi
+          sha256sum probato-pr.vsix | tee probato-pr.vsix.sha256
+          echo "VSIX $VERSION sha256 $(cut -d' ' -f1 probato-pr.vsix.sha256) from $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: vsix
@@ -129,6 +128,8 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: vsix
+      - name: Verify it is the packaged VSIX (SHA-256)
+        run: sha256sum -c probato-pr.vsix.sha256
       - run: pnpm exec vsce publish --oidc --packagePath probato-pr.vsix --skip-duplicate
       - name: Wait until the version is live on the Marketplace
         env:
@@ -169,6 +170,8 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: vsix
+      - name: Verify it is the packaged VSIX (SHA-256)
+        run: sha256sum -c probato-pr.vsix.sha256
       - name: Publish with retries and wait for it to become active
         run: node scripts/open-vsx-publish.mjs probato-pr.vsix --trusted-publishing
 
@@ -185,6 +188,8 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: vsix
+      - name: Verify it is the packaged VSIX (SHA-256)
+        run: sha256sum -c probato-pr.vsix.sha256
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
