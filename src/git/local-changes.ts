@@ -1,9 +1,8 @@
-import { readFile, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 import { matchesAnyGlob } from '../core/glob';
 import { tr } from '../core/i18n';
 import type { ChangeSet, ChangeSide, ContentProvider, FileChange, ReviewScope, SkippedFile } from '../core/model';
-import { PathOutsideWorkspaceError, resolveInside } from '../core/paths';
+import { isAsarPath, readSafeWorkspaceText } from '../infrastructure/safe-text-reader';
 import { EMPTY_TREE_SHA, GitError, type GitClient } from './git-client';
 import { parseUnifiedDiff, untrackedFileChange } from './diff-parser';
 
@@ -37,6 +36,10 @@ export function applyLimits(
   for (const file of files) {
     if (matchesAnyGlob(file.path, limits.exclude)) {
       skipped.push({ path: file.path, reason: 'Excluded by probatoPR.review.exclude' });
+    } else if (isAsarPath(file.path)) {
+      skipped.push({ path: file.path, reason: 'ASAR archive is not text source (Electron archive path)' });
+    } else if (file.binary) {
+      skipped.push({ path: file.path, reason: 'Binary file is not analyzable text' });
     } else if (kept.length >= limits.maxFiles) {
       skipped.push({ path: file.path, reason: `File limit reached (probatoPR.review.maxFiles = ${limits.maxFiles})` });
     } else {
@@ -66,7 +69,7 @@ export class LocalChangeCollector {
     const diffText = await this.git.diff(root, revisions.diffArgs, execOptions);
     const parsed = parseUnifiedDiff(diffText);
     const budgetSkipped: SkippedFile[] = [];
-    let eligibleCount = parsed.filter((f) => !matchesAnyGlob(f.path, limits.exclude)).length;
+    let eligibleCount = parsed.filter((f) => !matchesAnyGlob(f.path, limits.exclude) && !isAsarPath(f.path) && !f.binary).length;
     let bytes = Buffer.byteLength(diffText);
     if (revisions.includeUntracked) {
       for (const untracked of await this.git.untrackedFiles(root)) {
@@ -75,21 +78,33 @@ export class LocalChangeCollector {
           parsed.push({ path: untracked, status: 'added', binary: false, hunks: [], additions: 0, deletions: 0 });
           continue;
         }
-        const content = await this.readWorkingFile(root, untracked, limits.maxFileBytes);
-        bytes += content === undefined ? 0 : Buffer.byteLength(content);
+        if (isAsarPath(untracked)) {
+          budgetSkipped.push({ path: untracked, reason: 'ASAR archive is not text source (Electron archive path)' });
+          continue;
+        }
+        let content: string | undefined;
+        try {
+          content = await this.readWorkingFile(root, untracked, limits.maxFileBytes);
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (code !== 'EACCES' && code !== 'EPERM' && code !== 'EBUSY') throw error;
+          budgetSkipped.push({ path: untracked, reason: 'Untracked file could not be read: ' + code });
+          continue;
+        }
+        if (content === undefined) {
+          budgetSkipped.push({ path: untracked, reason: 'Untracked file is missing, oversized, non-text, or outside the workspace' });
+          continue;
+        }
+        bytes += Buffer.byteLength(content);
         if (bytes > limits.maxDiffBytes) {
           budgetSkipped.push({ path: untracked, reason: 'Untracked content exceeds probatoPR.review.maxDiffBytes' });
           continue;
         }
         eligibleCount++;
-        parsed.push(
-          content === undefined
-            ? { path: untracked, status: 'added', binary: false, hunks: [], additions: 0, deletions: 0 }
-            : untrackedFileChange(untracked, content),
-        );
+        parsed.push(untrackedFileChange(untracked, content));
       }
     }
-    if (parsed.length === 0 && !allowEmpty) {
+    if (parsed.length === 0 && budgetSkipped.length === 0 && !allowEmpty) {
       throw new NoChangesError(revisions.scope.label);
     }
 
@@ -185,23 +200,7 @@ export class LocalChangeCollector {
     }
   }
 
-  private async readWorkingFile(root: string, relative: string, maxBytes: number): Promise<string | undefined> {
-    try {
-      const absolute = await resolveInside(root, relative);
-      const info = await stat(absolute);
-      if (!info.isFile() || info.size > maxBytes) {
-        return undefined;
-      }
-      return await readFile(absolute, 'utf8');
-    } catch (error) {
-      if (error instanceof PathOutsideWorkspaceError) {
-        return undefined; // symlink escaping the repository: never followed
-      }
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === 'ENOENT' || code === 'EISDIR') {
-        return undefined;
-      }
-      throw error;
-    }
+  private readWorkingFile(root: string, relative: string, maxBytes: number): Promise<string | undefined> {
+    return readSafeWorkspaceText(root, relative, maxBytes);
   }
 }

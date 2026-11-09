@@ -1,6 +1,5 @@
-import { readFile, stat } from 'node:fs/promises';
 import type { WorkspaceIndex } from '../core/analyzer';
-import { PathOutsideWorkspaceError, resolveInside } from '../core/paths';
+import { isAsarPath, readSafeWorkspaceText } from './safe-text-reader';
 import type { GitClient } from '../git/git-client';
 
 /**
@@ -19,20 +18,11 @@ export class GitWorkspaceIndex implements WorkspaceIndex {
   async listFiles(filter: (path: string) => boolean): Promise<readonly string[]> {
     this.files ??= this.git
       .exec(this.root, ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], { maxBytes: 64 * 1024 * 1024 })
-      .then((out) => [...new Set(out.split('\0').filter((p) => p.length > 0))]);
+      .then((out) => [...new Set(out.split('\0').filter((p) => p.length > 0 && !isAsarPath(p)))]);
     return (await this.files).filter(filter);
   }
 
-  async read(path: string): Promise<string | undefined> {
-    try {
-      const absolute = await resolveInside(this.root, path);
-      const info = await stat(absolute);
-      return info.isFile() && info.size <= this.maxFileBytes ? await readFile(absolute, 'utf8') : undefined;
-    } catch (error) {
-      if (error instanceof PathOutsideWorkspaceError || (error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return undefined;
-      }
-      throw error;
-    }
+  read(path: string): Promise<string | undefined> {
+    return readSafeWorkspaceText(this.root, path, this.maxFileBytes);
   }
 }
