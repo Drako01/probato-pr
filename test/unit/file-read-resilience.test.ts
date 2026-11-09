@@ -13,7 +13,7 @@ import { git, initRepo, tempDir, writeFiles } from './helpers';
 
 const gitClient = new GitClient(new NodeProcessRunner(), { timeoutMs: 30000, maxBytes: 5000000 });
 const cleanups: (() => void)[] = [];
-afterEach(() => { cleanups.splice(0).forEach((c) => c()); });
+afterEach(() => { cleanups.splice(0).forEach((c) => { c(); }); });
 function repo(): string {
   const t = tempDir('probato-asar-');
   cleanups.push(t.cleanup);
@@ -70,7 +70,7 @@ describe('safe source reads (Electron ASAR + hostile or unstable files)', () => 
     writeFiles(root, { 'src/ok.ts': 'export const x = 2;\n', 'fixtures/invalid.asar': 'still not an archive' });
     const changes = await new LocalChangeCollector(gitClient).collect(root, { kind: 'working' }, limits);
     expect(changes.files.map((f) => f.path)).toContain('src/ok.ts');
-    expect(changes.skipped).toEqual(expect.arrayContaining([expect.objectContaining({ path: 'fixtures/invalid.asar', reason: expect.stringContaining('ASAR') })]));
+    expect(changes.skipped.some((file) => file.path === 'fixtures/invalid.asar' && file.reason.includes('ASAR'))).toBe(true);
     const binary = applyLimits([{ path: 'image.png', status: 'modified', binary: true, hunks: [], additions: 0, deletions: 0 }], limits);
     expect(binary.files).toHaveLength(0);
     expect(binary.skipped[0]?.reason).toContain('Binary');
