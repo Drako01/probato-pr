@@ -69,7 +69,7 @@ export class LocalChangeCollector {
     const diffText = await this.git.diff(root, revisions.diffArgs, execOptions);
     const parsed = parseUnifiedDiff(diffText);
     const budgetSkipped: SkippedFile[] = [];
-    let eligibleCount = parsed.filter((f) => !matchesAnyGlob(f.path, limits.exclude)).length;
+    let eligibleCount = parsed.filter((f) => !matchesAnyGlob(f.path, limits.exclude) && !isAsarPath(f.path) && !f.binary).length;
     let bytes = Buffer.byteLength(diffText);
     if (revisions.includeUntracked) {
       for (const untracked of await this.git.untrackedFiles(root)) {

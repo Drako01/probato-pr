@@ -9,6 +9,7 @@ All notable changes to Probato PR are documented here. The project follows [Sema
 ### Fixed
 
 - Skip Electron ASAR archives, including invalid VS Code test fixtures, **before** any filesystem operation; archive entries cannot crash local or cross-file reviews.
+- Hash ASAR files via Electron's raw OS filesystem for complete and symlink-safe repository snapshots, including untracked archives; archive content changes still invalidate review evidence.
 - Use bounded, descriptor-based UTF-8 reads for workspace files. Reject NUL/binary data, invalid UTF-8, files growing or shrinking while read, oversized content, escaped symlinks and missing files.
 - Report excluded ASAR, Git-marked binary, and unreadable/non-text untracked changes as explicit skipped files; never silently convert them into analyzed source or a passing review.
 - Align working-tree and revision indexes with archive exclusion; preserve fail-visible behavior on unexpected permissions and I/O errors.

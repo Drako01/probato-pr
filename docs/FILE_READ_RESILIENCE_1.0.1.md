@@ -8,8 +8,8 @@ Electron attempts to mount a tracked fixture such as `extensions/css-language-fe
 
 | Scenario | Handling | Evidence |
 | --- | --- | --- |
-| Tracked ASAR / uppercase ASAR / ASAR path segment | Excluded before all filesystem operations; reported in changed-file skips | Unit regression |
-| Untracked ASAR | Explicit skip; other files continue | Unit regression |
+| Tracked ASAR / uppercase ASAR / ASAR path segment | Excluded from text analysis; raw OS filesystem hashes it for snapshot freshness (without Electron ASAR interception) | Unit regression |
+| Untracked ASAR | Explicit skip; other files continue; content changes still invalidate repository snapshots | Unit regression |
 | Git diff binary | Skip with reason, not silently treated as text | Unit regression |
 | Non-text untracked (NUL / invalid UTF-8) | Explicit skip | Unit regression |
 | Missing/renamed file during read | Return unavailable and rely on review snapshot integrity check | Unit regression |

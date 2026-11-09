@@ -2,6 +2,8 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { LocalChangeCollector, applyLimits } from '../../src/git/local-changes';
+import { repositorySnapshot } from '../../src/git/repository-snapshot';
+import { resolveRawInside } from '../../src/infrastructure/raw-fs';
 import { GitClient } from '../../src/git/git-client';
 import { NodeProcessRunner } from '../../src/infrastructure/process-runner';
 import { GitWorkspaceIndex } from '../../src/infrastructure/workspace-index';
@@ -47,6 +49,20 @@ describe('safe source reads (Electron ASAR + hostile or unstable files)', () => 
     expect(await readSafeWorkspaceText(root, 'samples/invalid.ts', 100)).toBeUndefined();
     expect(await readSafeWorkspaceText(root, 'samples/large.ts', 4)).toBeUndefined();
     expect(await readSafeWorkspaceText(root, 'samples', 100)).toBeUndefined();
+  });
+
+  it('fingerprints tracked and untracked ASAR bytes without interpreting an archive', async () => {
+    const root = repo();
+    const original = await repositorySnapshot(gitClient, root);
+    const actual = await resolveRawInside(root, 'fixtures/invalid.asar');
+    expect(actual).toContain('invalid.asar');
+    writeFiles(root, { 'fixtures/invalid.asar': 'modified malformed archive' });
+    const changed = await repositorySnapshot(gitClient, root);
+    expect(changed.fingerprint).not.toBe(original.fingerprint);
+    writeFiles(root, { 'new.asar': 'first' });
+    const untracked = await repositorySnapshot(gitClient, root);
+    writeFiles(root, { 'new.asar': 'second' });
+    expect((await repositorySnapshot(gitClient, root)).fingerprint).not.toBe(untracked.fingerprint);
   });
 
   it('reports ASAR and binary changes as skipped, without hiding valid source changes', async () => {
