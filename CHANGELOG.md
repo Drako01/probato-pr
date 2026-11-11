@@ -4,6 +4,12 @@ All notable changes to Probato PR are documented here. The project follows [Sema
 
 ## [Unreleased]
 
+## [1.1.4] — 2026-11-11
+
+### Fixed
+
+- The "Publishing full analysis" progress no longer keeps spinning after the comment is published: it ends as soon as the publication finishes instead of waiting for the result notification to be dismissed.
+
 ## [1.1.3] — 2026-11-11
 
 ### Fixed

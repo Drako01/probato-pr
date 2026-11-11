@@ -186,6 +186,13 @@ describe('publishing the full analysis', () => {
     expect((body(created) as { body: string }).body).toContain(`probato-pr:analysis-sha:${sha}`);
   });
 
+  it('ends the operation without waiting for the result notification to be dismissed', async () => {
+    ui.info.mockReset().mockResolvedValueOnce('Continue').mockReturnValueOnce(new Promise(() => undefined));
+    const { controller, requests } = fixture({ remote: true });
+    await controller.publishAnalysis();
+    expect(writes(requests).some((r) => r.url.endsWith('/issues/7/comments'))).toBe(true);
+  });
+
   it('refuses a remote review whose commit is no longer the pull request head', async () => {
     const { controller, requests } = fixture({ remote: true });
     const stale = { ...remoteReview(), scope: { ...remoteReview().scope, headSha: 'c'.repeat(40) } };

@@ -134,7 +134,8 @@ export class DeliveryController {
       const result = await this.delivery.publishAnalysis(target.ref, pull.number, pull.head.sha, body, signal);
       const message = result.action === 'created' ? vscode.l10n.t('Analysis published to pull request #{0}.', pull.number) : result.action === 'updated' ? vscode.l10n.t('Analysis comment on pull request #{0} updated.', pull.number) : vscode.l10n.t('The analysis comment on pull request #{0} is already up to date.', pull.number);
       const open = vscode.l10n.t('Open on GitHub');
-      if (await vscode.window.showInformationMessage(message, open) === open) await vscode.env.openExternal(vscode.Uri.parse(result.url));
+      // Not awaited: the operation (and its progress) must end now, not when the toast is dismissed.
+      void vscode.window.showInformationMessage(message, open).then((choice) => choice === open ? vscode.env.openExternal(vscode.Uri.parse(result.url)) : undefined);
     }, remote);
   }
 
