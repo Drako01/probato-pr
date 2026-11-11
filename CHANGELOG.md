@@ -4,6 +4,12 @@ All notable changes to Probato PR are documented here. The project follows [Sema
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-11-11
+
+### Fixed
+
+- Publishing the full analysis no longer fails for a review of a GitHub pull request that has no local checkout; it uses the pull request recorded in the review and still validates the head commit before writing.
+
 ## [1.1.0] — 2026-11-10
 
 ### Added
