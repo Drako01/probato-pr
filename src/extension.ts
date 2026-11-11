@@ -217,6 +217,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<Probat
     vscode.commands.registerCommand('probatoPR.delivery', () => delivery.open()),
     vscode.commands.registerCommand('probatoPR.publishPullRequest', () => delivery.publishPullRequest()),
     vscode.commands.registerCommand('probatoPR.publishReview', () => delivery.publishReview()),
+    vscode.commands.registerCommand('probatoPR.publishAnalysis', () => delivery.publishAnalysis()),
     vscode.commands.registerCommand('probatoPR.pullRequestStatus', () => delivery.status()),
     vscode.commands.registerCommand('probatoPR.mergePullRequest', () => delivery.merge()),
     vscode.commands.registerCommand('probatoPR.importSarif', () => controller.importExternalReport()),

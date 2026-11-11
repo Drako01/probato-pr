@@ -1,5 +1,6 @@
 // Review Summary webview. Renders host-provided state with DOM APIs only (textContent, never innerHTML),
 // so repository-derived text cannot inject markup. All actions are posted to the host, which validates them.
+import { activeFilter, filterFindings } from '../ui/finding-filter';
 import type { HostMessage, SummaryCommand, SummaryFinding, SummaryReview, SummaryState, WebviewMessage } from '../ui/summary-protocol';
 
 interface VsCodeApi {
@@ -11,6 +12,8 @@ declare function acquireVsCodeApi(): VsCodeApi;
 
 interface ViewState {
   readonly severity: string;
+  readonly verification: string;
+  readonly query: string;
   readonly groupBy: 'severity' | 'file';
   readonly expanded: readonly string[];
 }
@@ -22,6 +25,8 @@ function readViewState(): ViewState {
   const saved = vscode.getState() as Partial<ViewState> | undefined;
   return {
     severity: typeof saved?.severity === 'string' ? saved.severity : 'all',
+    verification: typeof saved?.verification === 'string' ? saved.verification : 'all',
+    query: typeof saved?.query === 'string' ? saved.query.slice(0, 200) : '',
     groupBy: saved?.groupBy === 'file' ? 'file' : 'severity',
     expanded: Array.isArray(saved?.expanded) ? saved.expanded.filter((e): e is string => typeof e === 'string') : [],
   };
@@ -83,13 +88,22 @@ function renderEmpty(s: SummaryState): HTMLElement {
   );
 }
 
+function deliveryGroup(title: string, ...buttons: (HTMLElement | false | undefined)[]): HTMLElement {
+  return h('div', { class: 'delivery-group' }, h('h3', {}, title), h('div', { class: 'actions' }, ...buttons));
+}
+
 function renderDelivery(s: SummaryState): HTMLElement {
-  return h('section', { class: 'panel' }, h('h2', {}, s.labels.delivery), h('p', { class: 'muted' }, s.labels.deliveryHint),
-    h('div', { class: 'actions' },
-      commandButton(s.labels.localGit, 'localGit'),
-      commandButton(s.labels.delivery, 'delivery', 'button'),
-      ...(s.review ? [commandButton(s.labels.publishPullRequest, 'publishPullRequest'), commandButton(s.labels.publishReview, 'publishReview'), commandButton(s.labels.importSarif, 'importSarif')] : []),
-      commandButton(s.labels.pullRequestStatus, 'pullRequestStatus'), commandButton(s.labels.mergePullRequest, 'mergePullRequest')));
+  const l = s.labels;
+  return h('section', { class: 'panel delivery', id: 'sec-delivery' },
+    h('div', { class: 'panel-head' }, h('h2', {}, l.delivery), commandButton(l.delivery, 'delivery', 'button secondary')),
+    h('p', { class: 'muted' }, l.deliveryHint),
+    s.review && h('div', { class: 'callout' },
+      h('div', { class: 'callout-text' }, h('strong', {}, l.publishAnalysis), h('p', { class: 'muted' }, l.publishAnalysisHint)),
+      commandButton(l.publishAnalysis, 'publishAnalysis', 'button primary')),
+    h('div', { class: 'delivery-groups' },
+      deliveryGroup(l.deliveryPrepare, commandButton(l.localGit, 'localGit'), s.review && commandButton(l.publishPullRequest, 'publishPullRequest')),
+      s.review && deliveryGroup(l.deliveryShare, commandButton(l.publishReview, 'publishReview'), commandButton(l.importSarif, 'importSarif')),
+      deliveryGroup(l.deliveryFollow, commandButton(l.pullRequestStatus, 'pullRequestStatus'), commandButton(l.mergePullRequest, 'mergePullRequest'))));
 }
 
 function renderHeader(s: SummaryState, r: SummaryReview): HTMLElement {
@@ -112,7 +126,31 @@ function renderHeader(s: SummaryState, r: SummaryReview): HTMLElement {
         h('div', { class: `count sev-${c.severity}${c.count === 0 ? ' zero' : ''}` }, h('span', { class: 'count-value' }, String(c.count)), h('span', { class: 'count-label' }, c.label)),
       ),
     ),
+    renderSeverityBar(r),
   );
+}
+
+/** Proportional severity distribution. Text alternative included; colour is never the only signal (counts sit beside it). */
+function renderSeverityBar(r: SummaryReview): HTMLElement | undefined {
+  const total = r.severityCounts.reduce((sum, c) => sum + c.count, 0);
+  if (total === 0) return undefined;
+  return h('div', { class: 'sevbar', role: 'img', 'aria-label': r.severityCounts.filter((c) => c.count > 0).map((c) => `${c.label} ${c.count}`).join(', ') },
+    ...r.severityCounts.filter((c) => c.count > 0).map((c) => {
+      const segment = h('span', { class: `sevbar-seg sev-${c.severity}` });
+      segment.style.flexGrow = String(c.count); // CSSOM, not a style attribute: the CSP forbids inline styles.
+      return segment;
+    }));
+}
+
+function scrollToSection(id: string): void {
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  document.getElementById(id)?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+}
+
+/** In-page navigation across the long summary. */
+function renderJump(s: SummaryState, r: SummaryReview): HTMLElement {
+  const entries: [string, string][] = [[`sec-findings`, `${s.labels.findings} ${r.findings.length}`], ['sec-checks', `${s.labels.checks} ${r.checks.length}`], ['sec-delivery', s.labels.delivery]];
+  return h('nav', { class: 'jump', 'aria-label': s.labels.sections }, ...entries.map(([id, label]) => button(label, () => { scrollToSection(id); }, 'chip-button')));
 }
 
 function renderSteps(r: SummaryReview): HTMLElement {
@@ -275,16 +313,21 @@ function groups(r: SummaryReview, findings: readonly SummaryFinding[]): { key: s
 }
 
 function renderFindings(s: SummaryState, r: SummaryReview): HTMLElement {
-  const severity = r.severityCounts.some((c) => c.severity === view.severity && c.count > 0) ? view.severity : 'all';
-  const findings = severity === 'all' ? r.findings : r.findings.filter((f) => f.severity === severity);
-  const chip = (key: string, label: string, count: number): HTMLButtonElement =>
-    button(`${label} ${count}`, () => {
-      setView({ severity: key });
-    }, `filter${severity === key ? ' active' : ''}${key === 'all' ? '' : ` sev-${key}`}`, { 'aria-pressed': String(severity === key), 'data-key': `filter:${key}` });
+  const severity = activeFilter(view.severity, r.severityCounts.filter((c) => c.count > 0).map((c) => c.severity));
+  const verification = activeFilter(view.verification, r.verificationCounts.filter((v) => v.count > 0).map((v) => v.status));
+  const findings = filterFindings(r.findings, { severity, verification, query: view.query });
+  const filtered = severity !== 'all' || verification !== 'all' || view.query.trim() !== '';
+  const chip = (group: 'severity' | 'verification', key: string, label: string, count: number, tone: string): HTMLButtonElement => {
+    const selected = (group === 'severity' ? severity : verification) === key;
+    return button(`${label} ${count}`, () => { setView({ [group]: key }); }, `filter${selected ? ' active' : ''}${tone}`, { 'aria-pressed': String(selected), 'data-key': `filter:${group}:${key}` });
+  };
+  const search = h('input', { type: 'search', class: 'search', 'aria-label': s.labels.searchFindings, placeholder: s.labels.searchFindings, 'data-key': 'search', maxlength: '200' });
+  search.value = view.query;
+  search.addEventListener('input', () => { setView({ query: search.value.slice(0, 200) }); });
 
   return h(
     'section',
-    { class: 'panel' },
+    { class: 'panel', id: 'sec-findings' },
     h(
       'div',
       { class: 'panel-head' },
@@ -300,26 +343,46 @@ function renderFindings(s: SummaryState, r: SummaryReview): HTMLElement {
         }, `segment${view.groupBy === 'file' ? ' active' : ''}`, { 'aria-pressed': String(view.groupBy === 'file'), 'data-key': 'group:file' }),
       ),
     ),
-    r.findings.length > 0 &&
-      h('div', { class: 'filters', role: 'group' }, chip('all', s.labels.all, r.findings.length), ...r.severityCounts.filter((c) => c.count > 0).map((c) => chip(c.severity, c.label, c.count))),
+    r.findings.length > 0 && h('div', { class: 'toolbar' },
+      search,
+      h('div', { class: 'filters', role: 'group', 'aria-label': s.labels.findings },
+        chip('severity', 'all', s.labels.all, r.findings.length, ''),
+        ...r.severityCounts.filter((c) => c.count > 0).map((c) => chip('severity', c.severity, c.label, c.count, ` sev-${c.severity}`))),
+      h('div', { class: 'filters', role: 'group', 'aria-label': s.labels.verificationFilter },
+        chip('verification', 'all', s.labels.all, r.findings.length, ''),
+        ...r.verificationCounts.filter((v) => v.count > 0).map((v) => chip('verification', v.status, v.label, v.count, ''))),
+      h('div', { class: 'result-count', role: 'status', 'aria-live': 'polite' },
+        `${s.labels.showing} ${findings.length} / ${r.findings.length}`,
+        filtered && button(s.labels.clearFilters, () => { setView({ severity: 'all', verification: 'all', query: '' }); }, 'link', { 'data-key': 'clear-filters' }))),
     r.findings.length === 0
-      ? h('p', { class: 'muted' }, s.labels.noFindings)
-      : h(
-          'div',
-          { class: 'groups' },
-          ...groups(r, findings).map((g) => h('div', { class: 'group' }, h('h3', { class: 'group-title' }, `${g.label} · ${g.items.length}`), h('ul', { class: 'findings' }, ...g.items.map((f) => renderFinding(s, f))))),
-        ),
+      ? h('p', { class: 'muted empty-state' }, s.labels.noFindings)
+      : findings.length === 0
+        ? h('p', { class: 'muted empty-state' }, s.labels.noMatches)
+        : h(
+            'div',
+            { class: 'groups' },
+            ...groups(r, findings).map((g) => h('div', { class: 'group' }, h('h3', { class: 'group-title' }, `${g.label} · ${g.items.length}`), h('ul', { class: 'findings' }, ...g.items.map((f) => renderFinding(s, f))))),
+          ),
     h('p', { class: 'legend' }, ...r.verificationCounts.map((v) => h('span', { class: `chip ver-${v.status}`, title: v.hint }, `${v.label} ${v.count}`)), h('span', { class: 'muted' }, s.labels.statusLegend)),
     r.dismissed > 0 &&
       commandButton(`${s.labels.restoreDismissed} (${r.dismissed})`, 'restoreDismissed', 'link'),
   );
 }
 
+/** One chip per distinct outcome, e.g. "Passed 3 · Failed 1", so verification health reads at a glance. */
+function renderCheckTotals(r: SummaryReview): HTMLElement | undefined {
+  if (r.checks.length === 0) return undefined;
+  const totals = new Map<string, { label: string; count: number }>();
+  for (const c of r.checks) totals.set(c.status, { label: c.statusLabel, count: (totals.get(c.status)?.count ?? 0) + 1 });
+  return h('div', { class: 'filters' }, ...[...totals].map(([status, t]) => h('span', { class: `chip check-chip status-${status}` }, `${t.label} ${t.count}`)));
+}
+
 function renderChecks(s: SummaryState, r: SummaryReview): HTMLElement {
   return h(
     'section',
-    { class: 'panel' },
-    h('h2', {}, s.labels.checks),
+    { class: 'panel', id: 'sec-checks' },
+    h('h2', {}, `${s.labels.checks} (${r.checks.length})`),
+    renderCheckTotals(r),
     Boolean(r.reproducibilityLimitations?.length) && h('div', {}, h('h3', {}, s.labels.reproducibilityLimitations), h('ul', {}, ...(r.reproducibilityLimitations ?? []).map((reason) => h('li', {}, reason)))),
     r.checks.length === 0
       ? h('p', { class: 'muted' }, s.labels.noChecks)
@@ -403,10 +466,13 @@ function render(): void {
   const r = s.review;
   // Re-rendering replaces the DOM; keep keyboard focus on the same control.
   const focused = document.activeElement?.getAttribute('data-key');
-  app.replaceChildren(...[busy, ...(r ? [renderHeader(s, r), renderSteps(r),
-    renderDelivery(s), renderComparison(s), renderRisk(s, r), renderAi(s, r), renderFindings(s, r), renderChecks(s, r), renderMutation(s, r), renderMore(s)] : [renderEmpty(s)])].filter((n): n is HTMLElement => Boolean(n)));
+  // Reading order follows the task: verdict, why, findings, proof, then delivery and optional extras.
+  app.replaceChildren(...[busy, ...(r ? [renderHeader(s, r), renderJump(s, r), renderSteps(r), renderRisk(s, r), renderFindings(s, r), renderChecks(s, r),
+    renderDelivery(s), renderAi(s, r), renderComparison(s), renderMutation(s, r), renderMore(s)] : [renderEmpty(s)])].filter((n): n is HTMLElement => Boolean(n)));
   if (focused) {
-    app.querySelector<HTMLElement>(`[data-key="${CSS.escape(focused)}"]`)?.focus();
+    const target = app.querySelector<HTMLElement>(`[data-key="${CSS.escape(focused)}"]`);
+    target?.focus();
+    if (target instanceof HTMLInputElement) target.setSelectionRange(target.value.length, target.value.length);
   }
 }
 

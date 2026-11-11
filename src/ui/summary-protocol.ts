@@ -26,6 +26,7 @@ export const SUMMARY_COMMANDS = [
   'delivery',
   'publishPullRequest',
   'publishReview',
+  'publishAnalysis',
   'pullRequestStatus',
   'mergePullRequest',
   'importSarif',
@@ -52,6 +53,7 @@ export const SUMMARY_COMMAND_IDS: Readonly<Record<SummaryCommand, string>> = {
   delivery: 'probatoPR.delivery',
   publishPullRequest: 'probatoPR.publishPullRequest',
   publishReview: 'probatoPR.publishReview',
+  publishAnalysis: 'probatoPR.publishAnalysis',
   pullRequestStatus: 'probatoPR.pullRequestStatus',
   mergePullRequest: 'probatoPR.mergePullRequest',
   importSarif: 'probatoPR.importSarif',
@@ -146,6 +148,12 @@ export type SummaryLabels = Readonly<Record<
   | 'findings'
   | 'noFindings'
   | 'all'
+  | 'searchFindings'
+  | 'showing'
+  | 'clearFilters'
+  | 'noMatches'
+  | 'verificationFilter'
+  | 'sections'
   | 'groupBySeverity'
   | 'groupByFile'
   | 'whyStatus'
@@ -177,6 +185,11 @@ export type SummaryLabels = Readonly<Record<
   | 'deliveryHint'
   | 'publishPullRequest'
   | 'publishReview'
+  | 'publishAnalysis'
+  | 'publishAnalysisHint'
+  | 'deliveryPrepare'
+  | 'deliveryShare'
+  | 'deliveryFollow'
   | 'pullRequestStatus'
   | 'mergePullRequest'
   | 'importSarif'

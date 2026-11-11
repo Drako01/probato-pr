@@ -15,7 +15,20 @@ deliver pull requests without leaving the editor.
 No account, no AI key, no server, no subscription is needed for the core review. When you want more, **bring your own
 AI**: GitHub Copilot, Claude, OpenAI or a local model.
 
-## What's new in 1.0
+## What's new in 1.1
+
+- **Publish the full analysis to GitHub:** one command posts the complete report (findings, severities, evidence,
+  verification, recommendations and conclusions) as a single comment on the pull request. The pull request is
+  detected automatically, you edit the text first and confirm explicitly, and publishing again updates the earlier
+  comment instead of duplicating it. The pull request head must match the reviewed commit, secrets are redacted and
+  inline findings publishing is unchanged ([details](docs/DELIVERY.md)).
+- **Renewed Review Summary:** search findings by title, file or rule, filter by severity and verification, jump
+  between sections, see the severity distribution at a glance, and read the checks outcome as totals. Sections follow
+  the order verdict, risk, findings, checks and delivery.
+- **Clearer GitHub delivery:** both the Review Summary and Home group delivery into prepare, share and follow, with
+  the full-analysis action first.
+
+## What was new in 1.0
 
 Version 1.0.0 is the first stable release. Everything that worked in 0.6.0 keeps working the same way: commands,
 settings, CLI defaults and exit codes, the JSON/SARIF report shape and the review history are unchanged.
@@ -96,7 +109,8 @@ Each scope shows its own values; workspace preferences can override user prefere
 
 ![Probato PR Settings in a dark theme: review and verification preferences](media/screenshots/settings-dark.png)
 
-The Review Summary shows the risk, the findings by severity and the next step: verify, then deliver.
+The Review Summary shows the risk, the severity distribution, section navigation and the next step: verify, then
+deliver. Findings can be searched and filtered by severity and verification status.
 
 ![Probato PR Review Summary in a dark theme: critical risk, findings by severity and the review, verify and deliver steps](media/screenshots/review-summary-dark.png)
 
@@ -106,9 +120,11 @@ The same control center adapts to light themes, including navigation, text, cont
 
 ![Probato PR Review Summary in a light theme](media/screenshots/review-summary-light.png)
 
+![Probato PR GitHub delivery in a light theme](media/screenshots/github-light.png)
+
 ![Probato PR Settings in a light theme](media/screenshots/settings-light.png)
 
-*Real screenshots of version 1.0.0 in English, generated automatically with `pnpm run screenshots`: it opens
+*Real screenshots of version 1.1.0 in English, generated automatically with `pnpm run screenshots`: it opens
 VS Code with the extension on the demonstration repository from `scripts/create-demo-repo.mjs`, runs a review and
 captures each screen. No GitHub account is connected and no code is published. Probato PR also includes Spanish
 translations.*
@@ -135,11 +151,13 @@ New to Probato PR? Run `Welcome: Open Walkthrough` and pick **Get started with P
 
 ## Complete GitHub delivery
 
-Use **Probato PR: GitHub Delivery** to create or update pull requests, publish selected findings, manage reviews
+Use **Probato PR: GitHub Delivery** to create or update pull requests, publish selected findings or the full analysis, manage reviews
 and conversations, follow CI, read job logs and merge with an expected commit and destination. **Local Git Actions**
 handles branches, staging, commits, pushes and fast-forward synchronization. Every write presents its destination
 and content before execution. CI status separates passed, neutral, skipped, pending and failed checks and marks
 which ones the base branch requires. See the [delivery guide](docs/DELIVERY.md) for the full workflow and CLI.
+
+![Probato PR Home GitHub section in a dark theme: connection status, the full-analysis action and delivery grouped into prepare, share and follow](media/screenshots/github-dark.png)
 
 ## Features
 
@@ -247,6 +265,7 @@ Docker/Terraform checks remain future work; executing a language tool is separat
 | `Probato PR: GitHub Delivery` | Open the complete PR workflow, including conversations, reviews and merge queue. |
 | `Probato PR: Create or Update Pull Request` | Preview and publish a draft PR or update its description. |
 | `Probato PR: Publish Selected Findings` | Preview and publish selected observations on valid PR diff locations. |
+| `Probato PR: Publish Full Analysis to GitHub` | Edit, confirm and publish the complete report as one PR comment; re-publishing updates it. |
 | `Probato PR: Pull Request and CI Status` | Inspect CI results, blockers and GitHub Actions logs. |
 | `Probato PR: Merge Pull Request` | Refresh requirements and merge the expected commit after confirmation. |
 | `Probato PR: Import SARIF Evidence` | Add external diagnostics without claiming a verified execution. |

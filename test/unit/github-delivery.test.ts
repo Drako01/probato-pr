@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { GitHubClient, type FetchFn } from '../../src/github/github-client';
-import { buildReviewDraft, checkOutcome, commentMarker, GitHubDelivery, type DeliveryPull, type InlineDraft } from '../../src/github/delivery';
+import { ANALYSIS_COMMENT_LIMIT, buildAnalysisComment, buildReviewDraft, checkOutcome, commentMarker, GitHubDelivery, type DeliveryPull, type InlineDraft } from '../../src/github/delivery';
 import type { ReviewFinding } from '../../src/core/model';
 
 const ref = { owner: 'owner', repo: 'repo' };
@@ -131,6 +131,41 @@ const writes = (requests: readonly { url: string; init: RequestInit }[]) => requ
     const body = JSON.parse(stringBody(writes(requests)[0])) as { query: string; variables: unknown };
     expect(body.query).toContain('expectedHeadOid:$sha');
     expect(body.variables).toEqual({ id: 'PR_7', sha });
+  });
+ });
+
+ describe('full analysis comment', () => {
+  const body = buildAnalysisComment('# Report', sha);
+  const owned = (text = 'Old') => ({ id: 55, body: `<!-- probato-pr:analysis:v1 -->\n${text}`, html_url: 'https://github.com/owner/repo/pull/7#issuecomment-55', user: { id: 2, login: 'reviewer' }, performed_via_github_app: null });
+  it('wraps, redacts, strips forged markers and truncates under the GitHub limit', () => {
+    expect(body.startsWith('<!-- probato-pr:analysis:v1 -->')).toBe(true);
+    expect(body).toContain(`analysis-sha:${sha}`);
+    expect(buildAnalysisComment('x <!-- probato-pr:analysis:v1 --> y', sha).match(/analysis:v1/g)).toHaveLength(1);
+    expect(buildAnalysisComment('a'.repeat(100_000), sha).length).toBeLessThanOrEqual(ANALYSIS_COMMENT_LIMIT);
+  });
+  it('creates one comment, then updates it instead of duplicating', async () => {
+    const created = fixture((url, init) => url.endsWith('/issues/7/comments') && init.method === 'POST' ? Response.json(owned()) : undefined);
+    expect((await created.delivery.publishAnalysis(ref, 7, sha, body)).action).toBe('created');
+    const updated = fixture((url, init) => {
+      if (url.includes('/issues/7/comments?')) return Response.json([owned()]);
+      if (url.endsWith('/issues/comments/55') && init.method === 'PATCH') return Response.json(owned(body));
+      return undefined;
+    });
+    expect((await updated.delivery.publishAnalysis(ref, 7, sha, body)).action).toBe('updated');
+    expect(writes(updated.requests).map((r) => r.init.method)).toEqual(['PATCH']);
+  });
+  it('is idempotent, ignores foreign comments and refuses a stale head before writing', async () => {
+    const same = fixture((url) => url.includes('/issues/7/comments?') ? Response.json([{ ...owned(), body }]) : undefined);
+    expect((await same.delivery.publishAnalysis(ref, 7, sha, body)).action).toBe('unchanged');
+    expect(writes(same.requests)).toEqual([]);
+    const foreign = fixture((url, init) => {
+      if (url.includes('/issues/7/comments?')) return Response.json([{ ...owned(), user: { id: 99, login: 'x' } }, { ...owned(), id: 56, performed_via_github_app: { id: 1 } }]);
+      return url.endsWith('/issues/7/comments') && init.method === 'POST' ? Response.json(owned()) : undefined;
+    });
+    expect((await foreign.delivery.publishAnalysis(ref, 7, sha, body)).action).toBe('created');
+    const stale = fixture();
+    await expect(stale.delivery.publishAnalysis(ref, 7, 'old', body)).rejects.toThrow(/changed/);
+    expect(writes(stale.requests)).toEqual([]);
   });
  });
 

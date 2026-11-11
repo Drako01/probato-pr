@@ -100,6 +100,7 @@ export class OverviewTreeProvider implements vscode.TreeDataProvider<Node>, vsco
               children: [
                 action('publish', vscode.l10n.t('Create or Update Pull Request'), 'probatoPR.publishPullRequest', 'git-pull-request'),
                 action('review-publish', vscode.l10n.t('Publish Selected Findings'), 'probatoPR.publishReview', 'comment-discussion'),
+                action('analysis-publish', vscode.l10n.t('Publish Full Analysis to GitHub'), 'probatoPR.publishAnalysis', 'cloud-upload'),
                 action('ci', vscode.l10n.t('Pull Request and CI Status'), 'probatoPR.pullRequestStatus', 'checklist'),
                 action('merge', vscode.l10n.t('Merge Pull Request'), 'probatoPR.mergePullRequest', 'git-merge'),
                 action('import', vscode.l10n.t('Import SARIF evidence'), 'probatoPR.importSarif', 'file-code'),

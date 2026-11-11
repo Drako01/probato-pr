@@ -34,6 +34,13 @@ requires selecting a matching pull request again.
 
 ## Collaborate and follow CI
 
+**Publish Full Analysis to GitHub** posts the complete report (findings, severities, evidence, checks, comparison
+and conclusions) as one PR conversation comment. The pull request is detected from the saved selection, the review
+scope or the single open PR of the checked-out branch. You edit the Markdown in an editor before confirming; secrets
+are redacted and the comment is truncated below GitHub's limit with a notice. Re-publishing updates your previous
+Probato comment (never another user's or app's) instead of duplicating it, and nothing is written when the PR head
+differs from the reviewed commit.
+
 Publish Selected Findings lets you choose observations before showing a complete publication preview. Only
 locations present in the selected pull request diff can become inline comments. Removed files use the left side.
 Comments include evidence status, and existing conversations are preserved. A marker alone never grants

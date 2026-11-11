@@ -4,8 +4,8 @@ import type { ReviewResult } from '../core/model';
 import { redactSecrets } from '../core/secrets';
 import type { GitClient } from '../git/git-client';
 import { GitHubClient, parseGitHubRemote, type GitHubRepoRef } from '../github/github-client';
-import { buildReviewDraft, GitHubDelivery, type CheckOutcome, type CheckRequirement, type DeliveryPull, type DeliveryStatus } from '../github/delivery';
-import { renderPullRequestDescription } from '../reports/markdown';
+import { buildAnalysisComment, buildReviewDraft, GitHubDelivery, type CheckOutcome, type CheckRequirement, type DeliveryPull, type DeliveryStatus } from '../github/delivery';
+import { renderMarkdown, renderPullRequestDescription } from '../reports/markdown';
 import { exclusiveWithProgress } from './exclusive-progress';
 import type { ReviewSession } from './review-session';
 
@@ -33,6 +33,7 @@ export class DeliveryController {
       { label: vscode.l10n.t('Create or update a pull request'), action: () => this.publishPullRequest() },
       { label: vscode.l10n.t('Select the active pull request'), action: () => this.selectPullRequest() },
       { label: vscode.l10n.t('Publish selected findings'), action: () => this.publishReview() },
+      { label: vscode.l10n.t('Publish full analysis to GitHub'), action: () => this.publishAnalysis() },
       { label: vscode.l10n.t('Review conversations'), action: () => this.conversations() },
       { label: vscode.l10n.t('Submit a review'), action: () => this.submitReview() },
       { label: vscode.l10n.t('Change draft or ready state'), action: () => this.changeDraft() },
@@ -107,6 +108,28 @@ export class DeliveryController {
       await this.deps.ensureReviewCurrent?.(review);
       const result = await this.delivery.publishReview(target.ref, pull.number, pull.head.sha, draft, signal);
       void vscode.window.showInformationMessage(vscode.l10n.t('Published {0} new observation(s), updated {1}. Existing conversations were preserved.', result.created, result.updated));
+    });
+  }
+
+  /** Publishes the complete report as one editable, updatable PR comment, bound to the reviewed head commit. */
+  async publishAnalysis(): Promise<void> {
+    await this.operation(vscode.l10n.t('Publishing full analysis'), async (target, signal) => {
+      const review = this.deps.session.current;
+      if (!review || review.repository.root !== target.root) throw new Error(vscode.l10n.t('Review this repository before publishing findings.'));
+      await this.deps.ensureReviewCurrent?.(review);
+      const pull = await this.pickPull(target, signal);
+      if (!pull) return;
+      if (review.scope.headIsWorkingTree || review.scope.kind === 'staged' || (review.scope.headSha ?? review.repository.headSha) !== pull.head.sha) throw new Error(vscode.l10n.t('Review the committed pull request head before publishing findings.'));
+      const edited = await this.editText(vscode.l10n.t('Edit the analysis comment, then choose Continue.'), renderMarkdown(review, this.deps.session.comparison));
+      if (!edited?.trim()) return;
+      const body = buildAnalysisComment(edited, pull.head.sha);
+      const detail = `${target.ref.owner}/${target.ref.repo} #${pull.number}\n${pull.head.sha}\n\n${body}`;
+      if (!await this.confirm(vscode.l10n.t('Publish the full analysis to pull request #{0}? An earlier Probato analysis comment will be updated.', pull.number), detail)) return;
+      await this.deps.ensureReviewCurrent?.(review);
+      const result = await this.delivery.publishAnalysis(target.ref, pull.number, pull.head.sha, body, signal);
+      const message = result.action === 'created' ? vscode.l10n.t('Analysis published to pull request #{0}.', pull.number) : result.action === 'updated' ? vscode.l10n.t('Analysis comment on pull request #{0} updated.', pull.number) : vscode.l10n.t('The analysis comment on pull request #{0} is already up to date.', pull.number);
+      const open = vscode.l10n.t('Open on GitHub');
+      if (await vscode.window.showInformationMessage(message, open) === open) await vscode.env.openExternal(vscode.Uri.parse(result.url));
     });
   }
 
@@ -239,12 +262,23 @@ export class DeliveryController {
     const fromReview = this.deps.session.current?.scope.pullRequest;
     const number = saved?.owner === target.ref.owner && saved.repo === target.ref.repo ? saved.number : fromReview?.owner === target.ref.owner && fromReview.repo === target.ref.repo ? fromReview.number : undefined;
     if (!force && number) return this.delivery.pull(target.ref, number, signal);
+    if (!force) {
+      const detected = await this.detectBranchPull(target, signal);
+      if (detected) { await this.remember(target, detected); return detected; }
+    }
     const pulls = await this.deps.github.listOpenPulls(target.ref, signal);
     const chosen = await vscode.window.showQuickPick(pulls.map((p) => ({ label: `#${p.number} ${p.title}`, description: `${p.head.ref} -> ${p.base.ref}`, number: p.number })), { title: vscode.l10n.t('Select a pull request') });
     if (!chosen) return undefined;
     const pull = await this.delivery.pull(target.ref, chosen.number, signal);
     await this.remember(target, pull);
     return pull;
+  }
+  /** The single open PR whose head is the checked-out branch; ambiguity or no branch falls back to manual selection. */
+  private async detectBranchPull(target: Target, signal: AbortSignal): Promise<DeliveryPull | undefined> {
+    const branch = await this.deps.git.currentBranch(target.root);
+    if (!branch) return undefined;
+    const matching = await this.delivery.branchPulls(target.ref, branch, signal);
+    return matching.length === 1 && matching[0] ? this.delivery.pull(target.ref, matching[0].number, signal) : undefined;
   }
   private remember(target: Target, pull: DeliveryPull): Thenable<void> {
     return this.deps.state.update(STATE_PREFIX + target.root, { owner: target.ref.owner, repo: target.ref.repo, number: pull.number, headSha: pull.head.sha, url: pull.html_url });

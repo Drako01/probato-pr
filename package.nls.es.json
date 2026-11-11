@@ -70,6 +70,7 @@
   "command.delivery": "Entrega en GitHub",
   "command.publishPullRequest": "Crear o actualizar un pull request",
   "command.publishReview": "Publicar hallazgos seleccionados",
+  "command.publishAnalysis": "Publicar análisis completo en GitHub",
   "command.pullRequestStatus": "Estado del pull request y de CI",
   "command.mergePullRequest": "Integrar un pull request",
   "command.importSarif": "Importar evidencia SARIF",
