@@ -26,7 +26,7 @@ vi.mock('vscode', () => ({
     showQuickPick: ui.pick, showInputBox: ui.input, showTextDocument: ui.show,
     withProgress: (_options: unknown, action: (progress: unknown, token: { onCancellationRequested: (fn: () => void) => { dispose: () => void } }) => Promise<void>) => action({}, { onCancellationRequested: () => ({ dispose: () => undefined }) }),
   },
-  ProgressLocation: { Notification: 15 },
+  ProgressLocation: { Notification: 15, Window: 10 },
 }));
 
 const sha = 'a'.repeat(40);
