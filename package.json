@@ -2,7 +2,7 @@
   "name": "probato-pr",
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "publisher": "armotusitio",
   "author": {
     "name": "Alejandro Daniel Di Stefano",

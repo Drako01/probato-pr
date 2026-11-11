@@ -4,9 +4,17 @@ All notable changes to Probato PR are documented here. The project follows [Sema
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-11-10
+
 ### Added
 
 - `Probato PR: Publish Full Analysis to GitHub`: publishes the integral report as a single, editable, updatable PR comment with PR auto-detection, explicit confirmation and head-SHA validation. Inline publication is unchanged.
+- Review Summary: finding search, severity and verification filters, a sticky section navigation, a severity distribution bar, verification totals and a grouped GitHub delivery panel.
+- Home: the GitHub section groups delivery into prepare, share and follow, and exposes the full-analysis action; the review cards tone the risk level.
+
+### Changed
+
+- Review Summary sections follow the reading order verdict, risk, findings, checks, delivery.
 
 ## [1.0.1] — 2026-11-09
 

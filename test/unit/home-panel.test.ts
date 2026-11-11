@@ -75,6 +75,17 @@ describe('Home control center host boundary', () => {
     await vi.waitFor(() => { expect(deps.saveSetting).toHaveBeenCalledExactlyOnceWith('review.onSave', true, 'workspace'); });
     host.message?.({ type: 'action', action: 'reviewCurrentChanges' });
     await vi.waitFor(() => { expect(deps.execute).toHaveBeenCalledExactlyOnceWith('reviewCurrentChanges'); });
+    host.message?.({ type: 'action', action: 'publishAnalysis' });
+    await vi.waitFor(() => { expect(deps.execute).toHaveBeenLastCalledWith('publishAnalysis'); });
+    home.dispose();
+  });
+
+  it('exposes the raw risk level next to its localized label so the UI can tone the risk card', async () => {
+    const review = { repository: { name: 'repo' }, scope: { label: 'changes' }, risk: { level: 'high' }, checks: [], createdAt: '2026-11-03' } as unknown as ReviewResult;
+    const { home } = fixture(review);
+    await home.refresh();
+    const message = host.post.mock.calls[0]?.[0] as { state: { review: { riskLevel: string } } };
+    expect(message.state.review.riskLevel).toBe('high');
     home.dispose();
   });
 
