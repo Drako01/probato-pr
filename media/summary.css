@@ -9,6 +9,8 @@
   --card: var(--vscode-editorWidget-background);
   --muted: var(--vscode-descriptionForeground);
   --radius: 6px;
+  --surface: color-mix(in srgb, var(--vscode-editorWidget-background) 70%, var(--vscode-editor-background));
+  --hover: var(--vscode-list-hoverBackground);
 }
 
 body {
@@ -30,7 +32,9 @@ p { margin: 0; }
 .muted { color: var(--muted); }
 
 button { font: inherit; cursor: pointer; }
-button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
+button:disabled { opacity: 0.5; cursor: default; }
+section[id] { scroll-margin-top: 52px; }
 
 .button {
   border: 1px solid var(--vscode-button-border, transparent);
@@ -42,6 +46,7 @@ button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-off
 .button:hover { background: var(--vscode-button-hoverBackground); }
 .button.secondary { color: var(--vscode-button-secondaryForeground); background: var(--vscode-button-secondaryBackground); }
 .button.secondary:hover { background: var(--vscode-button-secondaryHoverBackground); }
+.button.primary { padding: 6px 16px; font-weight: 600; white-space: nowrap; }
 .link { border: 0; padding: 0; background: none; color: var(--vscode-textLink-foreground); }
 .link:hover { color: var(--vscode-textLink-activeForeground); text-decoration: underline; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -191,3 +196,54 @@ button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-off
 .mutation-axes code { font-size: .85em; color: var(--muted); }
 .mutation-hash { overflow-wrap: anywhere; }
 @media (max-width: 540px) { .mutation-axes { grid-template-columns: 1fr; gap: 4px; } .mutation-axes dd { margin-bottom: 10px; } }
+
+/* ---------------------------------------------------------------- navigation, severity bar, toolbar */
+.jump {
+  position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 8px 0; background: var(--vscode-editor-background); border-bottom: 1px solid var(--border);
+}
+.chip-button {
+  border: 1px solid var(--border); border-radius: 999px; padding: 1px 12px;
+  background: transparent; color: var(--vscode-foreground); font-variant-numeric: tabular-nums;
+}
+.chip-button:hover { background: var(--hover); }
+
+.sevbar { flex: 1 0 100%; display: flex; gap: 2px; height: 6px; border-radius: 999px; overflow: hidden; background: var(--border); }
+.sevbar-seg { min-width: 6px; background: var(--c); }
+
+.toolbar { display: grid; gap: 8px; }
+.search {
+  width: 100%; box-sizing: border-box; padding: 4px 8px; border-radius: 2px; font: inherit;
+  color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--border));
+}
+.search::placeholder { color: var(--vscode-input-placeholderForeground); }
+.result-count { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 0.9em; color: var(--muted); }
+.empty-state { padding: 12px 0; text-align: center; }
+
+/* ---------------------------------------------------------------- GitHub delivery */
+.callout {
+  display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between;
+  padding: 12px 14px; border-radius: var(--radius); background: var(--surface);
+  border: 1px solid var(--vscode-focusBorder);
+}
+.callout-text { display: grid; gap: 2px; min-width: 0; flex: 1 1 260px; }
+.delivery-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.delivery-group { display: grid; gap: 6px; align-content: start; }
+.delivery-group h3 { font-size: 0.8em; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+
+/* ---------------------------------------------------------------- verification totals */
+.check-chip.status-passed { border-color: var(--ok); color: var(--ok); }
+.check-chip.status-failed, .check-chip.status-error, .check-chip.status-timed-out { border-color: var(--sev-high); color: var(--sev-high); }
+
+/* ---------------------------------------------------------------- polish */
+.hero { box-shadow: 0 1px 0 color-mix(in srgb, var(--risk) 25%, transparent); }
+.step { transition: border-color 0.12s, background 0.12s; }
+.panel { background: var(--surface); }
+.panel.ai { background: transparent; }
+.finding { transition: background 0.12s; }
+@media (max-width: 480px) { body { padding: 12px 12px 32px; } .callout .button { width: 100%; } .delivery-groups { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (forced-colors: active) {
+  .sevbar-seg { background: CanvasText; }
+  .filter.active, .segment.active { outline: 2px solid Highlight; }
+}

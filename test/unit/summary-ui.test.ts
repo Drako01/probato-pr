@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { activeFilter, filterFindings } from '../../src/ui/finding-filter';
+import type { SummaryFinding } from '../../src/ui/summary-protocol';
 import { SUMMARY_COMMAND_IDS, SUMMARY_COMMANDS, webviewMessageSchema } from '../../src/ui/summary-protocol';
 import { workflowOf } from '../../src/ui/workflow';
 
@@ -54,5 +56,27 @@ describe('webviewMessageSchema', () => {
   it('accepts well-formed finding and evidence messages', () => {
     expect(webviewMessageSchema.parse({ type: 'dismissFinding', id: 'f-1' })).toEqual({ type: 'dismissFinding', id: 'f-1' });
     expect(webviewMessageSchema.parse({ type: 'ready' })).toEqual({ type: 'ready' });
+  });
+});
+
+describe('filterFindings', () => {
+  const finding = (over: Partial<SummaryFinding>): SummaryFinding => ({ id: 'f', severity: 'high', severityLabel: 'High', verification: 'suspected', verificationLabel: 'Suspected', title: 'SQL built from input', description: '', note: '', file: 'src/db/query.ts', line: 1, ruleId: 'sql-injection', explanation: { observation: '', observationNote: '', evidence: [], checks: [], missingProof: [] }, ...over });
+  const all = [finding({ id: 'a' }), finding({ id: 'b', severity: 'low', verification: 'confirmed', title: 'Unused import', file: 'src/ui/view.ts', ruleId: 'unused-import' })];
+  const ids = (filter: { severity?: string; verification?: string; query?: string }) => filterFindings(all, { severity: 'all', verification: 'all', query: '', ...filter }).map((f) => f.id);
+
+  it('returns everything when no filter is active', () => { expect(ids({})).toEqual(['a', 'b']); });
+  it('matches severity and verification exactly and combines them', () => {
+    expect(ids({ severity: 'low' })).toEqual(['b']);
+    expect(ids({ verification: 'suspected' })).toEqual(['a']);
+    expect(ids({ severity: 'low', verification: 'suspected' })).toEqual([]);
+  });
+  it('searches title, file and rule case-insensitively, ignoring surrounding spaces', () => {
+    expect(ids({ query: '  SQL ' })).toEqual(['a']);
+    expect(ids({ query: 'ui/VIEW' })).toEqual(['b']);
+    expect(ids({ query: 'unused-import' })).toEqual(['b']);
+  });
+  it('drops a stale saved selection that no longer matches anything', () => {
+    expect(activeFilter('critical', ['high', 'low'])).toBe('all');
+    expect(activeFilter('high', ['high', 'low'])).toBe('high');
   });
 });

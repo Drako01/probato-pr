@@ -1117,5 +1117,14 @@
   "Unknown checks: {0}. Use --list-checks.": "Checks desconocidos: {0}. Usá --list-checks.",
   "No checks detected. Nothing was executed.": "No se detectaron checks. No se ejecutó nada.",
   "Probato PR — local, evidence-based review": "Probato PR — revisión local basada en evidencia",
-  "The baseline has no Stryker JSON configuration; reviewed settings are not substituted.": "La base no tiene una configuración JSON de Stryker; no se sustituyen los ajustes de la revisión."
+  "The baseline has no Stryker JSON configuration; reviewed settings are not substituted.": "La base no tiene una configuración JSON de Stryker; no se sustituyen los ajustes de la revisión.",
+  "Filter by title, file or rule": "Filtrar por título, archivo o regla",
+  "Showing": "Mostrando",
+  "Clear filters": "Limpiar filtros",
+  "No findings match the current filters.": "Ningún hallazgo coincide con los filtros actuales.",
+  "Sections": "Secciones",
+  "Posts the whole report as one comment you can edit first. Publishing again updates it instead of duplicating it.": "Publica el reporte completo como un solo comentario que podés editar antes. Si publicás de nuevo, se actualiza en lugar de duplicarse.",
+  "Prepare": "Preparar",
+  "Share the analysis": "Compartir el análisis",
+  "Follow and merge": "Seguir y fusionar"
 }
