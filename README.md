@@ -247,6 +247,7 @@ Docker/Terraform checks remain future work; executing a language tool is separat
 | `Probato PR: GitHub Delivery` | Open the complete PR workflow, including conversations, reviews and merge queue. |
 | `Probato PR: Create or Update Pull Request` | Preview and publish a draft PR or update its description. |
 | `Probato PR: Publish Selected Findings` | Preview and publish selected observations on valid PR diff locations. |
+| `Probato PR: Publish Full Analysis to GitHub` | Edit, confirm and publish the complete report as one PR comment; re-publishing updates it. |
 | `Probato PR: Pull Request and CI Status` | Inspect CI results, blockers and GitHub Actions logs. |
 | `Probato PR: Merge Pull Request` | Refresh requirements and merge the expected commit after confirmation. |
 | `Probato PR: Import SARIF Evidence` | Add external diagnostics without claiming a verified execution. |

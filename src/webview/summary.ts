@@ -88,7 +88,7 @@ function renderDelivery(s: SummaryState): HTMLElement {
     h('div', { class: 'actions' },
       commandButton(s.labels.localGit, 'localGit'),
       commandButton(s.labels.delivery, 'delivery', 'button'),
-      ...(s.review ? [commandButton(s.labels.publishPullRequest, 'publishPullRequest'), commandButton(s.labels.publishReview, 'publishReview'), commandButton(s.labels.importSarif, 'importSarif')] : []),
+      ...(s.review ? [commandButton(s.labels.publishPullRequest, 'publishPullRequest'), commandButton(s.labels.publishReview, 'publishReview'), commandButton(s.labels.publishAnalysis, 'publishAnalysis', 'button primary'), commandButton(s.labels.importSarif, 'importSarif')] : []),
       commandButton(s.labels.pullRequestStatus, 'pullRequestStatus'), commandButton(s.labels.mergePullRequest, 'mergePullRequest')));
 }
 

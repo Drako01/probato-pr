@@ -101,6 +101,25 @@ export function buildReviewDraft(findings: readonly ReviewFinding[], files: read
   return { comments: grouped, skipped };
 }
 
+const ANALYSIS_MARKER = '<!-- probato-pr:analysis:v1 -->';
+/** GitHub rejects comments above 65,536 characters; keep a margin for the marker and the truncation notice. */
+export const ANALYSIS_COMMENT_LIMIT = 64_000;
+const IssueCommentSchema = z.object({ id: z.number(), body: z.string(), html_url: z.string(), user: UserSchema.nullable(), performed_via_github_app: z.object({ id: z.number() }).nullable().optional() });
+export interface AnalysisPublication { readonly action: 'created' | 'updated' | 'unchanged'; readonly url: string }
+
+/**
+ * Wraps the (possibly user-edited) report into the single PR conversation comment. Markers typed by the user are
+ * removed so only this function decides which comment Probato may later update.
+ */
+export function buildAnalysisComment(markdown: string, sha: string): string {
+  const clean = redactSecrets(markdown).replaceAll(/<!--\s*probato-pr:(?:analysis|reviewed-sha)[^>]*-->/g, '').trim();
+  const footer = `\n\n<!-- probato-pr:analysis-sha:${sha} -->`;
+  const notice = `\n\n${tr('_Report truncated to fit the GitHub comment limit. Export the full report from Probato PR._')}`;
+  const room = ANALYSIS_COMMENT_LIMIT - ANALYSIS_MARKER.length - 1 - footer.length;
+  const body = clean.length > room ? `${clean.slice(0, room - notice.length)}${notice}` : clean;
+  return `${ANALYSIS_MARKER}\n${body}${footer}`;
+}
+
 export interface ReviewThread {
   readonly id: string; readonly isResolved: boolean; readonly viewerCanResolve: boolean;
   readonly comments: readonly { readonly databaseId: number | null; readonly body: string; readonly url: string; readonly author: { readonly login: string } | null }[];
@@ -255,6 +274,26 @@ export class GitHubDelivery {
       await this.client.rest(`${pullPath(ref, number)}/reviews`, z.object({ id: z.number() }), 'POST', { commit_id: expectedSha, event: 'COMMENT', body: `Probato PR: ${missing.length} selected finding(s). Evidence status is shown on every observation.`, comments: missing.map(({ path, line, side, body }) => ({ path, line, side, body })) }, signal);
     }
     return { created: missing.length, updated };
+  }
+  /**
+   * Publishes the full analysis as one PR conversation comment. A comment is updated only when this same account
+   * wrote it directly (not via an app) and it carries the Probato marker, so a rerun never duplicates it and
+   * foreign comments are never edited. The PR head is checked before every write.
+   */
+  async publishAnalysis(ref: GitHubRepoRef, number: number, expectedSha: string, body: string, signal?: AbortSignal): Promise<AnalysisPublication> {
+    pullPath(ref, number);
+    await this.assertHead(ref, number, expectedSha, signal);
+    const issue = `${endpoint(ref)}/issues/${number}/comments`;
+    const [actor, existing] = await Promise.all([this.user(signal), this.client.paginate(issue, z.array(IssueCommentSchema), signal)]);
+    const owned = existing.filter((c) => c.user?.id === actor.id && !c.performed_via_github_app && c.body.startsWith(ANALYSIS_MARKER)).at(-1);
+    if (owned?.body === body) return { action: 'unchanged', url: owned.html_url };
+    await this.assertHead(ref, number, expectedSha, signal);
+    if (owned) {
+      const updated = await this.client.rest(`${endpoint(ref)}/issues/comments/${owned.id}`, IssueCommentSchema, 'PATCH', { body }, signal);
+      return { action: 'updated', url: updated.html_url };
+    }
+    const created = await this.client.rest(issue, IssueCommentSchema, 'POST', { body }, signal);
+    return { action: 'created', url: created.html_url };
   }
   async review(ref: GitHubRepoRef, number: number, expectedSha: string, event: 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES', body: string, signal?: AbortSignal): Promise<void> {
     const pull = await this.assertHead(ref, number, expectedSha, signal);

@@ -10,6 +10,7 @@ const GITHUB_WRITES: Readonly<Record<string, string>> = {
   createOrUpdate: 'Create or Update Pull Request',
   setDraft: 'toggles draft state',
   publishReview: 'Publish Selected Findings',
+  publishAnalysis: 'Publish Full Analysis to GitHub',
   review: 'REQUEST_CHANGES',
   reply: 'Replies to review comments',
   resolve: 'resolves or unresolves threads',

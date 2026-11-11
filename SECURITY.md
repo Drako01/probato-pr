@@ -29,6 +29,7 @@ Probato PR treats the following as **untrusted input**: repository files, Git co
   | --- | --- | --- |
   | Create or Update Pull Request | Creates a pull request (you choose draft or ready) or updates its title/description; toggles draft state | Text preview plus modal confirmation; refused if the checkout changed meanwhile |
   | Publish Selected Findings | Creates or updates review comments for the findings you selected | Text preview of every comment plus modal confirmation |
+  | Publish Full Analysis to GitHub | Creates or updates a single Markdown conversation comment on the pull request (publishAnalysis); only a comment written by the same account and carrying the Probato marker is ever updated | Editable preview, modal confirmation and a re-check that the PR head still equals the reviewed commit |
   | Review decision | Submits a `COMMENT`, `APPROVE` or `REQUEST_CHANGES` review | Modal confirmation showing the body and decision |
   | Conversations | Replies to review comments; resolves or unresolves threads | Modal confirmation per action |
   | Merge Pull Request / merge queue | Merges the expected head commit or adds the PR to the merge queue | Modal confirmation showing head and base SHAs; the expected head and base are re-checked so a moved branch is refused |

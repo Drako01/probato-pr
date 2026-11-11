@@ -212,6 +212,11 @@
         "category": "Probato PR"
       },
       {
+        "command": "probatoPR.publishAnalysis",
+        "title": "%command.publishAnalysis%",
+        "category": "Probato PR"
+      },
+      {
         "command": "probatoPR.pullRequestStatus",
         "title": "%command.pullRequestStatus%",
         "category": "Probato PR"

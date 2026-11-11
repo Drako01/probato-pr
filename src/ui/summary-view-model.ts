@@ -109,6 +109,7 @@ function labels(): SummaryLabels {
     deliveryHint: vscode.l10n.t('Prepare commits, publish your PR, collaborate, follow CI and merge from here.'),
     publishPullRequest: vscode.l10n.t('Create or Update Pull Request'),
     publishReview: vscode.l10n.t('Publish Selected Findings'),
+    publishAnalysis: vscode.l10n.t('Publish Full Analysis to GitHub'),
     pullRequestStatus: vscode.l10n.t('Pull Request and CI Status'),
     mergePullRequest: vscode.l10n.t('Merge Pull Request'),
     importSarif: vscode.l10n.t('Import SARIF evidence'),
