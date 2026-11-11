@@ -4,6 +4,12 @@ All notable changes to Probato PR are documented here. The project follows [Sema
 
 ## [Unreleased]
 
+## [1.1.2] — 2026-11-11
+
+### Fixed
+
+- Publishing the full analysis or inline findings no longer fails with "Review this repository before publishing" on Windows when the review has a local checkout: the repository path reported by Git and the one stored in the review are now compared in the same normalized form.
+
 ## [1.1.1] — 2026-11-11
 
 ### Fixed

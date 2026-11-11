@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReviewResult } from '../../src/core/model';
 import { DeliveryController, type DeliveryControllerDeps } from '../../src/extension/delivery-controller';
@@ -29,13 +30,15 @@ vi.mock('vscode', () => ({
 }));
 
 const sha = 'a'.repeat(40);
+/** Git prints forward slashes even on Windows; reviews store the path.normalize()d form, so they differ there. */
+const gitTopLevel = 'C:/repo';
 const pull = { number: 7, node_id: 'PR7', title: 'Reviewed change', body: 'Existing description', html_url: 'https://github.com/owner/repo/pull/7', state: 'open', draft: false, merged: false, mergeable: true, mergeable_state: 'clean', user: { id: 1, login: 'author' }, head: { sha, ref: 'feature' }, base: { sha: 'b'.repeat(40), ref: 'main' } };
 const repo = { default_branch: 'main', allow_merge_commit: true, allow_squash_merge: true, allow_rebase_merge: false, permissions: { push: true } };
 function review(kind: ReviewResult['scope']['kind'] = 'branch'): ReviewResult {
   return {
     id: 'r', createdAt: '2026-11-02T12:00:00Z', toolVersion: 'test',
     scope: { kind, label: 'Review', headSha: sha, headIsWorkingTree: kind === 'working' },
-    repository: { name: 'repo', root: '/repo', branch: 'feature', headSha: sha },
+    repository: { name: 'repo', root: path.normalize(gitTopLevel), branch: 'feature', headSha: sha },
     stats: { filesChanged: 1, additions: 1, deletions: 0, filesSkipped: 0 },
     changedFiles: ['a.ts'], skipped: [], findings: [], evidence: [], checks: [], analyzerRuns: [], aiRuns: [],
     risk: { level: 'low', reasons: [], limitations: [], counts: { byVerification: { confirmed: 0, evidenced: 0, suspected: 0, 'not-verified': 0 }, bySeverity: { critical: 0, high: 0, medium: 0, low: 0 }, checks: { passed: 0, failed: 0, notRun: 0 }, regressions: 0 } },
@@ -70,7 +73,7 @@ function fixture(options: { readonly kind?: ReviewResult['scope']['kind']; reado
     await action(new AbortController().signal);
   });
   const git = {
-    topLevel: vi.fn<() => Promise<string>>().mockResolvedValue('/repo'),
+    topLevel: vi.fn<() => Promise<string>>().mockResolvedValue(gitTopLevel),
     remoteUrl: vi.fn<() => Promise<string>>().mockResolvedValue('https://github.com/owner/repo.git'),
     currentBranch: vi.fn<() => Promise<string>>().mockResolvedValue('feature'),
     resolveCommit: vi.fn<() => Promise<string>>().mockResolvedValue(sha),
@@ -132,7 +135,7 @@ describe('DeliveryController host boundaries', () => {
     const approved = ui.warning.mock.calls.find((c) => c[0] === 'Publish this pull request?')?.[1] as { readonly detail: string };
     expect(approved.detail).toContain(payload.body);
     expect(snapshot).toHaveBeenCalledTimes(2);
-    expect(state.get('probatoPR.delivery:/repo')).toMatchObject({ owner: 'owner', repo: 'repo', number: 7, headSha: sha });
+    expect(state.get(`probatoPR.delivery:${path.normalize(gitTopLevel)}`)).toMatchObject({ owner: 'owner', repo: 'repo', number: 7, headSha: sha });
   });
   it('does not publish after repository contents change during confirmation', async () => {
     const { controller, requests, snapshot } = fixture();
