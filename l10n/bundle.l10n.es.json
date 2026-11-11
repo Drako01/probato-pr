@@ -1127,5 +1127,7 @@
   "Prepare": "Preparar",
   "Share the analysis": "Compartir el análisis",
   "Follow and merge": "Seguir y fusionar",
-  "Connected": "Conectado"
+  "Connected": "Conectado",
+  "Review this repository before publishing the analysis.": "Revisá este repositorio antes de publicar el análisis.",
+  "Review the committed pull request head before publishing the analysis.": "Revisá el commit publicado del pull request antes de publicar el análisis."
 }

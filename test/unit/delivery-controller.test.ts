@@ -41,9 +41,15 @@ function review(kind: ReviewResult['scope']['kind'] = 'branch'): ReviewResult {
     risk: { level: 'low', reasons: [], limitations: [], counts: { byVerification: { confirmed: 0, evidenced: 0, suspected: 0, 'not-verified': 0 }, bySeverity: { critical: 0, high: 0, medium: 0, low: 0 }, checks: { passed: 0, failed: 0, notRun: 0 }, regressions: 0 } },
   };
 }
+const controllerSession = (controller: DeliveryController): unknown => (controller as unknown as { deps: { session: unknown } }).deps.session;
+/** A review of a GitHub pull request through the API: no local checkout, so no repository root. */
+function remoteReview(): ReviewResult {
+  const base = review('pull-request');
+  return { ...base, scope: { ...base.scope, headIsWorkingTree: false, pullRequest: { owner: 'owner', repo: 'repo', number: 7, url: pull.html_url } }, repository: { ...base.repository, root: '' } };
+}
 interface Request { readonly url: string; readonly init: RequestInit }
 function body(request: Request | undefined): unknown { return JSON.parse(typeof request?.init.body === 'string' ? request.init.body : '{}') as unknown; }
-function fixture(options: { readonly kind?: ReviewResult['scope']['kind']; readonly existing?: boolean; readonly remoteSha?: string; readonly busy?: boolean } = {}) {
+function fixture(options: { readonly kind?: ReviewResult['scope']['kind']; readonly remote?: boolean; readonly existing?: boolean; readonly remoteSha?: string; readonly busy?: boolean } = {}) {
   const requests: Request[] = [];
   const fetch: FetchFn = (url, init) => {
     requests.push({ url, init });
@@ -52,6 +58,8 @@ function fixture(options: { readonly kind?: ReviewResult['scope']['kind']; reado
     if (url.endsWith('/pulls/7')) return Promise.resolve(Response.json(pull));
     if (url.includes('/git/ref/heads/')) return Promise.resolve(Response.json({ object: { sha: options.remoteSha ?? sha } }));
     if (url.endsWith('/pulls') && init.method === 'POST') return Promise.resolve(Response.json(pull));
+    if (url.endsWith('/user')) return Promise.resolve(Response.json({ id: 1, login: 'author' }));
+    if (url.includes('/issues/7/comments')) return Promise.resolve(Response.json(init.method === 'POST' ? { id: 99, body: '', html_url: 'https://github.com/owner/repo/pull/7#issuecomment-99', user: { id: 1, login: 'author' } } : []));
     return Promise.resolve(new Response('', { status: 500 }));
   };
   const snapshot = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
@@ -69,7 +77,7 @@ function fixture(options: { readonly kind?: ReviewResult['scope']['kind']; reado
     isDirty: vi.fn<() => Promise<boolean>>().mockResolvedValue(false),
   };
   const deps = {
-    session: { current: review(options.kind), exclusive, visibleFindings: () => [], cancel: vi.fn() },
+    session: { current: options.remote ? remoteReview() : review(options.kind), exclusive, visibleFindings: () => [], cancel: vi.fn() },
     git, github: new GitHubClient(fetch, () => Promise.resolve('synthetic-token')),
     state: { get: (key: string) => state.get(key), update: (key: string, value: unknown) => { state.set(key, value); return Promise.resolve(); } },
     signInToGitHub: signIn, ensureReviewCurrent: snapshot, log: { warn: vi.fn(), info: vi.fn(), show: vi.fn() },
@@ -161,5 +169,26 @@ describe('DeliveryController host boundaries', () => {
     expect(exclusive).toHaveBeenCalledOnce();
     expect(requests).toEqual([]);
     expect(ui.error).toHaveBeenCalledWith('Already running');
+  });
+});
+
+describe('publishing the full analysis', () => {
+  it('publishes a review of a GitHub pull request that has no local checkout', async () => {
+    const { controller, requests, snapshot, git } = fixture({ remote: true });
+    await controller.publishAnalysis();
+    expect(ui.error).not.toHaveBeenCalled();
+    expect(git.topLevel).not.toHaveBeenCalled();
+    expect(snapshot).not.toHaveBeenCalled();
+    const created = writes(requests).find((r) => r.url.endsWith('/issues/7/comments'));
+    expect((body(created) as { body: string }).body).toContain(`probato-pr:analysis-sha:${sha}`);
+  });
+
+  it('refuses a remote review whose commit is no longer the pull request head', async () => {
+    const { controller, requests } = fixture({ remote: true });
+    const stale = { ...remoteReview(), scope: { ...remoteReview().scope, headSha: 'c'.repeat(40) } };
+    (controllerSession(controller) as { current: ReviewResult }).current = stale;
+    await controller.publishAnalysis();
+    expect(ui.error).toHaveBeenCalledWith('Review the committed pull request head before publishing the analysis.');
+    expect(writes(requests)).toEqual([]);
   });
 });
