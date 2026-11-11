@@ -47,6 +47,7 @@ export async function run(): Promise<void> {
   const shots: readonly Shot[] = [
     { name: 'home', prepare: () => vscode.commands.executeCommand('probatoPR.openHome', 'home') },
     { name: 'review-summary', prepare: () => vscode.commands.executeCommand('probatoPR.showResults') },
+    { name: 'github', prepare: () => vscode.commands.executeCommand('probatoPR.openHome', 'github') },
     { name: 'settings', prepare: () => vscode.commands.executeCommand('probatoPR.openHome', 'settings') },
   ];
   for (const { suffix, theme } of THEMES) {
