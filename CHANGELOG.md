@@ -4,6 +4,12 @@ All notable changes to Probato PR are documented here. The project follows [Sema
 
 ## [Unreleased]
 
+## [1.1.3] — 2026-11-11
+
+### Fixed
+
+- GitHub delivery steps that wait for your input (such as "Edit the analysis comment, then choose Continue") no longer look stuck: their progress now shows in the status bar instead of a notification that covered the Continue prompt.
+
 ## [1.1.2] — 2026-11-11
 
 ### Fixed

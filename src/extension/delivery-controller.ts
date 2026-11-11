@@ -309,7 +309,7 @@ export class DeliveryController {
     await this.guarded(async () => {
       const target = remote ? { root: '', ref: { owner: remote.owner, repo: remote.repo } } : await this.target();
       if (!target) return;
-      await exclusiveWithProgress(this.deps.session, label, vscode.ProgressLocation.Notification, `Probato PR: ${label}`, (signal) => operation(target, signal));
+      await exclusiveWithProgress(this.deps.session, label, vscode.ProgressLocation.Window, `Probato PR: ${label}`, (signal) => operation(target, signal));
     });
   }
   private async guarded(operation: () => Promise<void>): Promise<void> {
