@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { severityLabel, verificationLabel } from '../core/labels';
 import type { ReviewResult } from '../core/model';
@@ -254,8 +255,10 @@ export class DeliveryController {
     const selected = local ? undefined : folders.length === 1 ? folders[0] : await vscode.window.showWorkspaceFolderPick({ placeHolder: vscode.l10n.t('Select a Git repository') });
     const candidate = local || selected?.uri.fsPath;
     if (!candidate) return undefined;
-    const root = await this.deps.git.topLevel(candidate);
-    if (!root) throw new Error(vscode.l10n.t('No Git repository found.'));
+    const top = await this.deps.git.topLevel(candidate);
+    if (!top) throw new Error(vscode.l10n.t('No Git repository found.'));
+    // Same normalization the review uses for repository.root; git prints forward slashes on Windows.
+    const root = path.normalize(top);
     const remote = await this.deps.git.remoteUrl(root);
     const ref = remote ? parseGitHubRemote(remote) : undefined;
     if (!ref) throw new Error(vscode.l10n.t('The origin remote must be a GitHub repository.'));
