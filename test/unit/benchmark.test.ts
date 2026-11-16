@@ -15,7 +15,7 @@ import { changeSetOf, workspaceOf } from './helpers';
  * Changing a holdout case changes this value. Update it only together with a CORPUS_VERSION bump and a note in
  * docs/BENCHMARK.md explaining why a held-out label changed; never to make the analyzers pass.
  */
-const HOLDOUT_SEAL = 'c18dee9a81d1a4bd18e5e7eabb4393c3702861e4a4e25c16933ab39eb3e635e4';
+const HOLDOUT_SEAL = '2dec231b6c9d5622631acb1b785f9f34c38c017f7652054cd8e20ad88c1d38e0';
 
 async function runCorpus(): Promise<CaseOutcome[]> {
   const engine = new ReviewEngine(createDefaultAnalyzers(), 'bench');

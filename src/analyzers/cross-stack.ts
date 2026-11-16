@@ -12,6 +12,8 @@ const ID = 'cross-stack';
 const MAX_CONSUMERS = 10_000;
 const SOURCE = /\.(?:[cm]?[jt]sx?|go|php|py|java|kt|sql|prisma)$/i;
 const DTO = /(?:Dto|Response|Request|Payload|Schema)$/i;
+/** Without COLUMN, `DROP` may name another table object (`DROP CHECK chk_x`, `DROP INDEX idx`); those are not columns. */
+const NOT_DDL_OBJECT = '(?!(?:CHECK|CONSTRAINT|INDEX|KEY|FOREIGN|PRIMARY|UNIQUE|PARTITION|PERIOD|SYSTEM)\\b)';
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 interface Contract { readonly name: string; readonly properties: ReadonlySet<string> }
@@ -123,7 +125,7 @@ export class CrossStackAnalyzer implements Analyzer {
   private async migrations(file: FileChange, paths: readonly string[], read: (file: string) => Promise<string>, out: OutputCollector): Promise<void> {
     const identifier = '[`"\\[]?([A-Za-z_][\\w]*)[`"\\]]?';
     const tableIdentifier = '(?:[`"\\[]?[A-Za-z_][\\w]*[`"\\]]?\\.)?' + identifier;
-    const alter = new RegExp(`ALTER\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?(?:ONLY\\s+)?${tableIdentifier}\\s+(?:DROP\\s+(?:COLUMN\\s+)?(?:IF\\s+EXISTS\\s+)?|RENAME\\s+COLUMN\\s+)${identifier}`, 'i');
+    const alter = new RegExp(`ALTER\\s+TABLE\\s+(?:IF\\s+EXISTS\\s+)?(?:ONLY\\s+)?${tableIdentifier}\\s+(?:DROP\\s+(?:COLUMN\\s+(?:IF\\s+EXISTS\\s+)?|(?:IF\\s+EXISTS\\s+)?${NOT_DDL_OBJECT})|RENAME\\s+COLUMN\\s+)${identifier}`, 'i');
     const additions = addedLines(file);
     const statement = additions.map((line) => line.text).join('\n');
     for (const match of statement.matchAll(new RegExp(alter.source, 'gi'))) {
