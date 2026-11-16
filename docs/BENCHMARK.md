@@ -41,6 +41,7 @@ Seal history:
 |---|---|
 | 2 | Expansion to 71 cases / 36 traps with provenance and `guards` |
 | 3 | Additive only: 5 positive and 5 trap cases for the secret formats that were `KNOWN_GAPS` (Anthropic, OpenAI, Stripe live, Google API key, JWT); some new cases hash into the holdout. No existing case was relabeled. Writing the Anthropic case exposed a real defect: the OpenAI pattern also matched `sk-ant-…` keys and reported them twice under the wrong label (fixed with a `(?!ant-)` guard in `src/core/secrets.ts`) |
+| 4 | Additive only: 5 trap and 2 positive cases taken from false positives reported on a real pull request: a `DROP CHECK` constraint read as a dropped column, a translation label for a password field, a regex that filters secret-like columns, a fake password in a test fixture and a commented catch around Web Storage. The positives keep real token formats reported in test files and commented catches around real I/O. Some new cases hash into the holdout. No existing case was relabeled |
 
 ## Metrics
 

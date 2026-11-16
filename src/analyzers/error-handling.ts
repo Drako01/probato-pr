@@ -9,6 +9,20 @@ import { isAnalyzableScript, isTestFile, lineOf, lineText, parseSource, visit } 
 const ID = 'error-handling';
 const SUPPRESSION = /(?:\/\/|\/\*)\s*(@ts-ignore|@ts-nocheck|eslint-disable(?:-next-line|-line)?)(?!\S)/;
 
+const WEB_STORAGE_CALL = /^(?:window\.|globalThis\.)?(?:localStorage|sessionStorage)\.(?:getItem|setItem|removeItem|clear)\(/;
+
+/**
+ * Web Storage throws when it is disabled (private browsing, blocked site data, quota). Ignoring that failure
+ * on purpose only loses a browser preference, so a commented empty catch around storage calls alone is fine.
+ */
+function guardsOnlyWebStorage(clause: ts.CatchClause, sf: ts.SourceFile): boolean {
+  const statements = ts.isTryStatement(clause.parent) ? clause.parent.tryBlock.statements : [];
+  return statements.length > 0 && statements.every((statement) => {
+    const call = ts.isExpressionStatement(statement) ? statement.expression : undefined;
+    return call !== undefined && ts.isCallExpression(call) && WEB_STORAGE_CALL.test(call.getText(sf));
+  });
+}
+
 function isEmptyFunction(node: ts.Node): boolean {
   if (!ts.isArrowFunction(node) && !ts.isFunctionExpression(node)) {
     return false;
@@ -78,6 +92,9 @@ export class ErrorHandlingAnalyzer implements Analyzer {
             return;
           }
           const commented = /\/\/|\/\*/.test(node.block.getText(sf));
+          if (commented && guardsOnlyWebStorage(node, sf)) {
+            return;
+          }
           out.add(
             staticFinding({
               analyzerId: ID,

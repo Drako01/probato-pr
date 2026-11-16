@@ -53,6 +53,8 @@ export interface SecretMatch {
   readonly pattern: SecretPattern;
   readonly index: number;
   readonly length: number;
+  /** The captured secret value (the whole match for token formats). */
+  readonly value: string;
 }
 
 export function findSecrets(text: string): SecretMatch[] {
@@ -64,7 +66,7 @@ export function findSecrets(text: string): SecretMatch[] {
       if (pattern.id === 'generic-secret-assignment' && PLACEHOLDER.test(value)) {
         continue;
       }
-      matches.push({ pattern, index: m.index, length: m[0].length });
+      matches.push({ pattern, index: m.index, length: m[0].length, value });
     }
   }
   return matches;

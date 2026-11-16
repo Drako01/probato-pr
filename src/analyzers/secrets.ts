@@ -3,8 +3,9 @@ import { OutputCollector, staticFinding } from '../core/finding-factory';
 import { matchesAnyGlob } from '../core/glob';
 import { msg, render, tr } from '../core/i18n';
 import type { ChangeSet, Severity } from '../core/model';
-import { findSecrets, redactSecrets, SENSITIVE_FILE_GLOBS, type SecretPattern } from '../core/secrets';
+import { findSecrets, redactSecrets, SENSITIVE_FILE_GLOBS, type SecretMatch, type SecretPattern } from '../core/secrets';
 import { addedLines } from '../git/diff-parser';
+import { isTestFile } from './ts-ast';
 
 const ID = 'secrets';
 const TEST_PATH = /(?:^|\/)(?:test|tests|__tests__|fixtures?|mocks?|examples?)\//i;
@@ -13,6 +14,19 @@ const SEVERITY: Readonly<Record<SecretPattern['confidence'], Readonly<Record<'so
   high: { source: 'critical', testPath: 'medium' },
   medium: { source: 'medium', testPath: 'low' },
 };
+/** Translation catalogs: `"password": "Password"` there is a UI label, not a credential. */
+const LOCALE_PATH = /(?:^|\/)(?:locales?|l10n|i18n|lang|translations?)\/|\.nls(?:\.[\w-]+)?\.json$/i;
+/** A regular expression literal stored as a string, e.g. a filter of secret-like column names. */
+const REGEX_LITERAL = /^\/.+\/[dgimsuvy]*$/;
+
+/**
+ * The generic name-based rule has no format to anchor on, so it is skipped where its matches are known noise:
+ * fixtures and tests (high-confidence token formats are still reported there), translation catalogs and regexes.
+ * Redaction keeps using every pattern; this only narrows what is reported as a finding.
+ */
+function isGenericNoise(match: SecretMatch, path: string, inTestPath: boolean): boolean {
+  return match.pattern.id === 'generic-secret-assignment' && (inTestPath || LOCALE_PATH.test(path) || REGEX_LITERAL.test(match.value));
+}
 
 /** Detects credentials introduced by the change: known token formats on added lines and sensitive files added. */
 export class SecretsAnalyzer implements Analyzer {
@@ -47,11 +61,11 @@ export class SecretsAnalyzer implements Analyzer {
           }),
         );
       }
-      const inTestPath = TEST_PATH.test(file.path);
+      const inTestPath = TEST_PATH.test(file.path) || isTestFile(file.path);
       for (const { line, text } of addedLines(file)) {
         const reported = new Set<string>();
         for (const match of findSecrets(text)) {
-          if (reported.has(match.pattern.id)) {
+          if (reported.has(match.pattern.id) || isGenericNoise(match, file.path, inTestPath)) {
             continue;
           }
           reported.add(match.pattern.id);

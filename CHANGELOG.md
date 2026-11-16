@@ -4,6 +4,14 @@ All notable changes to Probato PR are documented here. The project follows [Sema
 
 ## [Unreleased]
 
+## [1.1.5] — 2026-11-16
+
+### Fixed
+
+- Dropping a table constraint or index (`ALTER TABLE t DROP CHECK chk_x`, `DROP INDEX`, `DROP KEY`, `DROP FOREIGN KEY` and similar) is no longer reported as a dropped column with a stale reference.
+- The generic "hard-coded secret value" rule no longer reports translation labels (such as `"password": "Contraseña"` in `locales/`), regular expressions stored as strings, or fake values in test files. Credentials in a known format (GitHub, AWS, Slack, private keys and others) are still reported in test files, and redaction of report text is unchanged.
+- An empty `catch` with a comment that only wraps `localStorage` or `sessionStorage` calls is no longer reported: ignoring that failure only loses a browser preference.
+
 ## [1.1.4] — 2026-11-11
 
 ### Fixed

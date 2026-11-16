@@ -6,10 +6,10 @@ import type { FileSpec } from '../helpers';
 
 export const CORPUS_ID = 'probato-authored';
 /** Bump when cases are added, removed or relabeled; reports carry it so numbers are never compared across versions. */
-export const CORPUS_VERSION = 3;
+export const CORPUS_VERSION = 4;
 
 export type Split = 'dev' | 'validation' | 'holdout';
-export type Language = 'typescript' | 'javascript' | 'go' | 'python' | 'php' | 'sql' | 'openapi' | 'package-json' | 'tsconfig' | 'github-actions' | 'go-mod' | 'env';
+export type Language = 'typescript' | 'javascript' | 'go' | 'python' | 'php' | 'sql' | 'openapi' | 'package-json' | 'tsconfig' | 'github-actions' | 'go-mod' | 'env' | 'json';
 export type CaseTag =
   | 'rename' | 'alias' | 'barrel' | 'pre-existing' | 'placeholder' | 'consumer-updated' | 'refactor' | 'multi-file' | 'deletion' | 'monorepo' | 'test-path';
 
@@ -172,6 +172,11 @@ export const CASES: readonly BenchmarkCase[] = [
   { id: 'trap-ts-catch-handles-error', title: 'catch that handles the error', language: 'typescript', tags: [], provenance: authored,
     files: [{ path: 'src/io.ts', base: 'export function f() { g(); }\n', head: "export function f() {\n  try { g(); } catch (e) { throw new Error('g failed', { cause: e }); }\n}\n" }],
     expected: [], guards: ['errors/empty-catch'] },
+  { id: 'trap-ts-storage-preference-catch', title: 'commented catch around a Web Storage preference', language: 'typescript', tags: [], provenance: authored,
+    files: [{ path: 'src/prefs.ts', base: 'export function hide() {}\n', head: "export function hide() {\n  try { window.localStorage.setItem('onboarding', '1'); } catch { /* preference only */ }\n}\n" }],
+    expected: [], guards: ['errors/empty-catch'] },
+  { id: 'ts-commented-catch-swallows-io', title: 'commented catch that still swallows a real failure', language: 'typescript', tags: [], provenance: authored,
+    files: [{ path: 'src/io.ts', base: 'export function f() { save(); }\n', head: 'export function f() {\n  try { save(); } catch { /* ignore */ }\n}\n' }], expected: ['errors/empty-catch'] },
   { id: 'trap-ts-promise-catch-logs', title: 'promise catch that reports the error', language: 'typescript', tags: [], provenance: authored,
     files: [{ path: 'src/io.ts', base: 'export function f() { return g(); }\n', head: 'export function f() {\n  return g().catch((e: unknown) => report(e));\n}\n' }],
     expected: [], guards: ['errors/empty-promise-catch'] },
@@ -208,6 +213,17 @@ export const CASES: readonly BenchmarkCase[] = [
     files: [{ path: '.env.example', head: 'API_KEY=\n' }], expected: [], guards: ['secrets/sensitive-file-added'] },
   { id: 'trap-ts-github-token-from-env', title: 'GitHub token read from the environment', language: 'typescript', tags: [], provenance: authored,
     files: [{ path: 'src/gh.ts', base: 'export {};\n', head: 'export const token = process.env.GITHUB_TOKEN;\n' }], expected: [], guards: ['secrets/github-token'] },
+  { id: 'ts-github-token-in-test-file', title: 'real token format committed in a test file', language: 'typescript', tags: ['test-path'], provenance: authored,
+    files: [{ path: 'src/gh.test.ts', base: 'export {};\n', head: `export const token = '${githubToken}';\n` }], expected: ['secrets/github-token'] },
+  { id: 'trap-json-locale-password-label', title: 'translation label for a password field', language: 'json', tags: [], provenance: authored,
+    files: [{ path: 'locales/es/app.json', base: '{\n  "email": "Correo"\n}\n', head: '{\n  "email": "Correo",\n  "password": "Contraseña"\n}\n' }],
+    expected: [], guards: ['secrets/generic-secret-assignment'] },
+  { id: 'trap-php-secret-column-regex', title: 'regex that filters secret-like columns out of an export', language: 'php', tags: [], provenance: authored,
+    files: [{ path: 'src/Export.php', base: "<?php\nfinal class Export {}\n", head: "<?php\nfinal class Export {\n    private const SECRET_COLUMN = '/(_encrypted|_hash|token|secret)$/i';\n}\n" }],
+    expected: [], guards: ['secrets/generic-secret-assignment'] },
+  { id: 'trap-js-test-fixture-password', title: 'fake password in a browser test fixture', language: 'javascript', tags: ['test-path'], provenance: authored,
+    files: [{ path: 'test/login.test.mjs', base: 'export {};\n', head: 'export const body = { login: "owner@example.invalid", password: "Very-long-pass-2026!" };\n' }],
+    expected: [], guards: ['secrets/generic-secret-assignment'] },
   { id: 'trap-py-slack-token-from-env', title: 'Slack token read from the environment', language: 'python', tags: [], provenance: authored,
     files: [{ path: 'app/settings.py', base: 'import os\n', head: 'import os\nSLACK = os.environ["SLACK_TOKEN"]\n' }], expected: [], guards: ['secrets/slack-token'] },
   { id: 'trap-php-connection-string-no-credentials', title: 'database URL without credentials', language: 'php', tags: [], provenance: authored,
@@ -294,6 +310,10 @@ export const CASES: readonly BenchmarkCase[] = [
   { id: 'trap-sql-dropped-column-unreferenced', title: 'dropped column no longer referenced', language: 'sql', tags: [], provenance: authored,
     files: [{ path: 'migrations/012.sql', head: 'ALTER TABLE public.users\n  DROP COLUMN full_name;\n' }],
     workspace: { 'src/repository.ts': 'db.query("SELECT display_name FROM users");\n' }, expected: [], guards: ['cross-stack/sql-column-reference'] },
+  { id: 'trap-sql-check-constraint-replaced', title: 'CHECK constraint dropped and recreated, not a column', language: 'sql', tags: [], provenance: authored,
+    files: [{ path: 'migrations/020.sql', head: "ALTER TABLE plans DROP CHECK chk_plans_code;\nALTER TABLE plans ADD CONSTRAINT chk_plans_code CHECK (code IN ('base', 'pro'));\n" }],
+    workspace: { 'tests/migrations_test.php': '<?php\n$rows = query("SELECT code FROM plans");\nassertTrue($denied, "Wildcard grant was not rejected by the CHECK constraint.");\n' },
+    expected: [], guards: ['cross-stack/sql-column-reference'] },
   { id: 'trap-ts-tenant-predicate-reordered', title: 'tenant predicate kept while the query is refactored', language: 'typescript', tags: ['refactor'], provenance: authored,
     files: [{ path: 'src/service.ts', base: 'const where = { tenantId: user.tenantId, id };\nreturn db.user.findFirst({ where });\n', head: 'const where = { id, tenantId: user.tenantId };\nreturn db.user.findFirst({ where });\n' }],
     expected: [], guards: ['cross-stack/tenant-predicate-removed'] },
